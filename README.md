@@ -54,7 +54,7 @@ docs/
   01_要求仕様書/
     GU_ECsite_要求仕様書_noai_20260821.docx      … no_ai 版（ユーザー起案の整理）
     GU_ECsite_要求仕様書_ai_v2.1_20260821.docx   … ai 版（Claude 単独設計・テンプレート適用）
-    GU_ECsite_要求仕様書_withai_v2_20260821.docx … with_ai 版（統合・完成品）
+    GU_ECsite_要求仕様書_withai_v2.1_20260824.docx … with_ai 版（統合・完成品）
 ```
 
 ## 引き継ぎ時の注意
