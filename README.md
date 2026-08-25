@@ -58,7 +58,7 @@ docs/
   02_要件定義書/
     GU_ECsite_要件定義書_noai_雛形_20260824.docx  … no_ai 版（部分記入のまま確定）
     GU_ECsite_要件定義書_ai_v1_20260825.docx      … ai 版（Claude 単独設計、申し送り A-01〜A-08 を決定）
-    GU_ECsite_要件定義書_withai_v1_20260825.docx  … with_ai 版（統合・完成品）
+    GU_ECsite_要件定義書_withai_v1.1_20260825.docx  … with_ai 版（統合・完成品）
 ```
 
 ## 引き継ぎ時の注意
