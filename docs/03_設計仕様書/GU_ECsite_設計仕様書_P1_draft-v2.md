@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書番号 | GUEC-SD-01 |
-| 版 | draft-v1 |
+| 版 | draft-v2 |
 | 作成者 | Mitsuru Oya・Claude |
 | 作成日 | 2026-09-07 |
 | 入力 | 要求仕様書 with_ai v2.4、要件定義書 with_ai v1.3、実装フェーズ計画 v1.2 |
@@ -14,6 +14,7 @@
 | 版 | 日付 | 内容 | 作成 | 承認 |
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-09-07 | 初稿。統括との壁打ちで決めた設計判断 20 件と設計要件を本文化。未決 #20〜30 は推し案で仮置き | Claude | — |
+| draft-v2 | 2026-09-07 | 未決 #20〜30 を統括が承認し DS-DEC-21〜31 に昇格（条件付きの項目は条件を本文へ反映）。9.5 の講義の問いに回答。精査で見つけた修正 4 件（注文後のカート再生成・ゲスト照会のメール送信方法・ホームの性別区分・8.3 の構成図）を反映 | Claude | Oya |
 
 ## 0. 本書の位置づけ
 
@@ -24,7 +25,7 @@
 
 設計要素には設計 ID を付ける。DS-SCR（画面）・DS-API（API）・DS-TBL（テーブル）・DS-PRC（処理）・DS-IF（外部 IF）・DS-DEC（設計判断）の 6 種で、10 章のトレーサビリティ表で REQ → F/SCR → DS → テスト ID をつなぐ。
 
-本文中の【要判断 #xx】は統括の判断待ちの箇所で、推し案で仮置きしている。判断が出た時点で印を外す。
+draft-v1 で【要判断 #xx】としていた箇所は、2026-09-07 の統括判断で確定し DS-DEC-21〜31 に昇格した（9.2）。本文の印は外し、条件付きで承認された項目は条件を該当章に書き込んだ。
 
 ## 1. システム構成
 
@@ -59,7 +60,7 @@ flowchart LR
 | 要素 | 役割 | 備考 |
 | --- | --- | --- |
 | App Service ①（Next.js） | 画面の SSR、BFF（認証 Cookie の検証・FastAPI への取り次ぎ・画面向け整形）、Stripe Webhook の入口 | Linux・B1・Always On。公開面はここだけ |
-| App Service ②（FastAPI） | 業務処理・金額計算・在庫引当・DB アクセス・外部 IF 呼び出し | Linux・B1・Always On。CORS は ① のオリジンのみ。Week10 で VNet に閉じる |
+| App Service ②（FastAPI） | 業務処理・金額計算・在庫引当・DB アクセス・外部 IF 呼び出し | Linux・B1・Always On。CORS は ① のオリジンのみ。App Service のアクセス制限で ① の送信 IP のみ許可（DS-DEC-27）。Week10 で VNet に閉じる |
 | Azure Database for MySQL | 全データ。自動バックアップ 7 日 | 8.4 LTS。Firewall で App Service の送信 IP のみ許可 |
 | Key Vault／アプリ設定 | DB 接続文字列・Stripe 秘密鍵・Webhook 署名鍵・Claude API キー・内部認証シークレット | ソースに置かない |
 | Application Insights | エラー率・応答時間の監視、閾値超過のメール通知 | 要件 6 章 |
@@ -84,8 +85,8 @@ flowchart LR
 | LLM | Claude API、anthropic | 1.x | F-029。モデルは Claude Sonnet 5 を想定 |
 | 認証 | 自前（argon2id ＋ サーバー側セッション） | argon2-cffi | 外部 ID 連携の余地を残す（A-07） |
 | テスト | pytest（API）、Vitest（フロント）、Stripe CLI（Webhook） | 最新 | README の jest は Vitest に変更済み |
-| パッケージ管理 | pnpm、uv | 最新 | 版固定が明確【要判断 #23】 |
-| ローカル環境 | Docker Compose（MySQL 8.4・utf8mb4・UTC） | — | Azure と揃える【要判断 #24】 |
+| パッケージ管理 | pnpm、uv | 最新 | 版固定が明確（DS-DEC-24）。演習期間中は版を固定し、脆弱性は Week8 のチェックで更新する。api は App Service が requirements.txt を読むため CI で `uv export` する（8.4） |
+| ローカル環境 | Docker Compose（MySQL 8.4・utf8mb4・UTC） | — | Azure と揃える（DS-DEC-25）。Azure Database for MySQL Flexible Server の 8.4 提供状況は構築時に要確認。無ければ両方 8.0（Azure 延長サポート）に揃える |
 
 ## 3. UML
 
@@ -331,14 +332,14 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 | DS-API-004 | GET | /api/v1/search?q= | キーワード検索。0 件時は代替導線（類似語・おすすめカテゴリ） | F-003 | P2 |
 | DS-API-005 | GET | /api/v1/contents | 特集・お知らせ（ホーム用） | F-030 | P2（P1 はダミー） |
 | DS-API-006 | GET | /api/v1/contents/{slug} | FAQ・規約・特商法などの静的ページ | F-028 | P2 |
-| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員） | F-009 | P1 |
+| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員）。トークンのカートが `ordered` なら新しい `active` カートを作って返す（注文後に買い物を続けられるようにする） | F-009 | P1 |
 | DS-API-011 | POST | /api/v1/cart/items | 明細追加（variant_id・quantity）。在庫 0 は 409 | F-009,007 | P1 |
 | DS-API-012 | PATCH | /api/v1/cart/items/{item_id} | 数量変更 | F-009 | P1 |
 | DS-API-013 | DELETE | /api/v1/cart/items/{item_id} | 明細削除 | F-009 | P1 |
 | DS-API-020 | GET | /api/v1/settings/public | 税率・送料ルール（表示用） | F-032,016 | P1 |
 | DS-API-021 | POST | /api/v1/checkout/prepare | 金額計算・冪等キー発行（確認画面用） | F-013 | P1 |
 | DS-API-022 | POST | /api/v1/orders | 注文確定（DS-PRC-014-1） | F-014,025 | P1 |
-| DS-API-023 | GET | /api/v1/orders/{order_number}?email= | ゲストの注文照会（メール一致必須・レート制限） | F-017,025 | P1（完了画面）／P2 |
+| DS-API-023 | POST | /api/v1/orders/{order_number}/lookup | ゲストの注文照会。メールは本文で受ける（URL に個人情報を載せない）。メール一致必須・レート制限 | F-017,025 | P1（完了画面）／P2 |
 | DS-API-024 | GET | /api/v1/me/orders | 会員の注文履歴 | F-017 | P2 |
 | DS-API-025 | GET | /api/v1/checkout/sessions/{id} | Checkout Session 状態照会（Webhook 未達の保険） | F-014 | P2 |
 | DS-API-030 | POST | /api/v1/auth/register | 会員登録（メール確認トークン発行） | F-024 | P2 |
@@ -365,7 +366,7 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 | /api/cart, /api/cart/items, /api/cart/items/[id] | GET/POST/PATCH/DELETE | DS-API-010〜013 | 匿名トークン Cookie の発行・付与 |
 | /api/checkout/prepare | POST | DS-API-021 | CSRF トークン検証 |
 | /api/orders | POST | DS-API-022 | CSRF トークン検証。処理中は F-036 の表示 |
-| /api/orders/[orderNumber] | GET | DS-API-023 | 完了画面の再表示 |
+| /api/orders/[orderNumber]/lookup | POST | DS-API-023 | 完了画面の再表示。メールは本文で送る |
 | /api/webhooks/stripe | POST | DS-API-060 | P2。生ボディを変更せず転送 |
 
 ### 4.4 処理仕様（P1 詳細設計）
@@ -379,14 +380,14 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 2. `carts` を `active → ordered` に条件付き UPDATE。影響 0 行なら 409（注文済み）
 3. 明細ごとに `variants` を条件付き UPDATE（DS-DEC-08）。影響 0 行が 1 つでもあれば全体を ROLLBACK し、在庫切れの明細 ID を返す（409）
 4. 金額を再計算する。単価は `variants → products.price_incl_tax` の現在値、送料は `system_settings` のルール（初期値: 4,990 円以上で無料、未満は設定値）。表示金額と 1 円でも違えば ROLLBACK し 409（金額変更）
-5. 決済アダプタを呼ぶ。P1 はスタブで、環境変数 `PAYMENT_STUB_RESULT=ok|ng` で切替
+5. 決済アダプタを呼ぶ。P1 はスタブで、環境変数 `PAYMENT_STUB_RESULT=ok|ng` で切替。P2 以降の Azure 環境ではこの変数を設定せず（スタブ OFF）、デプロイ時のチェック項目に「本番で `PAYMENT_STUB_RESULT` が未設定」を含める（DS-DEC-26）
 6. OK なら `orders.status=受付済`、`payments` に記録、`order_items` に確定時単価を保存、`audit_logs` に記録して COMMIT。NG なら `orders.status=決済失敗` と `payments` の失敗を COMMIT した後、別トランザクションで在庫を戻しカートを `active` に戻す
 7. メールアダプタを呼ぶ（P1 はログ出力）。失敗しても注文は成立させ、監査ログに残す
 8. 注文番号は `GU-YYMMDD-` ＋ ランダム 8 文字（英大文字と数字、紛らわしい I/O/0/1 を除く）
 
 #### DS-PRC-021 金額計算（確認画面用）
 
-カート明細の単価 × 数量の合計を小計とし、送料ルールを適用して合計を出す。税率は `system_settings.tax_rate` で、税込価格から内税額を表示用に逆算する（合計 × 税率 ÷（1 ＋ 税率）、円未満切り捨て）。金額は整数の円で扱い、浮動小数を使わない【要判断 #30】。
+カート明細の単価 × 数量の合計を小計とし、送料ルールを適用して合計を出す。税率は `system_settings.tax_rate` で、税込価格から内税額を表示用に逆算する（合計 × 税率 ÷（1 ＋ 税率）、円未満切り捨て）。金額は整数の円で扱い、浮動小数を使わない（DS-DEC-31）。商品価格は税込で持ち、税率変更時に変わるのは内税表示と `orders.tax_rate_at_order` で、売価は運用の価格改定で追従させる。税率が可変であることは受け入れテスト「税率を変えると確認画面の内税額が変わる」で示す。
 
 #### DS-PRC-011 カート追加
 
@@ -449,7 +450,7 @@ erDiagram
 | DS-TBL-05 | categories | name, slug(UNIQUE), parent_id, gender, sort_order | 階層＋性別 | F-001 | P1 |
 | DS-TBL-06 | products | name, description, material, price_incl_tax, published, sort_order | 複数カテゴリは product_categories | F-001,005,031 | P1 |
 | DS-TBL-07 | product_categories | product_id, category_id | 複合 UNIQUE | F-031 | P1 |
-| DS-TBL-08 | product_images | product_id, url, sort_order | P1 は静的パス【要判断 #21】 | F-005 | P1 |
+| DS-TBL-08 | product_images | product_id, path, sort_order | `path` はパスのみ保存し、配信ベース URL は環境変数 `IMAGE_BASE_URL` に持つ。P1 は Next.js の静的配信、P2 で Blob に移す際はファイルコピーと環境変数の変更のみで済む（DS-DEC-22） | F-005 | P1 |
 | DS-TBL-09 | variants | product_id, color, size, sku(UNIQUE), stock | stock は条件付き UPDATE でのみ減算 | F-005,007,014 | P1 |
 | DS-TBL-10 | stores | name, prefecture | ダミー 3 件 | F-006,038 | P3 |
 | DS-TBL-11 | store_stocks | store_id, variant_id, stock | ダミー | F-006 | P3 |
@@ -465,8 +466,8 @@ erDiagram
 | DS-TBL-21 | system_settings | key(UNIQUE), value(JSON), description | tax_rate, shipping_fee, free_shipping_threshold, payment_timeout_minutes | F-032,016 | P1 |
 | DS-TBL-22 | contents | kind(feature/news/faq/static), slug(UNIQUE), title, body, publish_from, publish_to, sort_order | | F-028,030,034 | P2 |
 | DS-TBL-23 | audit_logs | actor_type(member/staff/system), actor_id, action, target_type, target_id, detail(JSON), at | 90 日で削除 | NFR-04 | P1 |
-| DS-TBL-24 | chat_sessions | member_id(NULL 可), anonymous_token, turns, started_at, handoff_at | 10 往復上限 | F-029 | P2 |
-| DS-TBL-25 | chat_messages | chat_session_id, role(user/assistant), body_masked, product_ids(JSON) | 個人情報はマスク後 | F-029 | P2 |
+| DS-TBL-24 | chat_sessions | member_id(NULL 可), anonymous_token, turns, started_at, handoff_at | 10 往復上限。削除請求・退会時は member_id を NULL にする（DS-DEC-29） | F-029 | P2 |
+| DS-TBL-25 | chat_messages | chat_session_id, role(user/assistant), body_masked, product_ids(JSON) | 個人情報はマスク後。90 日で削除（監査ログと同じジョブ） | F-029 | P2 |
 | DS-TBL-26 | login_attempts | subject_type, identifier, succeeded, ip, at | 5 回/15 分でロック判定 | NFR-10 | P2 |
 
 P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `orders.member_id`（NULL 可）と `carts.member_id` は P1 から列を持ち、P2 で FK を張る。
@@ -478,7 +479,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 - 在庫: `variants.stock` の減算は条件付き UPDATE のみ。管理画面の在庫変更（F-031）は絶対値の SET で、監査ログに前後の値を残す
 - 注文状態: 8 値の列挙。遷移の妥当性はアプリで検証し、不正な遷移は 409
 - 個人情報の匿名化: 削除請求時は members の個人情報列をダミー値に置換し、orders の配送先コピーも同様に置換する（要件 F-026）
-- 監査ログの保持: `audit_logs.at` に索引を張り、日次ジョブで 90 日超を削除【要判断 #27 の仕組みに載せる】
+- 監査ログの保持: `audit_logs.at` に索引を張り、日次ジョブで 90 日超を削除（DS-DEC-28 のスケジューラに載せる。P2）
 - 初期データ（seed）: カテゴリ 3 区分、商品 30 点（色 2・サイズ 3・在庫付き）、店舗 3 件、会員 5 件、クーポン 2 件、system_settings 4 キー。Alembic のマイグレーションとは分けて `seed.py` で投入する
 
 ## 6. 画面設計
@@ -522,7 +523,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 │ │        トップ画像（特集・全幅）              │ │
 │ └──────────────────────────────────────────┘ │
 │ カテゴリ（画像＋文字、上下の画像が隠れない数 U-02） │
-│ [WOMEN] [MEN] [KIDS] [BABY] → 全カテゴリへ      │
+│ [WOMEN] [MEN] [KIDS・TEEN] → 全カテゴリへ       │
 │ おすすめ商品（トップ画像と同じ表示形式 U-03）      │
 │ ┌────┐ ┌────┐ ┌────┐ ┌────┐                   │
 │ │ 商品 │ │ 商品 │ │ 商品 │ │ 商品 │ → もっと見る    │
@@ -644,7 +645,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 | コード | 秘密を触るモジュールは `import "server-only"`。クライアントから import するとビルド失敗 | CI |
 | ビルド成果物 | CI でクライアントバンドルを全文検索し、注入したダミー秘密が 0 件 | IT |
 | 通信 | 応答に秘密・接続文字列・内部 URL を含めない。FastAPI の例外本文をそのまま返さない | ST: 全応答を走査 |
-| リポジトリ | `.env` 不コミット、`.env.example` は空値、gitleaks を CI と pre-commit に【要判断 #29】 | CI |
+| リポジトリ | `.env` 不コミット、`.env.example` は空値、gitleaks を CI と pre-commit に。GitHub の Secret scanning／Push protection（public リポジトリは無料）も有効化して二重にする（DS-DEC-30） | CI |
 | ログ | 秘密パターンのマスクフィルタを両アプリに | UT |
 
 ### 7.3 セッション設計（DS-DEC-14）
@@ -652,10 +653,11 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 | 項目 | 設計 |
 | --- | --- |
 | 方式 | サーバー側セッション。`sessions` に Cookie 値の SHA-256 を保存 |
-| Cookie | HttpOnly・Secure・SameSite=Lax。会員は `sid`、管理は `asid`（別名・別種別）。会員 24 時間、管理 8 時間【要判断 #20】 |
+| Cookie | HttpOnly・Secure・SameSite=Lax。会員は `sid`、管理は `asid`（別名・別種別）。会員 24 時間、管理 8 時間（要件 6 章の 24 時間より厳しい側に設定。DS-DEC-21） |
 | 固定攻撃対策 | ログイン成功時にセッション ID を再発行 |
 | CSRF | 状態変更 API は BFF でトークン検証（Double Submit Cookie） |
 | ロック | `login_attempts` で 5 回/15 分を判定し `locked_until` を設定。通知メール。手動解除は F-039（P3） |
+| 管理画面の分離 | 同じ Next.js の `/admin`（route group で独立）＋別 Cookie。API は `/api/v1/admin/*` に隔離。Week10 の閉域化で管理面を別ホスト＋IP 制限に切り出し、公開面からの総当たり到達性を消す（DS-DEC-21） |
 | 失効 | ログアウト・期限切れ・ロック時に行を削除 |
 | ゲスト | 認証なし。カートは `anonymous_token` Cookie（HttpOnly・90 日） |
 
@@ -667,7 +669,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 | 2 | 注文作成と同一トランザクションでカートを `active → ordered` に条件付き UPDATE | IT: 2 タブ確定で 1 件 |
 | 3 | 注文 1 件に Stripe Session 1 つ（`stripe_session_id` UNIQUE） | P2 |
 | 4 | `stripe_events.event_id` UNIQUE で Webhook を重複排除 | IT: 同一 event 2 回で更新 1 回 |
-| 補助 | 決済待ちの期限（30 分）で自動キャンセル・在庫戻し・カートを `active` に戻す【要判断 #25】 | IT: 期限切れ後に買い直せる |
+| 補助 | 決済待ちの期限（30 分。Stripe Checkout の expires_at 下限と同じ）で自動キャンセル・在庫戻し・カートを `active` に戻す（DS-DEC-26）。P1 はスタブが同期で結果を返すため決済待ちが残らず、実装は P2 追補。P2 では決済待ちの間カートがロックされるため「決済を再開する」「この注文を取り消す」導線を SCR-006 に設ける | IT: 期限切れ後に買い直せる（P2） |
 
 ### 7.5 内部 ID と認可（DS-DEC-12）
 
@@ -705,7 +707,8 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 | 名前 | 置き場 | 用途 |
 | --- | --- | --- |
 | DATABASE_URL | api | `mysql+asyncmy://...?ssl=true` |
-| INTERNAL_TOKEN | web・api | BFF → FastAPI の内部認証【要判断 #26】 |
+| INTERNAL_TOKEN | web・api | BFF → FastAPI の内部認証（共有シークレット。DS-DEC-27）。Webhook 転送の主防御は Stripe 署名検証で、これは補助 |
+| IMAGE_BASE_URL | web | 商品画像の配信ベース URL（P1 は静的パス、P2 で Blob に切替。DS-DEC-22） |
 | API_BASE_URL | web | FastAPI の URL（サーバー側のみ） |
 | STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET | api | P2 |
 | ACS_CONNECTION_STRING / MAIL_FROM | api | P2 |
@@ -716,18 +719,18 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 ### 8.3 ローカル開発
 
 ```
-apps/GUapp/
+GUapp/（リポジトリルート。モノレポ）
   apps/web/        Next.js（pnpm）
   apps/api/        FastAPI（uv）
   docker-compose.yml   MySQL 8.4（utf8mb4・UTC）
   docs/
 ```
 
-`docker compose up -d` で MySQL を起動し、`uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload` と `pnpm dev` で動かす。Stripe Webhook は P2 で `stripe listen --forward-to localhost:3000/api/webhooks/stripe`【要判断 #22】。
+`docker compose up -d` で MySQL を起動し、`uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload` と `pnpm dev` で動かす。Stripe Webhook は P2 で `stripe listen --forward-to localhost:3000/api/webhooks/stripe`。docs とコードを 1 リポジトリに置く理由はトレースと引き継ぎの一元化（DS-DEC-23）。アプリの稼働は App Service 単位で独立しているため、リポジトリを 1 つにしても片方の障害が他方へ波及することはない。壊れたコードの混入は CI（テスト必須）で防ぐ。
 
 ### 8.4 デプロイ方針（Week7 に向けたメモ）
 
-GitHub Actions で main への push をトリガに、①pytest・Vitest・gitleaks → ②ビルド → ③App Service へデプロイ（web・api を別ジョブ）。マイグレーションはデプロイジョブの前段で `alembic upgrade head` を実行する。P1 はローカルのみで、CI はテストと秘密スキャンまでを先に整える。
+GitHub Actions で main への push をトリガに、①pytest・Vitest・gitleaks → ②ビルド（web は Next.js standalone 出力、api は `uv export --format requirements-txt > requirements.txt` を生成して App Service の Oryx ビルドに渡す） → ③App Service へデプロイ（web・api を別ジョブ）。マイグレーションはデプロイジョブの前段で `alembic upgrade head` を実行する。デプロイ後のチェックに「本番で `PAYMENT_STUB_RESULT` が未設定」を含める。P1 はローカルのみで、CI はテストと秘密スキャンまでを先に整える。
 
 ## 9. 設計上の決定・申し送り
 
@@ -756,21 +759,23 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | 19 | UML は Mermaid | 差分管理 | draw.io |
 | 20 | Vitest ＋ pytest | 設定が軽い | Jest |
 
-### 9.2 未決（統括判断待ち）
+### 9.2 draft-v1 の未決 #20〜30 の決定（2026-09-07 統括承認）
 
-| # | 論点 | 仮置き | 影響章 |
-| --- | --- | --- | --- |
-| 20 | 管理画面の分離方法 | 同じ Next.js の `/admin`、別 Cookie・別セッション種別 | 6・7.3 |
-| 21 | 商品画像の置き場 | P1 は静的、P2 で Blob 判断 | 5.2 |
-| 22 | モノレポ構成 | `apps/web`・`apps/api` | 8.3 |
-| 23 | パッケージ管理 | pnpm・uv | 2 |
-| 24 | ローカル DB | Docker MySQL 8.4 | 2・8.3 |
-| 25 | 決済待ちの期限 | 30 分。Session 期限も 30 分。必須 | 7.4 |
-| 26 | Webhook 転送の内部認証 | 共有シークレットのヘッダ | 4.1・8.2 |
-| 27 | 期限切れ処理の実行方式 | FastAPI 内 APScheduler、5 分ごと | 5.3・7.4 |
-| 28 | チャット会話ログ | 2 表に保存、マスク後 | 5.2 |
-| 29 | 秘密スキャン | gitleaks | 7.2 |
-| 30 | 金額の持ち方 | 整数の円、税込 | 4.4・5.2 |
+旧 #20〜30 は DS-DEC-21〜31 として確定した。条件付きの項目は条件を該当章に書き込んである。
+
+| DS-DEC | 旧 # | 決定 | 条件・理由 | 影響章 |
+| --- | --- | --- | --- | --- |
+| 21 | 20 | 管理画面は同じ Next.js の `/admin`、別 Cookie（`asid`）・別セッション種別・管理 8 時間 | 同居のリスクは公開面の脆弱性の波及と総当たりの到達性。`/admin` は route group で独立させ API も `/api/v1/admin/*` に隔離済みなので、Week10 の閉域化で管理面を別ホスト＋IP 制限に切り出して総当たりリスクを消す | 6・7.3 |
+| 22 | 21 | 商品画像は P1 は静的配信、P2 で Blob Storage へ | DB にはパスのみ保存し配信ベース URL は環境変数。移行はファイルコピーと環境変数変更のみでコード・DB 無変更 | 5.2・8.2 |
+| 23 | 22 | モノレポ（`apps/web`・`apps/api`・`docs/` を GUapp 1 リポジトリに） | トレースと引き継ぎの一元化。稼働は App Service 単位で独立し、壊れたコードの混入は CI で防ぐ | 8.3 |
+| 24 | 23 | pnpm・uv で版を固定 | 演習期間は固定し、脆弱性は Week8 のチェックで更新。api は CI で requirements.txt を export | 2・8.4 |
+| 25 | 24 | ローカル DB は Docker MySQL 8.4 | 無料でオフライン開発可。Azure 側の 8.4 提供状況は構築時に要確認、無ければ両方 8.0 | 2・8.3 |
+| 26 | 25 | 決済待ちの期限 30 分（Stripe Checkout の下限）。P2 で実装 | P1 はスタブが同期応答で決済待ちが残らない。P2 では決済待ち中のカートロックに対し再開・取り消し導線を設ける。P2 以降はスタブ OFF（本番で `PAYMENT_STUB_RESULT` 未設定をデプロイチェック） | 4.4・7.4 |
+| 27 | 26 | Webhook 転送の内部認証は共有シークレットのヘッダ | 主防御は Stripe 署名検証、これは補助。さらに App Service ② のアクセス制限で ① の送信 IP のみ許可 | 1・4.1・8.2 |
+| 28 | 27 | 期限切れ処理・90 日削除は FastAPI 内 APScheduler、5 分ごと。P2 で実装 | gunicorn の 2 ワーカーで二重実行しないよう、実行前に MySQL `GET_LOCK()` を取得した 1 プロセスだけが処理する。実サービスなら Azure Functions の Timer トリガーが適所（9.5） | 5.3・7.4 |
+| 29 | 28 | チャット会話ログは 2 表にマスク後の本文のみ保存 | 有人引き継ぎのため保存中は会員に紐づけ、削除請求・退会時に member_id を NULL に。90 日で削除 | 5.2 |
+| 30 | 29 | gitleaks（pre-commit・CI）＋ GitHub Secret scanning／Push protection | push 前に止められるのは gitleaks。GitHub 側は無料の保険。trufflehog は設定が重く演習では過剰 | 7.2 |
+| 31 | 30 | 金額は整数の円。商品価格は税込で持つ | 税率変更で変わるのは内税表示と `tax_rate_at_order`。売価は運用の価格改定で追従（GU 実サイトと同じ）。可変であることは受け入れテスト「税率変更で内税額が変わる」で示す | 4.4・5.2 |
 
 ### 9.3 一般的な EC との比較（代替案の検討経緯）
 
@@ -785,7 +790,7 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 
 ### 9.5 講義の問いへの答え
 
-「POS アプリで Functions はあり？」→【統括記入】
+「POS アプリで Functions はあり？」→ 常時応答が要る API 本体には不向き。従量課金の Functions はアイドル後にコールドスタートが発生し、REQ-NFR-03（久しぶりのアクセスでも極端に遅くならない）を満たせない。レジは営業中ずっと即応が要る処理なので App Service（Always On）を選ぶ。一方、周期処理（決済待ちの期限切れ、再入荷通知、監査ログの削除）は Functions の Timer トリガーが適所で、常時稼働が要らず、API のワーカー多重実行の問題（DS-DEC-28）も起きない。本演習では実装量を抑えるため API 内スケジューラで代替するが、実サービスなら周期処理だけ Functions に切り出す。
 
 ## 10. トレーサビリティ表（P1）
 
