@@ -95,7 +95,7 @@ flowchart LR
 アクターは要件定義書 4 章の 4 種にゲストを加えた。Mermaid にユースケース図の記法が無いため、フローチャート記法で代替する。P1 の対象はゲストの購買導線（太枠）である。
 
 ```mermaid
-flowchart LR
+flowchart TB
     G([ゲスト])
     Mb([会員])
     Op([運用担当者])
@@ -105,7 +105,7 @@ flowchart LR
         U2[カートを操作する<br/>F-009]
         U3[注文を確定する<br/>F-013,014,025]
     end
-    subgraph 会員
+    subgraph 会員向け
         U4[登録・ログインする<br/>F-024]
         U5[注文履歴を見る<br/>F-017]
     end
@@ -123,6 +123,8 @@ flowchart LR
     Mb --> U1 & U2 & U3 & U5 & U6 & U7
     Op --> U8 & U9 & U10 & U11
     Sp --> U10 & U11
+    U1 ~~~ U8
+    U4 ~~~ U10
     style U1 stroke-width:3px
     style U2 stroke-width:3px
     style U3 stroke-width:3px
