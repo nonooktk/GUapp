@@ -171,8 +171,8 @@ sequenceDiagram
     participant BFF as Next.js BFF
     participant API as FastAPI
     participant DB as MySQL
-    participant PAY as 決済アダプタ（P1: スタブ）
-    participant MAIL as メールアダプタ（P1: ログ）
+    participant PAY as 決済アダプタ（P1 はスタブ）
+    participant MAIL as メールアダプタ（P1 はログ出力）
     B->>BFF: GET /checkout/confirm
     BFF->>API: POST /api/v1/checkout/prepare（cart token）
     API->>DB: カート・明細・在庫・設定を読み金額を計算
@@ -191,7 +191,7 @@ sequenceDiagram
         API->>API: 金額再計算・表示金額と照合
         API->>PAY: authorize(order_number, amount)
         PAY-->>API: OK（スタブは常に OK。テスト用に NG を切替可）
-        API->>DB: UPDATE orders SET status=受付済; INSERT payments; INSERT audit_logs
+        API->>DB: UPDATE orders SET status=受付済 ／ INSERT payments ／ INSERT audit_logs
         API->>DB: COMMIT
         API->>MAIL: send(order_confirmation)
         API-->>BFF: 201 注文番号・明細・金額
@@ -227,11 +227,11 @@ sequenceDiagram
     alt 重複
         API-->>BFF: 200（無視）
     else 新規
-        API->>DB: UPDATE orders SET status=受付済; INSERT payments
+        API->>DB: UPDATE orders SET status=受付済 ／ INSERT payments
         API-->>BFF: 200
     end
     BFF-->>S: 200
-    B->>BFF: GET /orders/complete?session_id=
+    B->>BFF: GET /orders/complete（session_id 付き）
     BFF->>API: GET /api/v1/checkout/sessions/{id}（状態照会）
     API-->>BFF: paid なら受付済（Webhook 未達の保険）
 ```
