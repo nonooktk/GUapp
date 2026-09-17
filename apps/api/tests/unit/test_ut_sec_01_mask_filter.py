@@ -17,7 +17,7 @@ def _emit(record_filter: SecretMaskFilter, message: str, *args: object) -> str:
 
 
 def test_ut_sec_01_mask_stripe_key() -> None:
-    out = _emit(SecretMaskFilter(), "key=sk_live_ABCdef0123456789XYZ done")
+    out = _emit(SecretMaskFilter(), "key=sk_live_ABCdef0123456789XYZ done")  # pragma: allowlist secret  # noqa: E501
     assert "sk_live_ABCdef0123456789XYZ" not in out  # pragma: allowlist secret
     assert f"sk_live_{MASK}" in out
     out2 = _emit(SecretMaskFilter(), "key=sk_test_zzz999 whsec_abc123")
@@ -68,7 +68,7 @@ def test_ut_sec_01_filter_keeps_args_structure_for_uvicorn_access_formatter() ->
         __file__,
         1,
         '%s - "%s %s HTTP/%s" %d',
-        ("127.0.0.1:1", "GET", "/api/v1/health?token=sk_live_ABC123", "1.1", 200),
+        ("127.0.0.1:1", "GET", "/api/v1/health?token=sk_live_ABC123", "1.1", 200),  # pragma: allowlist secret  # noqa: E501
         None,
     )
     assert SecretMaskFilter().filter(record) is True
