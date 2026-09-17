@@ -3,10 +3,10 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書番号 | GUEC-TD-01 |
-| 版 | draft-v1 |
+| 版 | draft-v2 |
 | 作成者 | Mitsuru Oya・Claude |
 | 作成日 | 2026-09-07 |
-| 入力 | 要求仕様書 with_ai v2.4、要件定義書 with_ai v1.3、設計仕様書 P1 draft-v2、実装フェーズ計画 v1.2 |
+| 入力 | 要求仕様書 with_ai v2.4、要件定義書 with_ai v1.3、設計仕様書 P1 draft-v3、実装フェーズ計画 v1.2 |
 | 対象 | P1（F-001,004,005,009,013,014,025,036 と F-007・F-032 の一部）。P2 以降は追補 |
 
 ## 改訂履歴
@@ -14,6 +14,7 @@
 | 版 | 日付 | 内容 | 作成 | 承認 |
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-09-07 | 初稿。設計仕様書 P1 draft-v2 の設計 ID に対応する 4 レベルのテストを設計。9.4 申し送りの必須項目を IT に反映 | Claude | — |
+| draft-v2 | 2026-09-17 | 設計仕様書 draft-v3 に追従。UT-WEB-06 を CI へ移管、UT-WEB-07・UT-014-03/04 の検証範囲を UT で確認できる範囲に限定。tax_rate の表現・422 の扱いを設計と整合 | Claude | Oya |
 
 ## 0. 本書の位置づけ
 
@@ -39,7 +40,7 @@
 | AT | 利用者の目的が達成できるか | 手順書に沿ってブラウザで操作。PC 幅と 375px の 2 回 | 手動（Playwright 化は P2 で判断） | P1 実装完了後 |
 | ST | 機能要件・非機能要件を満たすか | 画面操作と HTTP クライアント（curl）。セキュリティ項目は開発者ツールで確認 | 一部を pytest で自動化 | P1 実装完了後 |
 | IT | API と DB の経路が設計どおり動くか。同時実行・異常系 | pytest＋httpx で FastAPI を起動し Docker MySQL に接続。並行実行は asyncio.gather | 全件自動 | P1 実装と並走 |
-| UT | 関数・コンポーネントが仕様どおりか | pytest（api）、Vitest＋Testing Library（web） | 全件自動。CI で実行 | 実装と同時 |
+| UT | 関数・コンポーネントが仕様どおりか | pytest（api。DB を要する関数は SQLite インメモリ）、Vitest＋Testing Library（web） | 全件自動。CI で実行 | 実装と同時 |
 
 ### 1.2 合否基準
 
@@ -53,7 +54,7 @@
 | --- | --- |
 | DB | Docker MySQL 8.4。テスト開始時に `alembic upgrade head` → `seed.py` で初期化 |
 | seed | 商品 30 点（色 2・サイズ 3）。テスト用に次を追加する：在庫 0 のバリエーション（V-STOCK0）、在庫 1 のバリエーション（V-STOCK1）、非公開商品（P-UNPUB）、全バリエーション在庫 0 の商品（P-ALL0） |
-| system_settings | tax_rate=0.10、shipping_fee=550、free_shipping_threshold=4990、payment_timeout_minutes=30 |
+| system_settings | tax_rate="0.10"（文字列。API 内は Decimal／基点整数）、shipping_fee=550、free_shipping_threshold=4990、payment_timeout_minutes=30 |
 | 決済 | `PAYMENT_STUB_RESULT=ok`（既定）。決済 NG のテストは `ng` に切り替えて実行 |
 | メール | ログ出力スタブ。送信内容はログで確認 |
 | 個人情報 | 配送先・メールはダミーのみ（例：テスト 太郎、test@example.com） |
@@ -145,7 +146,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | IT-010-02 | DS-API-010 | 正常 | 注文済み（ordered）カートのトークンで GET /cart | 新しい active カートが作られて返る |
 | IT-011-01 | DS-API-011 | 正常 | 同じ variant を 2 回追加 | 明細は 1 行で数量 2 |
 | IT-011-02 | DS-API-011 | 異常 | 在庫 0・非公開商品の variant | 409 `out_of_stock`／404 |
-| IT-011-03 | DS-API-011 | 境界 | quantity=10、11、0、-1 | 10 は 201、11 は 422、0 と -1 は 400 |
+| IT-011-03 | DS-API-011 | 境界 | quantity=10、11、0、-1 | 10 は 201、11 は 422 `limit_exceeded`（業務上限）、0 と -1 は 400 `validation_error`（形式） |
 | IT-011-04 | DS-API-011 | 境界 | 合計 50 点、51 点 | 50 は 201、51 は 422 |
 | IT-012-01 | DS-API-012,013 | 正常 | 数量変更・削除 | 反映される。他人のカートの item_id は 404 |
 | IT-020-01 | DS-API-020 | 正常 | GET /settings/public | tax_rate・shipping_fee・free_shipping_threshold のみ返る（内部設定は含まない） |
@@ -176,17 +177,17 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | --- | --- | --- | --- | --- |
 | UT-021-01 | DS-PRC-021 金額計算 | 正常 | 単価 1,990×2、送料ルール既定 | 小計 3,980、送料 550、合計 4,530、内税 411（4530×10÷110=411.8→411） |
 | UT-021-02 | DS-PRC-021 | 境界 | 小計 4,989／4,990／4,991 | 送料 550／0／0 |
-| UT-021-03 | DS-PRC-021 | 境界 | 合計 0 円（空）、合計 1 円 | 0 は 409 相当の例外、1 円は内税 0 |
-| UT-021-04 | DS-PRC-021 | 正常 | tax_rate=0.08 | 内税が 8% で逆算される。合計は変わらない |
-| UT-021-05 | DS-PRC-021 | 正常 | 金額の型 | 全て int。float が混入すると型エラー |
-| UT-014-01 | 注文番号生成 | 正常 | 10,000 回生成 | 形式 `GU-\d{6}-[A-HJ-NP-Z2-9]{8}`。重複 0 |
+| UT-021-03 | DS-PRC-021 | 境界 | 合計 0 円（空）、合計 1 円 | 空カートは金額計算前に 409 `empty_cart` の例外、1 円は内税 0 |
+| UT-021-04 | DS-PRC-021 | 正常 | tax_rate="0.08" | 内税が 8% で逆算される。合計は変わらない |
+| UT-021-05 | DS-PRC-021 | 正常 | 金額の型 | 全て int。引数に float を渡すと `TypeError` |
+| UT-014-01 | 注文番号生成 | 正常 | 10,000 回生成 | 形式 `GU-\d{6}-[A-HJ-NP-Z2-9]{8}`。重複 0。UNIQUE 衝突時は 1 回再生成 |
 | UT-014-02 | 注文番号生成 | 異常 | 文字集合 | I・O・0・1 が 1 度も出ない |
-| UT-014-03 | 在庫引当（条件付き UPDATE 生成） | 正常 | quantity=2、stock=5 | `stock=stock-2 WHERE stock>=2` が発行され影響 1 行 |
-| UT-014-04 | 在庫引当 | 境界 | quantity=stock、quantity=stock+1 | 前者は影響 1 行、後者は 0 行 |
-| UT-014-05 | 状態遷移検証 | 異常 | 決済待ち → 出荷済（飛び越し） | 409 相当の例外 |
-| UT-011-01 | DS-PRC-011 カート追加判定 | 境界 | 明細 9→10、10→11 | 前者可、後者不可 |
-| UT-VAL-01 | Pydantic 入力検証（配送先） | 異常 | 郵便番号 6 桁・8 桁、電話に英字、メールに `@` 無し | 全て validation_error。項目名が返る |
-| UT-VAL-02 | Pydantic 入力検証 | 境界 | 氏名 1 文字・50 文字・51 文字 | 1 と 50 は可、51 は不可 |
+| UT-014-03 | 在庫引当（条件付き UPDATE 生成） | 正常 | quantity=2、stock=5 | 条件付き UPDATE が実行され影響 1 行。実施方法: SQLite インメモリで引当関数を実行し影響行数のみを検証。MySQL 固有挙動は IT-014-04 で担保 |
+| UT-014-04 | 在庫引当 | 境界 | quantity=stock、quantity=stock+1 | 前者は影響 1 行、後者は 0 行。実施方法: SQLite インメモリで引当関数を実行し影響行数のみを検証。MySQL 固有挙動は IT-014-04 で担保 |
+| UT-014-05 | 状態遷移検証 | 異常 | pending_payment → shipped | 409 `invalid_transition`。遷移表は要件定義書 5.5 |
+| UT-011-01 | DS-PRC-011 カート追加判定 | 境界 | 明細 9→10、10→11 | 前者可、後者不可。11 は 422 `limit_exceeded` |
+| UT-VAL-01 | Pydantic 入力検証（配送先） | 異常 | 郵便番号 6 桁・8 桁（ハイフン付き 7 桁は可）、電話に英字、メールに `@` 無し | 400 `validation_error`、fields に項目名と reason |
+| UT-VAL-02 | Pydantic 入力検証 | 境界 | 氏名 1 文字・50 文字・51 文字。住所 200／201 文字、電話 9 桁／12 桁も併せて確認 | 1 と 50 は可、51 は不可 |
 | UT-SEC-01 | 秘密マスクフィルタ | 正常 | ログに `sk_live_…` と接続文字列を含む文字列 | マスクされて出力される |
 | UT-SEC-02 | エラーハンドラ | 正常 | 未捕捉例外 | 500 の本文が固定文言。ログにのみ詳細 |
 
@@ -199,8 +200,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | UT-WEB-03 | 処理中表示（F-036） | 正常 | 送信中の状態 | ボタン disabled、処理中表示、再クリックで 2 回目の送信が発生しない |
 | UT-WEB-04 | 金額表示 | 正常 | 6520 | `¥6,520` と 3 桁区切りで表示 |
 | UT-WEB-05 | 環境変数ローダー（7.2） | 異常 | `NEXT_PUBLIC_INTERNAL_TOKEN` を定義 | 起動時に拒否される |
-| UT-WEB-06 | server-only モジュール | 異常 | クライアントコンポーネントから秘密モジュールを import | ビルド失敗 |
-| UT-WEB-07 | 商品詳細の固定バー | 正常 | 幅 375px のビューポート | 固定バーが表示され、色・サイズ・数量・価格が選択に追従 |
+| UT-WEB-07 | 商品詳細の固定バー | 正常 | 色・サイズ・数量の選択操作 | 固定バーの表示内容（色/サイズ/数量/価格）が選択に追従。375px での表示位置は AT-02／ST-F005-03 で確認 |
 | UT-WEB-08 | 在庫切れ表示 | 正常 | 在庫 0 のバリエーション選択 | ボタン disabled、「在庫切れ」表示 |
 
 ## 6. テストデータ
@@ -218,7 +218,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 
 | 時期 | 内容 |
 | --- | --- |
-| P1 実装と同時 | UT を実装と並走で作成。CI（GitHub Actions）で pytest・Vitest を実行 |
+| P1 実装と同時 | UT を実装と並走で作成。CI（GitHub Actions）で pytest・Vitest を実行。CI: クライアントコンポーネントから server-only モジュールを import した違反ファイルで `next build` が失敗することを確認するジョブ |
 | P1 実装後半 | IT を pytest で実装。Docker MySQL を CI でも起動（services） |
 | P1 実装完了 | ST・AT を手順書で実施し、結果を 10 章の表に記録。AT-01・AT-02 合格が P1 出口 |
 | P2 追補 | Stripe Webhook（同一 event 2 回で更新 1 回）、決済待ち期限切れ、HTTPS、性能 95%tile、ログイン・ロック、AI アシスタントのテストを追加 |
@@ -256,7 +256,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | REQ-FR-1102（データ） | F-032（一部） | DS-API-020・DS-TBL-21 | AT-08 | ST-F032-01/02 | IT-020-01 | UT-021-04 |
 | REQ-FR-1204,1205 | F-036 / 全画面 | DS-PRC-036 | AT-05 | ST-F036-01 | — | UT-WEB-02/03 |
 | REQ-NFR-04 | — | DS-TBL-23 | — | ST-NFR-02 | IT-014-01 | — |
-| REQ-NFR-06,07,08 | — | 7 章 | — | ST-SEC-01〜11 | IT-060-01、IT-CORS-01、IT-BFF-01/02 | UT-SEC-01/02、UT-WEB-05/06 |
+| REQ-NFR-06,07,08 | — | 7 章 | — | ST-SEC-01〜11 | IT-060-01、IT-CORS-01、IT-BFF-01/02 | UT-SEC-01/02、UT-WEB-05（UT-WEB-06 は CI） |
 | REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 |
 | REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — |
 

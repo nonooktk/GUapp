@@ -1,0 +1,322 @@
+<title>GUapp 設計とテストの読み方</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f6f7f9; --paper:#ffffff; --ink:#1c2230; --ink-2:#4a5468; --ink-3:#7b8497;
+  --line:#dde1e8; --navy:#1f3a68; --navy-soft:#e6ecf6; --red:#b8312f; --red-soft:#f9e9e8;
+  --green:#2f7a4c; --green-soft:#e6f2ea; --amber:#9a6b12; --amber-soft:#f8efd9;
+  --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141821; --paper:#1c212c; --ink:#e8ebf1; --ink-2:#b4bccb; --ink-3:#8791a4;
+    --line:#2e3542; --navy:#8fb0e6; --navy-soft:#1f2a3d; --red:#e57b78; --red-soft:#3a2323;
+    --green:#7cc79a; --green-soft:#1f3328; --amber:#e0b35a; --amber-soft:#3a3120;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141821; --paper:#1c212c; --ink:#e8ebf1; --ink-2:#b4bccb; --ink-3:#8791a4;
+  --line:#2e3542; --navy:#8fb0e6; --navy-soft:#1f2a3d; --red:#e57b78; --red-soft:#3a2323;
+  --green:#7cc79a; --green-soft:#1f3328; --amber:#e0b35a; --amber-soft:#3a3120;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans JP',system-ui,sans-serif;font-size:16px;line-height:1.85;padding-block:0 64px;padding-inline:16px}
+h1,h2,h3{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;line-height:1.3;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,5vw,42px);font-weight:900;letter-spacing:-.01em}
+h2{font-size:clamp(22px,3.4vw,28px);font-weight:900;margin-top:64px;padding-top:24px;border-top:3px solid var(--ink)}
+h3{font-size:18px;font-weight:700;margin-top:32px;color:var(--navy)}
+p{margin:12px 0;max-width:42em}
+ul,ol{max-width:42em;padding-left:1.4em}
+li{margin:6px 0}
+strong{font-weight:700}
+code{font-family:var(--mono);font-size:.9em;background:var(--navy-soft);padding:1px 6px;border-radius:4px}
+.wrap{max-width:880px;margin:0 auto}
+header.top{padding-block:56px 32px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.lead{font-size:18px;color:var(--ink-2);max-width:40em;margin-top:16px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:20px;font-size:13px;color:var(--ink-3)}
+nav.toc{margin-top:32px;background:var(--paper);border:1px solid var(--line);padding:20px 24px;border-radius:6px}
+nav.toc ol{columns:2;column-gap:32px;margin:8px 0 0;padding-left:1.4em}
+nav.toc li{break-inside:avoid;font-size:15px}
+nav.toc a{color:var(--navy);text-decoration:none}
+nav.toc a:hover,nav.toc a:focus-visible{text-decoration:underline}
+@media (max-width:560px){nav.toc ol{columns:1}}
+.why{background:var(--paper);border-left:4px solid var(--navy);padding:14px 20px;margin:20px 0;border-radius:0 6px 6px 0;max-width:46em}
+.why .tag{font-size:12px;font-weight:700;color:var(--navy);letter-spacing:.08em}
+.why p{margin:4px 0 0}
+.metaphor{background:var(--amber-soft);padding:14px 20px;margin:20px 0;border-radius:6px;max-width:46em}
+.metaphor .tag{font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.08em}
+.metaphor p{margin:4px 0 0}
+.tablewrap{overflow-x:auto;margin:20px 0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;background:var(--paper)}
+th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--navy-soft);font-weight:700;white-space:nowrap}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:1px 9px;border-radius:999px;white-space:nowrap}
+.pill.l{background:var(--navy-soft);color:var(--navy)}
+.pill.r{background:var(--red-soft);color:var(--red)}
+.pill.ok{background:var(--green-soft);color:var(--green)}
+.pill.ng{background:var(--red-soft);color:var(--red)}
+.pill.bd{background:var(--amber-soft);color:var(--amber)}
+.vee{margin:28px 0;overflow-x:auto}
+.vee svg{display:block;width:100%;max-width:860px;height:auto}
+.vee text{font-family:'Noto Sans JP',sans-serif}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:20px 0}
+.box{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px 18px}
+.box h4{margin:0 0 6px;font-size:15px;font-weight:700}
+.box p{margin:0;font-size:14.5px;color:var(--ink-2)}
+.steps{counter-reset:s;list-style:none;padding:0;max-width:46em}
+.steps li{counter-increment:s;position:relative;padding:10px 0 10px 44px;border-bottom:1px dashed var(--line)}
+.steps li::before{content:counter(s);position:absolute;left:0;top:10px;width:30px;height:30px;border-radius:50%;background:var(--navy);color:#fff;font-weight:700;display:grid;place-items:center;font-size:14px;font-family:var(--mono)}
+.steps li b{display:block}
+.steps li span{color:var(--ink-2);font-size:14.5px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:16px 0;font-size:14px}
+.flow .n{background:var(--paper);border:1px solid var(--line);padding:6px 12px;border-radius:6px}
+.flow .a{color:var(--ink-3)}
+.calc{font-family:var(--mono);font-size:14.5px;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:14px 18px;max-width:46em;line-height:1.9;overflow-x:auto}
+.calc b{color:var(--navy)}
+.glossary dt{font-weight:700;margin-top:14px}
+.glossary dd{margin:2px 0 0;color:var(--ink-2);max-width:42em}
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-3)}
+a{color:var(--navy)}
+:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">GUapp ／ V字モデル開発演習 Lv3</div>
+  <h1>設計仕様書とテスト設計書の読み方</h1>
+  <p class="lead">GU の EC サイトを題材に作った 2 冊の文書、「設計仕様書 P1 draft-v3」と「テスト設計書 P1 draft-v2」は、何が書いてあって、なぜそう書いたのか。プログラミングの前提知識がない人向けに、章ごとの意図を解説します。</p>
+  <div class="meta"><span>対象文書: GUEC-SD-01 draft-v3・GUEC-TD-01 draft-v2</span><span>作成: 2026-09-17</span><span>作成者: Claude（監修 Oya）</span></div>
+  <nav class="toc" aria-label="目次">
+    <div class="eyebrow">目次</div>
+    <ol>
+      <li><a href="#s1">V字モデルとは何か</a></li>
+      <li><a href="#s2">この演習で作っているもの</a></li>
+      <li><a href="#s3">設計仕様書の各章の意図</a></li>
+      <li><a href="#s4">設計の要所 3 つ</a></li>
+      <li><a href="#s5">テスト設計書の各章の意図</a></li>
+      <li><a href="#s6">テストの実例で見る「正常・異常・境界」</a></li>
+      <li><a href="#s7">実装直前に直した 6 点</a></li>
+      <li><a href="#s8">用語集</a></li>
+    </ol>
+  </nav>
+</header>
+
+<h2 id="s1">1. V字モデルとは何か</h2>
+<p>ソフトウェアを作る手順を「左側で決めて、右側で確かめる」の V 字に並べた考え方です。左に降りるほど話が細かくなり（何がしたいか → どう作るか）、右に登るほど確認の範囲が広くなります（部品が動くか → 全体で目的が達成できるか）。</p>
+<p>肝心なのは<strong>左右が同じ高さで対になっている</strong>ことです。設計書の 1 行に対してテストの 1 行があり、要求の 1 行に対して受け入れテストの 1 行がある。だから「何を確かめれば完成と言えるか」が作り始める前に決まります。</p>
+
+<div class="vee" role="img" aria-label="V字モデルの図。左側に要求仕様・要件定義・基本設計・詳細設計、右側に受け入れテスト・システムテスト・結合テスト・単体テスト。同じ段が対応する。">
+<svg viewBox="0 0 860 360" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g stroke="var(--line)" stroke-dasharray="4 4"><line x1="215" y1="50" x2="645" y2="50"/><line x1="255" y1="130" x2="605" y2="130"/><line x1="295" y1="210" x2="565" y2="210"/></g>
+  <g fill="var(--navy)" stroke="none">
+    <rect x="20" y="20" width="195" height="60" rx="6"/><rect x="60" y="100" width="195" height="60" rx="6"/><rect x="100" y="180" width="195" height="60" rx="6"/><rect x="140" y="260" width="195" height="60" rx="6"/>
+  </g>
+  <g fill="var(--red)" stroke="none">
+    <rect x="645" y="20" width="195" height="60" rx="6"/><rect x="605" y="100" width="195" height="60" rx="6"/><rect x="565" y="180" width="195" height="60" rx="6"/><rect x="525" y="260" width="195" height="60" rx="6"/>
+  </g>
+  <g fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle">
+    <text x="117" y="45">要求仕様書</text><text x="117" y="66" font-size="11" font-weight="400">何がしたいか（REQ-xx）</text>
+    <text x="157" y="125">要件定義書</text><text x="157" y="146" font-size="11" font-weight="400">機能に分解（F-xxx）</text>
+    <text x="197" y="205">基本設計</text><text x="197" y="226" font-size="11" font-weight="400">API・DB・画面（DS-xxx）</text>
+    <text x="237" y="285">詳細設計</text><text x="237" y="306" font-size="11" font-weight="400">処理手順・関数（DS-PRC）</text>
+    <text x="742" y="45">受け入れテスト</text><text x="742" y="66" font-size="11" font-weight="400">AT：利用者の目的が達成できるか</text>
+    <text x="702" y="125">システムテスト</text><text x="702" y="146" font-size="11" font-weight="400">ST：機能・非機能を満たすか</text>
+    <text x="662" y="205">結合テスト</text><text x="662" y="226" font-size="11" font-weight="400">IT：API と DB がつながるか</text>
+    <text x="622" y="285">単体テスト</text><text x="622" y="306" font-size="11" font-weight="400">UT：関数 1 つが正しいか</text>
+  </g>
+  <path d="M335,330 L430,345 L525,330" fill="none" stroke="var(--ink-3)" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="430" y="330" fill="var(--ink-2)" font-size="12" text-anchor="middle">実装（コーディング）</text>
+  <text x="430" y="40" fill="var(--ink-3)" font-size="12" text-anchor="middle">同じ段が対になる</text>
+</svg>
+</div>
+
+<div class="metaphor"><div class="tag">たとえるなら</div><p>家を建てるとき、「南向きのリビングが欲しい」（要求）→「窓は 2 間幅」（要件）→「サッシの型番と取付図」（設計）と細かくしていき、完成後は「サッシが図面どおり付いたか」→「窓が 2 間幅か」→「リビングは南向きで明るいか」と逆順に確かめます。V 字はこれをソフトウェアでやる形式です。</p></div>
+
+<h2 id="s2">2. この演習で作っているもの</h2>
+<p>題材は GU の EC サイトです。講義の前提として、画面は Next.js、裏側の処理は FastAPI、データベースは Azure 上の MySQL と決まっています。要件定義では機能を 39 件に分け、必須（Must）18 件・推奨（Should）17 件・任意（Could）4 件に優先度を付けました。</p>
+<p>全部を一度に作ると、途中で設計が変わったときに手戻りが大きくなります。そこで実装を 4 つのフェーズに分け、<strong>最初の P1 は「会員登録なしで商品を選び、カートに入れ、注文を確定するまで」</strong>の一本道だけを通すことにしました。今回の 2 冊はこの P1 を対象に書かれています。</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>フェーズ</th><th>ゴール</th><th>P1 に含めた機能（8 件＋部分 2 件）</th></tr></thead>
+<tbody>
+<tr><td><strong>P1</strong> 購買最小構成</td><td>ゲストが 6 画面を通って注文を確定できる。ローカル PC で動く</td><td>商品一覧・共通メニュー・商品詳細・カート・注文手続き・注文確定・ゲスト購入・画面共通の状態表示。加えて「在庫切れの明示」と「税率・送料のデータ」</td></tr>
+<tr><td>P2 Must 完遂＋新機能</td><td>必須 18 件と Lv3 新機能の AI アシスタントが Azure 上で動く</td><td>—</td></tr>
+<tr><td>P3 / P4</td><td>推奨・任意機能（返品、クーポン、レコメンドなど）</td><td>—</td></tr>
+</tbody></table></div>
+
+<div class="why"><div class="tag">なぜ一本道から</div><p>P1 の途中で「注文テーブルに会員の列がない」「注文時の単価を保存していない」と気づくと、テーブルの作り直しになります。そのため設計仕様書は、実装は P1 に絞りつつ、<strong>DB と API の土台だけは必須 18 件すべてを見据えて先に固める</strong>二層構造にしています。</p></div>
+
+<h2 id="s3">3. 設計仕様書の各章の意図</h2>
+<p>設計仕様書は 10 章あります。それぞれが「誰の、どんな疑問に答える章か」で読むと構造がつかめます。</p>
+
+<h3>1 章 システム構成 — 「部品はどう並んでいるか」</h3>
+<p>ブラウザ、Next.js、FastAPI、MySQL、外部サービス（決済の Stripe、メール、Claude API）の配置図です。重要な決定は 1 つで、<strong>ブラウザは Next.js にしか話しかけられない</strong>ようにしたことです。FastAPI と DB は Next.js の後ろに隠れます。</p>
+<div class="metaphor"><div class="tag">たとえるなら</div><p>レストランの「ホール（Next.js）」「厨房（FastAPI）」「倉庫（MySQL）」です。お客様はホール係にだけ注文し、厨房や倉庫には直接入れません。文書ではホール係を BFF（Backend for Frontend）と呼んでいます。</p></div>
+
+<h3>2 章 技術スタック — 「何を使って作るか」</h3>
+<p>言語・フレームワーク・DB の版を表にしています。版を書くのは、半年後に別の人が同じ環境を再現できるようにするためです。「MySQL 8.0 は 2026 年 4 月にサポートが終わるので 8.4 にする」のように、選んだ理由も添えています。</p>
+
+<h3>3 章 UML — 「動きを絵で共有する」</h3>
+<p>4 種類の図が入っています。文章だと読み手ごとに解釈がぶれる「誰が何をするか」「処理はどの順で、どこで分岐するか」を、決まった記法の図で固定するのが目的です。</p>
+<div class="grid2">
+  <div class="box"><h4>ユースケース図</h4><p>登場人物（ゲスト・会員・運用担当・サポート担当）と、それぞれができること。P1 はゲストの購買だけを太枠で示す。</p></div>
+  <div class="box"><h4>アクティビティ図</h4><p>購入の流れを分岐付きで描いたフローチャート。「在庫がない」「決済が失敗」「同じ注文が 2 回来た」の 3 つの分岐が入っている。</p></div>
+  <div class="box"><h4>シーケンス図</h4><p>注文確定ボタンを押した瞬間から完了画面までに、ブラウザ・Next.js・FastAPI・DB・決済がどの順で会話するかを時間軸で描いた図。</p></div>
+  <div class="box"><h4>クラス図</h4><p>データの種類（商品・カート・注文・注文明細…）とその関係。「注文 1 件に明細が複数」のような 1 対多を線で表す。</p></div>
+</div>
+
+<h3>4 章 API 設計 — 「厨房への注文票の書式」</h3>
+<p>API は、ホール係（Next.js）が厨房（FastAPI）に出す注文票の書式です。「商品一覧を出して」「カートにこれを追加」「注文を確定」など、P1 では 11 種類。それぞれに DS-API-001 のような番号が付いています。</p>
+<p>4.4 の「処理仕様」は、注文確定（DS-PRC-014-1）のように<strong>失敗すると実害が出る処理の手順書</strong>です。4.5 は、失敗したときに何番のエラーをどう返すかの規則で、今回の改訂で「判定の順序」を明記しました（7 章で解説）。</p>
+
+<h3>5 章 DB 設計 — 「倉庫の棚割り」</h3>
+<p>データを入れる表（テーブル）を 26 個定義し、P1 ではそのうち 13 個を作ります。1 つの表は Excel のシート 1 枚のようなもので、列（項目）と制約（同じ値を 2 つ入れられない、など）を決めます。</p>
+<div class="why"><div class="tag">なぜ「注文時の単価」を別に保存するのか</div><p>商品の値段は後で変わります。注文明細に「その時の単価」をコピーして持たないと、値下げした翌日に過去の注文金額まで変わってしまう。これは要求仕様（REQ-FR-505）から一直線につながっている設計です。</p></div>
+
+<h3>6 章 画面設計 — 「6 枚の画面の骨組み」</h3>
+<p>ホーム → 商品一覧 → 商品詳細 → カート → 注文手続き → 注文確認・完了 の 6 画面を、文字で描いたワイヤーフレームで示しています。スマホ幅（375px）でも操作できることを前提にし、商品詳細ではスクロール中も「カートに入れる」が押せる固定バーを置きます。</p>
+
+<h3>7 章 セキュリティ設計 — 「盗まれない・壊されない仕組み」</h3>
+<p>講義の必須項目 6 つ（BFF、CORS、Swagger 非表示、型定義、金額はサーバーで計算、DB ファイアウォール）を「設計」と「どう検証するか」の 2 列で表にしています。検証列があるのは、セキュリティは「やったつもり」になりやすいからです。</p>
+
+<h3>8 章 インフラ・デプロイ — 「どこで動かすか」</h3>
+<p>Azure のどのサービスを使うか、環境変数（秘密の鍵や接続先）をどこに置くか、ローカル PC ではどう起動するかの手順です。P1 はローカル環境のみで、Azure への配置は Week7 の話です。</p>
+
+<h3>9 章 設計判断 — 「なぜそう決めたか」の台帳</h3>
+<p>DS-DEC-01 から 32 まで、決めたこと・理由・採らなかった代替案を並べています。<strong>後で「なぜこうなっている？」と聞かれたときに、当時の判断を再現できる</strong>ための章です。設計書で最も価値が長持ちする部分といえます。</p>
+
+<h3>10 章 トレーサビリティ表 — 「要求からテストまでの糸」</h3>
+<p>要求 ID → 機能 ID → 設計 ID → テスト ID を 1 行に並べた表です。ある要求がどの設計で実現され、どのテストで確かめられるかを追えます。逆に、どの要求にもつながらない設計は「余計な作り込み」として見つかります。</p>
+
+<h2 id="s4">4. 設計の要所 3 つ</h2>
+<p>設計仕様書の中で、EC サイトとして「ここが崩れるとお金と信用に直結する」箇所を 3 つ取り上げます。</p>
+
+<h3>4.1 注文確定の 8 手順（DS-PRC-014-1）</h3>
+<ol class="steps">
+  <li><b>冪等キーで注文を仮登録</b><span>確認画面を開いた時点で発行した「この注文専用の合言葉」を注文表に書き込む。同じ合言葉が既にあれば、その注文を返して終わる（ボタン 2 度押し対策）。</span></li>
+  <li><b>カートを「注文済み」に切り替える</b><span>切り替えに失敗したら、別のタブで先に注文されている。409 エラー。</span></li>
+  <li><b>在庫を 1 明細ずつ引き当てる</b><span>「在庫が数量以上あるときだけ減らす」という条件付き更新。1 つでも失敗したら全部取り消して在庫切れを返す。</span></li>
+  <li><b>金額をサーバーで再計算し、画面の金額と照合</b><span>1 円でも違えば取り消し。ブラウザ側の金額はいくらでも書き換えられるので、信用しない。</span></li>
+  <li><b>決済を呼ぶ</b><span>P1 は本物の決済ではなく「スタブ」（常に OK を返す代役。テスト用に NG にも切り替え可）。</span></li>
+  <li><b>OK なら確定を書き込む</b><span>注文を「受付済」に、支払い記録・明細（注文時の単価と商品名）・監査ログを保存して確定。NG なら「決済失敗」を残してから在庫とカートを元に戻す。</span></li>
+  <li><b>確認メールを送る</b><span>P1 はログ出力のみ。メールが失敗しても注文は成立させ、失敗は監査ログに残す。</span></li>
+  <li><b>注文番号を発行する</b><span><code>GU-260917-7K3M9Q2X</code> の形式。見間違えやすい I・O・0・1 は使わない。万一同じ番号が出たら 1 回だけ作り直す。</span></li>
+</ol>
+
+<h3>4.2 二重注文を防ぐ 4 層（DS-DEC-07）</h3>
+<p>「同じ注文が 2 件できる」事故を、1 つの仕掛けではなく 4 つの層で防ぎます。1 層目だけでは、まったく同時に届いた 2 リクエストや、2 つのタブから別々に確定した場合を防げないためです。</p>
+<div class="tablewrap"><table>
+<thead><tr><th>層</th><th>仕掛け</th><th>防げる事故</th><th>フェーズ</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td>冪等キーを注文表で「重複禁止」にする</td><td>同じ画面でボタンを何度も押す・通信の再送</td><td>P1</td></tr>
+<tr><td class="num">2</td><td>注文作成と同時にカートを「注文済み」に切り替える</td><td>2 つのタブから別々に確定する</td><td>P1</td></tr>
+<tr><td class="num">3</td><td>注文 1 件に決済セッション 1 つ</td><td>決済画面の二重生成</td><td>P2</td></tr>
+<tr><td class="num">4</td><td>決済会社からの通知 ID を重複禁止にする</td><td>同じ通知が 2 回届いて 2 回処理される</td><td>P2</td></tr>
+</tbody></table></div>
+
+<h3>4.3 金額の計算規則（DS-PRC-021・DS-DEC-31）</h3>
+<p>金額は必ず<strong>整数の円</strong>で計算し、小数（浮動小数点）を使いません。コンピュータの小数は 0.1 を正確に表せず、積み上げると 1 円ずれるためです。商品価格は税込で持ち、「うち消費税」は表示用に逆算します。</p>
+<div class="calc">
+小計 ＝ 単価 × 数量 の合計 …… 1,990 × 2 ＝ <b>3,980</b><br>
+送料 ＝ 小計が 4,990 以上なら 0、未満なら 550 …… <b>550</b><br>
+合計 ＝ 小計 ＋ 送料 …… <b>4,530</b><br>
+うち消費税 ＝ 合計 × 10 ÷ 110 を円未満切り捨て …… 4,530 × 10 ÷ 110 ＝ 411.8 → <b>411</b>
+</div>
+<p>税率は設定表に文字列 <code>"0.10"</code> で保存し、計算時は「10（%）」の整数に直してから <code>合計 × 10 ÷ 110</code> と割り算します。これで小数を一度も使わずに済みます。</p>
+
+<h2 id="s5">5. テスト設計書の各章の意図</h2>
+<p>テスト設計書は「V 字の右側」を 1 冊にまとめたものです。各テストには設計側の ID が必ず書いてあり、<strong>何を確かめるテストなのかが設計書から逆引きできます</strong>。</p>
+
+<h3>0〜1 章 位置づけと方針 — 「4 段の高さと合格ライン」</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>レベル</th><th>確かめること</th><th>やり方</th><th>件数</th></tr></thead>
+<tbody>
+<tr><td><span class="pill r">AT</span> 受け入れ</td><td>利用者の目的が達成できるか。「会員登録なしで買えた」</td><td>人がブラウザで操作。PC 幅と 375px の 2 回</td><td class="num">8</td></tr>
+<tr><td><span class="pill r">ST</span> システム</td><td>機能ごと・非機能（レイアウト、セキュリティ）</td><td>画面操作と HTTP クライアント。一部自動化</td><td class="num">39</td></tr>
+<tr><td><span class="pill r">IT</span> 結合</td><td>FastAPI と MySQL を本当につないだときの挙動。同時実行や異常系</td><td>pytest から実 DB へ。全件自動</td><td class="num">31</td></tr>
+<tr><td><span class="pill r">UT</span> 単体</td><td>関数・部品 1 つが仕様どおりか</td><td>pytest（API）・Vitest（画面）。全件自動、CI で毎回実行</td><td class="num">22</td></tr>
+</tbody></table></div>
+<p>合格ラインは、AT-01（ゲスト購入）に合格し、IT・UT が全件緑、375px 幅で一本道が通ることです。自動テストは 1 件でも失敗すると main ブランチへの取り込みを止めます。</p>
+
+<h3>2〜5 章 テスト項目 — 「1 行 1 テスト、区分付き」</h3>
+<p>すべての行に「正常・異常・境界」の区分があります。素人目には「動くかどうか」が全部に見えますが、テスト設計では 3 つを意図的に分けます。</p>
+<div class="grid2">
+  <div class="box"><h4><span class="pill ok">正常</span> 仕様どおりの入力で期待どおりになる</h4><p>いちばん基本。ここが通らなければ何も始まらない。</p></div>
+  <div class="box"><h4><span class="pill ng">異常</span> 仕様外の入力・状態で、設計した戻し方になる</h4><p>「エラーにならない」ではなく「設計どおりのエラーになる」を確かめる。</p></div>
+  <div class="box"><h4><span class="pill bd">境界</span> 上限・下限の前後で挙動が切り替わる</h4><p>バグは境目に集まる。「10 は通って 11 は弾く」を両側で確かめる。</p></div>
+</div>
+
+<h3>6 章 テストデータ — 「わざと壊れた商品を用意する」</h3>
+<p>普通の商品 30 点に加え、テストのために「在庫 0 のサイズ」「在庫 1 のサイズ」「非公開の商品」「全サイズ在庫 0 の商品」を初期データに混ぜます。異常系や競合のテストは、こういう意図的なデータがないと再現できません。</p>
+
+<h3>7〜10 章 実施計画・申し送り・トレーサビリティ</h3>
+<p>いつ・どのレベルを実施するか、P2 に持ち越すテスト、講義の観点との対応表、そして設計書 10 章と同じトレーサビリティ表（今度はテスト ID が埋まった版）です。</p>
+
+<h2 id="s6">6. テストの実例で見る「正常・異常・境界」</h2>
+<p>4 レベルから 1 件ずつ、読み方の例を挙げます。</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>ID</th><th>レベル</th><th>区分</th><th>何をするか</th><th>何が起きれば合格か</th><th>なぜこのテストが要るか</th></tr></thead>
+<tbody>
+<tr><td class="num">AT-01</td><td>AT</td><td><span class="pill ok">正常</span></td><td>ホームから商品を選び、登録せずに配送先を入れて注文確定</td><td>完了画面に注文番号が出る。DB の注文表に 1 件、明細に注文時の単価</td><td>P1 の存在理由そのもの。これ 1 本が通れば P1 は「動いた」と言える</td></tr>
+<tr><td class="num">ST-F009-03</td><td>ST</td><td><span class="pill bd">境界</span></td><td>カートの 1 明細を 10 個、次に 11 個にする</td><td>10 は成功、11 は 422 エラーで画面に表示</td><td>「上限 10」は 10 と 11 の両側を見ないと確かめたことにならない</td></tr>
+<tr><td class="num">IT-014-02</td><td>IT</td><td><span class="pill ng">異常</span></td><td>同じ冪等キーの注文リクエストを 20 本同時に送る</td><td>注文は 1 件だけ。20 本すべてが同じ注文番号を受け取る</td><td>二重注文防止の 1 層目が「本当に同時」でも効くかは、実 DB でしか確かめられない</td></tr>
+<tr><td class="num">IT-014-04</td><td>IT</td><td><span class="pill ng">異常</span></td><td>在庫 1 の商品に、別々のカートから同時に 2 注文</td><td>1 件成功、1 件は在庫切れ。在庫は 0 で止まりマイナスにならない</td><td>「条件付き更新なら安全」という設計判断（DS-DEC-08）の裏付け</td></tr>
+<tr><td class="num">UT-021-01</td><td>UT</td><td><span class="pill ok">正常</span></td><td>金額計算関数に単価 1,990 × 2 を渡す</td><td>小計 3,980・送料 550・合計 4,530・内税 411</td><td>4 章の計算規則を、DB も画面もなしに関数だけで毎回確認できる</td></tr>
+<tr><td class="num">UT-014-02</td><td>UT</td><td><span class="pill ng">異常</span></td><td>注文番号を大量に生成し文字を調べる</td><td>I・O・0・1 が 1 度も出ない</td><td>電話で注文番号を読み上げるときの聞き間違いを設計で潰した箇所</td></tr>
+</tbody></table></div>
+
+<div class="why"><div class="tag">読み方のコツ</div><p>テストの行を見たら、「対象」列の DS 番号で設計書を引き、その設計が守ろうとしている要求まで戻ってみてください。要求 → 設計 → テストの 3 点が 1 本の線になっていれば、そのテストは「意味のあるテスト」です。線がつながらないテストは、設計書かテスト設計書のどちらかに穴があります。</p></div>
+
+<h2 id="s7">7. 実装直前に直した 6 点</h2>
+<p>2026-09-17 に、実装に入る前の点検で単体テスト 23 件を設計書と突き合わせました。その結果、文書どうしの矛盾 3 件と、テストでは確かめられない書き方 3 件が見つかり、設計仕様書を draft-v3、テスト設計書を draft-v2 に改訂しました。<strong>着手前に見つかれば直すのは文章だけ</strong>で済みます。実装後なら、コードとテストと文書の 3 か所を直すことになります。</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>#</th><th>見つかったこと</th><th>直し方</th></tr></thead>
+<tbody>
+<tr><td class="num">A1</td><td>「小数を使わない」と決めたのに、税率が <code>0.10</code> という小数で書かれていた</td><td>税率は文字列で保存し、計算は「10%」の整数で <code>合計 × 10 ÷ 110</code> とする</td></tr>
+<tr><td class="num">A2</td><td>「上限超過は 422 エラー」と書いてあるのに、エラー一覧に 422 がなかった。入力ミスの 400 との使い分けも不明確</td><td>エラーの判定順序（認証 → 形 → 存在 → 業務規則 → DB の状態 → 回数 → その他）を定め、P2 以降の API にも使える規則として 4.5 を書き直した（DS-DEC-32）</td></tr>
+<tr><td class="num">A3</td><td>画面の見本が「小計 5,970 円・送料 550 円」だった。5,970 円は送料無料ラインの 4,990 円以上なので、自分の規則と矛盾</td><td>見本を「小計 3,980・送料 550・合計 4,530」に統一し、送料無料の判定は「小計」に対して行うと明記</td></tr>
+<tr><td class="num">B1</td><td>「秘密の部品を画面側から読み込むとビルドが失敗する」は単体テストでは確かめられない</td><td>CI（自動ビルド）のチェック項目へ移した</td></tr>
+<tr><td class="num">B2</td><td>「375px 幅で固定バーが出る」は単体テストの環境に画面サイズの概念がなく確認不能</td><td>単体テストは「選んだ色・サイズが固定バーに反映される」だけを見る。幅の確認は人が行う受け入れテストへ</td></tr>
+<tr><td class="num">C1〜3</td><td>郵便番号・電話番号の形式、住所などの文字数上限、注文状態の英語コードが未定義</td><td>正規表現・文字数・8 つの英語コードを設計書に追記</td></tr>
+</tbody></table></div>
+
+<h3>A2 で決めたエラーの判定順序</h3>
+<p>エラーの番号は「何が悪かったか」を機械にも人にも伝える言語です。同じ状況で 400 と 422 が混ざると、画面側の処理もテストも書けなくなります。そこで<strong>上から順に問いかけ、最初に当たった番号を返す</strong>と決めました。</p>
+<div class="flow">
+  <span class="n">正当な呼び出し元か <b>401/403</b></span><span class="a">→</span>
+  <span class="n">形は正しいか <b>400</b></span><span class="a">→</span>
+  <span class="n">対象は存在するか <b>404</b></span><span class="a">→</span>
+  <span class="n">業務の規則内か <b>422</b></span><span class="a">→</span>
+  <span class="n">今の DB 状態と両立するか <b>409</b></span><span class="a">→</span>
+  <span class="n">回数上限内か <b>429</b></span><span class="a">→</span>
+  <span class="n">それ以外 <b>500</b></span>
+</div>
+<p>覚え方は 2 つです。<strong>400 と 422</strong>：どんな状況でも常に不正（数量にマイナス）なら 400、形は正しいがこの店の規則で受けられない（数量 11 個）なら 422。<strong>422 と 409</strong>：DB を見ずに判定できれば 422、在庫のように今の状態次第なら 409。409 は時間が経てば成功しうるエラー、422 は入力を変えないと成功しないエラー、と言い換えられます。</p>
+
+<h2 id="s8">8. 用語集</h2>
+<dl class="glossary">
+  <dt>BFF（Backend for Frontend）</dt><dd>ブラウザからの窓口になるサーバー。ここでは Next.js が担い、裏の FastAPI をブラウザから隠す。</dd>
+  <dt>API</dt><dd>プログラム同士が話すための決まった書式。「商品一覧をください」「カートに追加」といった要求 1 つ 1 つに URL と形式がある。</dd>
+  <dt>冪等（べきとう）キー</dt><dd>同じ操作を何度繰り返しても結果が 1 回分になるようにするための合言葉。注文確定に必ず付ける。</dd>
+  <dt>スタブ</dt><dd>まだ本物をつなげない外部サービス（決済・メール）の代役。決まった返事を返すだけの簡易版。</dd>
+  <dt>条件付き UPDATE</dt><dd>「在庫が 2 個以上あるときだけ 2 個減らす」のように、条件を満たすときだけ書き換える DB 命令。同時アクセスでも在庫がマイナスにならない。</dd>
+  <dt>トランザクション</dt><dd>複数の DB 操作を「全部成功か、全部取り消し」のひとまとまりにする仕組み。注文確定の途中で失敗したら途中結果を残さない。</dd>
+  <dt>マイグレーション（Alembic）</dt><dd>テーブルの追加・変更の履歴を残し、別の PC でも同じ DB 構造を再現できるようにする道具。</dd>
+  <dt>seed</dt><dd>動作確認用の初期データ。商品 30 点や、テスト用の在庫 0 商品など。</dd>
+  <dt>CORS</dt><dd>ブラウザが「別のサイトからの呼び出し」を許すかどうかの規則。FastAPI は Next.js からの呼び出しだけを許す。</dd>
+  <dt>CSRF</dt><dd>利用者になりすまして勝手に操作させる攻撃。状態を変える操作には毎回トークン（合言葉）を要求して防ぐ。</dd>
+  <dt>Pydantic</dt><dd>FastAPI で入力の形（型・桁数・必須）を宣言的に検査する仕組み。SQL インジェクション対策の第一線。</dd>
+  <dt>CI（GitHub Actions）</dt><dd>コードを保存するたびに自動でテストとビルドを走らせる仕組み。人が忘れても毎回確かめる。</dd>
+  <dt>pytest / Vitest</dt><dd>自動テストの道具。pytest は Python（FastAPI 側）、Vitest は TypeScript（Next.js 側）。</dd>
+  <dt>P1〜P4</dt><dd>実装のフェーズ。P1 はゲスト購買の一本道、P2 で必須機能と AI アシスタント、P3・P4 で推奨・任意機能。</dd>
+  <dt>ID の読み方</dt><dd>REQ-FR-505 ＝ 要求（機能）、F-014 ＝ 機能、SCR-006 ＝ 画面、DS-API-022 ＝ 設計（API）、DS-PRC-014-1 ＝ 設計（処理）、DS-DEC-07 ＝ 設計判断、AT/ST/IT/UT ＝ テスト。</dd>
+</dl>
+
+<footer>本解説は GUapp リポジトリ <code>docs/05_解説/</code> に置き、設計仕様書 draft-v3・テスト設計書 draft-v2 の内容に基づく。文書が改訂されたら本解説も更新する。</footer>
+</div>

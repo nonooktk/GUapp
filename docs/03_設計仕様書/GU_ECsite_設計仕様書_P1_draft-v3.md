@@ -3,7 +3,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | 文書番号 | GUEC-SD-01 |
-| 版 | draft-v2 |
+| 版 | draft-v3 |
 | 作成者 | Mitsuru Oya・Claude |
 | 作成日 | 2026-09-07 |
 | 入力 | 要求仕様書 with_ai v2.4、要件定義書 with_ai v1.3、実装フェーズ計画 v1.2 |
@@ -15,6 +15,7 @@
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-09-07 | 初稿。統括との壁打ちで決めた設計判断 20 件と設計要件を本文化。未決 #20〜30 は推し案で仮置き | Claude | — |
 | draft-v2 | 2026-09-07 | 未決 #20〜30 を統括が承認し DS-DEC-21〜31 に昇格（条件付きの項目は条件を本文へ反映）。9.5 の講義の問いに回答。精査で見つけた修正 4 件（注文後のカート再生成・ゲスト照会のメール送信方法・ホームの性別区分・8.3 の構成図）を反映 | Claude | Oya |
+| draft-v3 | 2026-09-17 | 実装前レビューで見つかった矛盾 3 件・未定義 3 件を反映。4.5 エラー応答を判定順序付きの全フェーズ共通規則に差し替え（DS-DEC-32）。金額計算の税率表現（DS-DEC-31 補足）、注文番号衝突時の再生成、入力形式の正規表現と長さ上限、注文状態の列挙コードを追加 | Claude | Oya |
 
 ## 0. 本書の位置づけ
 
@@ -376,6 +377,17 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 #### DS-PRC-014-1 注文確定
 
 入力: 冪等キー、カートの匿名トークン、配送先（氏名・郵便番号・住所・電話）、メール、表示金額（小計・送料・合計）。
+
+入力形式:
+
+| 項目 | 形式 | 長さ |
+| --- | --- | --- |
+| ship_name 氏名 | 空白以外を含む | 1〜50 文字 |
+| ship_postal_code 郵便番号 | ハイフンを除去後 `^\d{7}$` | 7 桁 |
+| ship_address 住所（都道府県・市区町村・番地・建物を結合） | 任意文字 | 1〜200 文字 |
+| ship_phone 電話 | ハイフンを除去後 `^\d{10,11}$` | 10〜11 桁 |
+| guest_email メール | RFC 5322 準拠（Pydantic EmailStr） | 〜254 文字 |
+
 出力: 注文番号、明細、金額、状態。
 
 1. 冪等キーで `orders` に INSERT（status=決済待ち）。一意制約違反なら既存注文を返して終了
@@ -385,30 +397,71 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 5. 決済アダプタを呼ぶ。P1 はスタブで、環境変数 `PAYMENT_STUB_RESULT=ok|ng` で切替。P2 以降の Azure 環境ではこの変数を設定せず（スタブ OFF）、デプロイ時のチェック項目に「本番で `PAYMENT_STUB_RESULT` が未設定」を含める（DS-DEC-26）
 6. OK なら `orders.status=受付済`、`payments` に記録、`order_items` に確定時単価を保存、`audit_logs` に記録して COMMIT。NG なら `orders.status=決済失敗` と `payments` の失敗を COMMIT した後、別トランザクションで在庫を戻しカートを `active` に戻す
 7. メールアダプタを呼ぶ（P1 はログ出力）。失敗しても注文は成立させ、監査ログに残す
-8. 注文番号は `GU-YYMMDD-` ＋ ランダム 8 文字（英大文字と数字、紛らわしい I/O/0/1 を除く）
+8. 注文番号は `GU-YYMMDD-` ＋ ランダム 8 文字（英大文字と数字、紛らわしい I/O/0/1 を除く）。生成した注文番号が UNIQUE 制約に衝突した場合は 1 回だけ再生成して再試行する（32 文字 × 8 桁で衝突確率は 10,000 件あたり約 5×10⁻⁵）
 
 #### DS-PRC-021 金額計算（確認画面用）
 
 カート明細の単価 × 数量の合計を小計とし、送料ルールを適用して合計を出す。税率は `system_settings.tax_rate` で、税込価格から内税額を表示用に逆算する（合計 × 税率 ÷（1 ＋ 税率）、円未満切り捨て）。金額は整数の円で扱い、浮動小数を使わない（DS-DEC-31）。商品価格は税込で持ち、税率変更時に変わるのは内税表示と `orders.tax_rate_at_order` で、売価は運用の価格改定で追従させる。税率が可変であることは受け入れテスト「税率を変えると確認画面の内税額が変わる」で示す。
 
+`system_settings.tax_rate` は JSON の文字列 `"0.10"` で保持し、API 内では `Decimal` に変換して基点整数（10 = 10%）で扱う。内税は `合計 × 税率(%) // (100 + 税率(%))` の整数演算で求める（例: 4,530 円 → 4530×10÷110 = 411.8 → 411 円）。金額計算関数は引数が `int` 以外なら `TypeError` を投げる。空カート（明細 0 件）は金額計算の前に 409 `empty_cart` として弾く。0 円商品は seed に置かない前提とする。送料無料の閾値は**小計**（送料・値引き前の明細合計）に対して判定する。
+
 #### DS-PRC-011 カート追加
 
-variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422。
+variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422（4.5 の limit_exceeded）。
 
 #### DS-PRC-036 画面共通の状態表示
 
 BFF への状態変更リクエスト中はボタンを無効化して処理中表示を出し、成功・失敗をトーストで示す。注文確定・削除は実行前に確認ダイアログを挟む（REQ-FR-1205）。この表示は使い勝手のためで、二重送信の防御は DS-PRC-014-1 の冪等キー側で行う。
 
-### 4.5 エラー応答
+### 4.5 エラー応答（全フェーズ共通規則・DS-DEC-32）
 
-| HTTP | 用途 | 本文 |
-| --- | --- | --- |
-| 400 | 入力形式エラー | `{code:"validation_error", fields:[...]}` |
-| 401 / 403 | 未認証・権限なし | 管理画面は 302 で SCR-014 へ |
-| 404 | 存在しない・他人のもの | 所有者以外には存在自体を隠す |
-| 409 | 業務上の競合（在庫切れ・金額変更・注文済み） | `{code:"out_of_stock", items:[variant_id]}` など |
-| 429 | レート制限 | ゲスト照会・ログイン |
-| 500 | 内部エラー | 本文は固定文言。詳細はログのみ（秘密・SQL・内部 ID を出さない） |
+判定は次の順序で行い、最初に該当したものを返す。
+
+| 順 | 問い | コード | 判定する層 |
+| --- | --- | --- | --- |
+| 1 | 呼び出し元は正当か（内部トークン・セッション・CSRF） | 401／403 | BFF・FastAPI の依存関数 |
+| 2 | 入力は形として正しいか（型・必須・長さ・文字種・範囲） | 400 | Pydantic（DB を見ない） |
+| 3 | 対象は存在し、呼び出し元のものか | 404 | リポジトリ層 |
+| 4 | 入力は業務ルールを満たすか（DB の状態を見ずに決まる上限・組合せ） | 422 | サービス層（DB 参照なし） |
+| 5 | 現在の DB 状態と両立するか（在庫・状態遷移・重複・金額一致） | 409 | サービス層（トランザクション内） |
+| 6 | 呼び出し回数が上限内か | 429 | ミドルウェア |
+| 7 | それ以外の失敗 | 500 | 例外ハンドラ |
+
+400 と 422 の境目は「他のリクエストがどう来ても常に不正」なら 400、「形は正しいがこのサービスの規則で受けられない」なら 422。422 と 409 の境目は、DB を読まずに判定できれば 422、DB の今の状態に依存するなら 409（409 は時間が経てば成功しうる、422 は入力を変えないと成功しない）。
+
+コード別の本文形式:
+
+| コード | code | 本文 | 備考 |
+| --- | --- | --- | --- |
+| 400 | validation_error | `{code, fields:[{name, reason}]}` | FastAPI 既定の 422 を例外ハンドラで 400 に変換。reason は固定語（required／format／too_long／out_of_range） |
+| 401 | unauthorized | `{code}` | 内部トークン不一致・セッション無効・期限切れ。管理画面は 302 で SCR-014 |
+| 403 | forbidden | `{code}` | CSRF 不一致、ロール不足、アカウントロック中（locked_until は返さない） |
+| 404 | not_found | `{code}` | 存在しない・非公開・他人のもの。3 者を区別しない |
+| 409 | 業務名 | `{code, ...詳細}` | out_of_stock {items}／price_changed {amounts}／already_ordered {order_number}／invalid_transition {from, to}／duplicate {field}／empty_cart |
+| 422 | limit_exceeded ほか | `{code, field, limit}` | limit_exceeded／unsupported_value |
+| 429 | rate_limited | `{code}` ＋ Retry-After ヘッダ | |
+| 500 | internal_error | `{code, message:"処理中にエラーが発生しました"}` | 固定文言。詳細はログのみ |
+
+P1〜P2 の適用例:
+
+| API | 400 | 422 | 409 |
+| --- | --- | --- | --- |
+| DS-API-011 カート追加 | quantity が整数でない・0 以下 | quantity > 10、カート合計 > 50 | 在庫 0（非公開は 404） |
+| DS-API-022 注文確定 | 郵便番号 7 桁以外、メール形式不正、氏名 51 文字 | 受け取り方法が P1 未対応の store、支払い方法が card 以外 | 在庫引当失敗、金額不一致、カートが ordered |
+| DS-API-030 会員登録 | メール形式不正、パスワード 8 文字未満 | パスワードが禁止パターン | メール既登録（duplicate。列挙防止で 200 にする場合は 7.5 に明記） |
+| DS-API-032 ログイン | 必須欠落 | — | —（認証失敗は 401、回数超過は 403、回数は返さない） |
+| DS-API-051 管理：商品 | 価格が負・整数でない、sku 空 | 色・サイズが許可リスト外 | sku 重複、カテゴリ不存在は 409 invalid_reference（管理者には隠す必要なし） |
+| DS-API-052 管理：設定 | tax_rate が数値文字列でない | tax_rate が 0〜100% 外、送料が負 | 楽観ロック updated_at 不一致 |
+| DS-API-053 管理：注文状況 | status が列挙外 | — | 遷移表に無い遷移 invalid_transition |
+| DS-API-041 チャット | 本文が空・2,000 文字超 | — | 10 往復到達 turn_limit、引き継ぎ済み |
+
+実装上の取り決め:
+
+- Pydantic には形の検証だけを書く（業務上限は書かない。書くと 422 が 400 に化ける）
+- 業務エラーは `AppError(status, code, **detail)` 1 系統で投げ、ハンドラ 1 か所で変換する。ルーターに HTTPException を直接書かない
+- 4・5 の判定はサービス層に集め、UT はサービス層関数に対して行う
+- 403 と 404 の順序は公開面は 404 先、管理面は 403 先
+- 一覧の空結果は 200 と空配列
 
 ## 5. DB 設計
 
@@ -458,7 +511,7 @@ erDiagram
 | DS-TBL-11 | store_stocks | store_id, variant_id, stock | ダミー | F-006 | P3 |
 | DS-TBL-12 | carts | member_id(NULL 可), anonymous_token(UNIQUE, NULL 可), status(active/ordered/merged) | 会員は 1 カート | F-009,010 | P1 |
 | DS-TBL-13 | cart_items | cart_id, variant_id, quantity | (cart_id, variant_id) UNIQUE | F-009 | P1 |
-| DS-TBL-14 | orders | order_number(UNIQUE), idempotency_key(UNIQUE), member_id(NULL 可), guest_email, status(8 値), receive_method, store_id, pickup_code, tracking_number, subtotal, shipping_fee, discount, total, tax_rate_at_order, ship_name, ship_postal_code, ship_address, ship_phone, cart_id, stripe_session_id(UNIQUE, NULL 可), expires_at | 配送先は注文時点の値をコピー | F-014,017,033 | P1 |
+| DS-TBL-14 | orders | order_number(UNIQUE), idempotency_key(UNIQUE), member_id(NULL 可), guest_email, status(8 値), receive_method, store_id, pickup_code, tracking_number, subtotal, shipping_fee, discount, total, tax_rate_at_order, ship_name, ship_postal_code, ship_address, ship_phone, cart_id, stripe_session_id(UNIQUE, NULL 可), expires_at | 配送先は注文時点の値をコピー。ship_name VARCHAR(50)、ship_address VARCHAR(200)、ship_phone VARCHAR(11)、guest_email VARCHAR(254) | F-014,017,033 | P1 |
 | DS-TBL-15 | order_items | order_id, variant_id, product_name_at_order, color, size, unit_price_at_order, quantity, discount, coupon_id | 確定時単価・商品名を保持 | F-014 | P1 |
 | DS-TBL-16 | payments | order_id, provider(stub/stripe), provider_ref, amount, result(ok/ng/refunded), refunded_amount | カード情報は持たない | F-014,037 | P1 |
 | DS-TBL-17 | stripe_events | event_id(UNIQUE), type, payload_hash, processed_at | Webhook 重複排除 | F-014 | P2 |
@@ -479,7 +532,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 - 確定時単価: `order_items.unit_price_at_order` と `product_name_at_order` に注文時の値をコピーし、商品マスタの価格改定が過去の注文に影響しないようにする（REQ-FR-505）
 - ゲスト注文: `orders.member_id` は NULL、`guest_email` で識別。ゲスト照会は注文番号＋メール一致
 - 在庫: `variants.stock` の減算は条件付き UPDATE のみ。管理画面の在庫変更（F-031）は絶対値の SET で、監査ログに前後の値を残す
-- 注文状態: 8 値の列挙。遷移の妥当性はアプリで検証し、不正な遷移は 409
+- 注文状態: 8 値の列挙。遷移の妥当性はアプリで検証し、不正な遷移は 409。列挙コードは pending_payment（決済待ち）／accepted（受付済）／preparing（出荷準備中）／shipped（出荷済）／delivered（配達完了）／pickup_expired（受取期限切れ）／cancelled（キャンセル済）／payment_failed（決済失敗）。遷移表は要件定義書 5.5 が正本で、アプリの状態遷移検証関数はこの表を辞書として持つ
 - 個人情報の匿名化: 削除請求時は members の個人情報列をダミー値に置換し、orders の配送先コピーも同様に置換する（要件 F-026）
 - 監査ログの保持: `audit_logs.at` に索引を張り、日次ジョブで 90 日超を削除（DS-DEC-28 のスケジューラに載せる。P2）
 - 初期データ（seed）: カテゴリ 3 区分、商品 30 点（色 2・サイズ 3・在庫付き）、店舗 3 件、会員 5 件、クーポン 2 件、system_settings 4 キー。Alembic のマイグレーションとは分けて `seed.py` で投入する
@@ -577,13 +630,13 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 
 ```
 ┌──────────────────────────────────────────────┐
-│ カート（3 点）                                  │
+│ カート（2 点）                                  │
 │ ┌────┐ 商品名                 数量 [2 ▾] [削除] │
-│ │画像│ 黒 / M   ¥1,990        小計 ¥3,980      │
+│ │画像│ 黒 / M   ¥1,990 数量 2 小計 ¥3,980      │
 │ └────┘ ⚠ 在庫切れのため購入できません（該当時） │
 │ ...                                             │
-│ 小計 ¥5,970  送料 ¥550（4,990 円以上で無料）     │
-│ 合計 ¥6,520                                      │
+│ 小計 ¥3,980  送料 ¥550（4,990 円以上で無料）     │
+│ 合計 ¥4,530                                      │
 │                 [レジへ進む]（在庫切れ明細があれば無効）│
 └──────────────────────────────────────────────┘
 ```
@@ -611,7 +664,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 ┌ 確認 ─────────────────────────────────────────┐
 │ 注文内容（明細・数量・単価）                      │
 │ お届け先 / メール / 受け取り方法 / 支払い方法       │
-│ 小計 ¥5,970 送料 ¥550 合計 ¥6,520（うち消費税 ¥592）│
+│ 小計 ¥3,980 送料 ¥550（4,990 円以上で無料） 合計 ¥4,530（うち消費税 ¥411）│
 │ <input type=hidden name=idempotency_key>          │
 │ [戻る]                 [注文を確定する]            │ ← 押下で確認ダイアログ → 処理中表示
 └──────────────────────────────────────────────┘
@@ -760,6 +813,7 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | 18 | LLM は商品 ID を返し、名称・価格は DB 値で差し替え | 創作を防ぐ | — |
 | 19 | UML は Mermaid | 差分管理 | draw.io |
 | 20 | Vitest ＋ pytest | 設定が軽い | Jest |
+| 32 | エラー応答は判定順序（認証→形→存在→業務規則→DB 状態→回数→その他）で 1 つに決める。400 と 422、422 と 409 の境目を定義 | フェーズをまたいで同じ規則で追補できる。Pydantic の既定 422 との混同を防ぐ | — |
 
 ### 9.2 draft-v1 の未決 #20〜30 の決定（2026-09-07 統括承認）
 
@@ -777,7 +831,7 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | 28 | 27 | 期限切れ処理・90 日削除は FastAPI 内 APScheduler、5 分ごと。P2 で実装 | gunicorn の 2 ワーカーで二重実行しないよう、実行前に MySQL `GET_LOCK()` を取得した 1 プロセスだけが処理する。実サービスなら Azure Functions の Timer トリガーが適所（9.5） | 5.3・7.4 |
 | 29 | 28 | チャット会話ログは 2 表にマスク後の本文のみ保存 | 有人引き継ぎのため保存中は会員に紐づけ、削除請求・退会時に member_id を NULL に。90 日で削除 | 5.2 |
 | 30 | 29 | gitleaks（pre-commit・CI）＋ GitHub Secret scanning／Push protection | push 前に止められるのは gitleaks。GitHub 側は無料の保険。trufflehog は設定が重く演習では過剰 | 7.2 |
-| 31 | 30 | 金額は整数の円。商品価格は税込で持つ | 税率変更で変わるのは内税表示と `tax_rate_at_order`。売価は運用の価格改定で追従（GU 実サイトと同じ）。可変であることは受け入れテスト「税率変更で内税額が変わる」で示す | 4.4・5.2 |
+| 31 | 30 | 金額は整数の円。商品価格は税込で持つ | 税率変更で変わるのは内税表示と `tax_rate_at_order`。売価は運用の価格改定で追従（GU 実サイトと同じ）。可変であることは受け入れテスト「税率変更で内税額が変わる」で示す。税率は文字列で保存し Decimal／基点整数で演算（float 不使用） | 4.4・5.2 |
 
 ### 9.3 一般的な EC との比較（代替案の検討経緯）
 
@@ -796,20 +850,21 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 
 ## 10. トレーサビリティ表（P1）
 
-| REQ | F / SCR | DS | テスト ID（T3 で採番） |
-| --- | --- | --- | --- |
-| REQ-FR-101,102,108 | F-001 / SCR-001,002 | DS-API-001,002・DS-TBL-05,06,09・DS-SCR-001,002 | ST-001〜 |
-| REQ-FR-109,1201,1202 | F-004 / 共通 | DS-SCR 共通レイアウト・DS-API-001,010 | ST-004〜 |
-| REQ-FR-201,202,206,207,1203 | F-005 / SCR-003 | DS-API-003・DS-TBL-06,08,09・DS-SCR-003 | ST-005〜 |
-| REQ-FR-204 | F-007（表示） / SCR-002,003 | DS-API-003,011・DS-PRC-011 | ST-007〜 |
-| REQ-FR-401,402,403,407 | F-009 / SCR-004 | DS-API-010〜013・DS-TBL-12,13・DS-PRC-011 | ST-009〜, UT |
-| REQ-FR-501,502,503 | F-013 / SCR-005,006 | DS-API-020,021・DS-PRC-021・DS-SCR-005,006 | ST-013〜 |
-| REQ-FR-504,505 | F-014 / SCR-006 | DS-API-022・DS-PRC-014-1・DS-TBL-14,15,16,23 | IT-014〜, UT |
-| REQ-FR-804 | F-025 / SCR-005,006 | DS-API-022,023 | AT-01（US-01） |
-| REQ-FR-1102（データ） | F-032（一部） | DS-API-020・DS-TBL-21 | ST-032 |
-| REQ-FR-1204,1205 | F-036 / 全画面 | DS-PRC-036 | ST-036 |
-| REQ-NFR-06,07,08 | — | 7 章 | ST-SEC〜 |
-| REQ-NFR-09 | — | 6 章（375px） | AT-01 |
-| REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | ST-SEC |
+| REQ | F / SCR | DS | AT | ST | IT | UT |
+| --- | --- | --- | --- | --- | --- | --- |
+| REQ-FR-101,102,108 | F-001 / SCR-001,002 | DS-API-001,002・DS-TBL-05,06,09・DS-SCR-001,002 | AT-07 | ST-F001-01〜03 | IT-001-01、IT-002-01/02 | — |
+| REQ-FR-109,1201,1202 | F-004 / 共通 | DS-SCR 共通・DS-API-001,010 | AT-04、AT-07 | ST-F004-01 | IT-010-01 | UT-WEB-01 |
+| REQ-FR-201,202,206,207,1203 | F-005 / SCR-003 | DS-API-003・DS-TBL-06,08,09・DS-SCR-003 | AT-02 | ST-F005-01〜03 | IT-003-01/02 | UT-WEB-07 |
+| REQ-FR-204 | F-007（表示） / SCR-002,003 | DS-API-003,011・DS-PRC-011 | AT-03 | ST-F007-01 | IT-011-02 | UT-WEB-08 |
+| REQ-FR-401,402,403,407 | F-009 / SCR-004 | DS-API-010〜013・DS-TBL-12,13・DS-PRC-011 | AT-04、AT-06 | ST-F009-01〜05 | IT-010-01/02、IT-011-01〜04、IT-012-01 | UT-011-01 |
+| REQ-FR-501,502,503 | F-013 / SCR-005,006 | DS-API-020,021・DS-PRC-021・DS-SCR-005,006 | AT-01、AT-08 | ST-F013-01/02 | IT-020-01、IT-021-01/02 | UT-021-01〜05、UT-VAL-01/02 |
+| REQ-FR-504,505 | F-014 / SCR-006 | DS-API-022・DS-PRC-014-1・DS-TBL-14,15,16,23 | AT-01 | ST-F014-01〜06 | IT-014-01〜09 | UT-014-01〜05 |
+| REQ-FR-804 | F-025 / SCR-005,006 | DS-API-022,023 | AT-01 | ST-F025-01〜03 | IT-023-01/02 | — |
+| REQ-FR-1102（データ） | F-032（一部） | DS-API-020・DS-TBL-21 | AT-08 | ST-F032-01/02 | IT-020-01 | UT-021-04 |
+| REQ-FR-1204,1205 | F-036 / 全画面 | DS-PRC-036 | AT-05 | ST-F036-01 | — | UT-WEB-02/03 |
+| REQ-NFR-04 | — | DS-TBL-23 | — | ST-NFR-02 | IT-014-01 | — |
+| REQ-NFR-06,07,08 | — | 7 章 | — | ST-SEC-01〜11 | IT-060-01、IT-CORS-01、IT-BFF-01/02 | UT-SEC-01/02、UT-WEB-05（UT-WEB-06 は CI） |
+| REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 |
+| REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — |
 
 P2 以降の行は追補で追加する。
