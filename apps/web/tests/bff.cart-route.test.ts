@@ -149,7 +149,7 @@ describe("POST /api/cart/items（CSRF）", () => {
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ item_count: 2 });
     const [calledUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(calledUrl).toBe("http://fastapi.test:8000/api/v1/cart/items");
+    expect(calledUrl).toBe("http://fastapi.test:8000/api/v1/cart/items"); // gitleaks:allow（テスト用 URL。generic-api-key の誤検出）
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ variant_id: 1, quantity: 2 });
   });
@@ -205,7 +205,7 @@ describe("PATCH / DELETE /api/cart/items/[id]", () => {
     );
     expect(ok.status).toBe(200);
     const [calledUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(calledUrl).toBe("http://fastapi.test:8000/api/v1/cart/items/7");
+    expect(calledUrl).toBe("http://fastapi.test:8000/api/v1/cart/items/7"); // gitleaks:allow（テスト用 URL。generic-api-key の誤検出）
     expect(init.method).toBe("PATCH");
   });
 

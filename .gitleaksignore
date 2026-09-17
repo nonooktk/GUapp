@@ -4,3 +4,6 @@
 68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/web/tests/st-sec-07.cookie.test.ts:generic-api-key:6
 68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:generic-api-key:71
 68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:stripe-access-token:20
+# PR #5（Wave 1）: テスト内の FastAPI モック URL を generic-api-key と誤検出
+7e94fc59c4752f85dbd34c61452a4d18c1b608e1:apps/web/tests/bff.cart-route.test.ts:generic-api-key:152
+7e94fc59c4752f85dbd34c61452a4d18c1b608e1:apps/web/tests/bff.cart-route.test.ts:generic-api-key:208
