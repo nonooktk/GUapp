@@ -1,0 +1,24 @@
+# 改行は LF に統一（Windows でも CI のシェルスクリプト・pnpm の bin が壊れないように）
+* text=auto eol=lf
+
+# Windows 専用スクリプトは CRLF
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# バイナリ
+*.docx binary
+*.xlsx binary
+*.pptx binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# ロックファイルは diff を出さない
+pnpm-lock.yaml -diff
+uv.lock -diff

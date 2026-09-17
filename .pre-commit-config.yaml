@@ -1,0 +1,42 @@
+# pre-commit: commit 時点で事故を止める仕組み（P1 実装プラン「Wave 0 着手前チェックリスト」）
+# 導入:  pip install --user pre-commit detect-secrets && pre-commit install
+# 手動:  pre-commit run --all-files
+# 管理者権限不要。gitleaks（Go 製）は CI 側（.github/workflows/secrets-scan.yml）で実行する。
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # 500KB 超のファイルを拒否（.venv・node_modules・MySQL データの誤 add を止める）
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      # 秘密鍵ファイルの混入を拒否
+      - id: detect-private-key
+      # 改行を LF に統一（.gitattributes と二重化）
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+        exclude: '\.(ps1|cmd|bat)$'
+      # マージ衝突マーカーの残留を拒否
+      - id: check-merge-conflict
+      # YAML・JSON・TOML の構文
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      # サブモジュールの混入を拒否
+      - id: forbid-new-submodules
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      # 秘密らしき文字列（トークン・鍵・高エントロピー文字列）を検出。許容済みは .secrets.baseline
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: '(pnpm-lock\.yaml|uv\.lock|\.secrets\.baseline)$'
+
+  - repo: local
+    hooks:
+      # .env 系ファイルのステージを名前で拒否（.env.example のみ許可）
+      - id: forbid-dotenv
+        name: forbid .env files
+        entry: python scripts/hooks/forbid_dotenv.py
+        language: system
+        files: '(^|/)\.env(\..*)?$'

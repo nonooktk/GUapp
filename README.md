@@ -72,6 +72,24 @@ docs/
     GU_ECsite_テスト設計書_P1_draft-v1_20260907.docx  … 提出用 docx（draft-v1 時点から生成）
 ```
 
+## 開発の始め方（P1）
+
+1. 必要なツール: Node.js 24、pnpm、Python 3.13（uv 経由）、uv、pre-commit。管理者権限は不要
+   ```powershell
+   npm install -g pnpm
+   pip install --user uv pre-commit detect-secrets
+   uv python install 3.13
+   ```
+2. clone 直後に pre-commit を有効化する（秘匿ファイル・巨大ファイル・改行の事故を commit 時点で止める）
+   ```powershell
+   pre-commit install
+   pre-commit run --all-files
+   ```
+3. `.env.example` を `apps/api/.env` と `apps/web/.env` にコピーして値を埋める。`.env` はコミットできない（`.gitignore` と pre-commit で二重に拒否）
+4. MySQL・API・web の起動手順は `docs/00_計画/P1実装プラン_20260917.md` と Wave 0 で追加する `scripts/mysql-local/README.md` を参照
+
+事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。
+
 ## 引き継ぎ時の注意
 
 - with_ai 版の 8 章「申し送り・未決事項」（A-01〜A-08）が要件定義の最初の入力。未決 8 件を要件定義の初回レビューまでに決定する

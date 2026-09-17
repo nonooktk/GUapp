@@ -1,3 +1,47 @@
-﻿~$*.docx
+# ── 秘匿情報（絶対にコミットしない。設計仕様書 7.2・DS-DEC-13）──
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Office のロックファイル ──
+~$*.docx
 ~$*.xlsx
 ~$*.pptx
+
+# ── Python（apps/api）──
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ── Node（apps/web）──
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# ── MySQL ローカル（zip 版はリポジトリ外 %LOCALAPPDATA% に置くが、誤配置の保険）──
+mysql-data/
+*.ibd
+*.pid
+*.sock
+
+# ── ログ・一時ファイル ──
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# ── エディタ・ツール ──
+.idea/
+.vscode/
+.obsidian/workspace.json
+.claude/settings.local.json

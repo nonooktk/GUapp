@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout -f:*)",
+      "Bash(git checkout --force:*)",
+      "Bash(git clean:*)",
+      "Bash(git stash:*)",
+      "Bash(git add -A:*)",
+      "Bash(git add --all:*)",
+      "Bash(git add .:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git rebase:*)",
+      "PowerShell(git push --force:*)",
+      "PowerShell(git push -f:*)",
+      "PowerShell(git reset --hard:*)",
+      "PowerShell(git checkout -f:*)",
+      "PowerShell(git clean:*)",
+      "PowerShell(git stash:*)",
+      "PowerShell(git add -A:*)",
+      "PowerShell(git add .:*)",
+      "PowerShell(git branch -D:*)"
+    ]
+  }
+}

@@ -708,7 +708,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `or
 | 項目 | 設計 |
 | --- | --- |
 | 方式 | サーバー側セッション。`sessions` に Cookie 値の SHA-256 を保存 |
-| Cookie | HttpOnly・Secure・SameSite=Lax。会員は `sid`、管理は `asid`（別名・別種別）。会員 24 時間、管理 8 時間（要件 6 章の 24 時間より厳しい側に設定。DS-DEC-21） |
+| Cookie | HttpOnly・Secure・SameSite=Lax。会員は `sid`、管理は `asid`（別名・別種別）。会員 24 時間、管理 8 時間（要件 6 章の 24 時間より厳しい側に設定。DS-DEC-21）。`Secure` は `APP_ENV=production` のみ付与する（`http://localhost` では Secure 付き Cookie がブラウザに保存されず、ローカルの AT-01 が通らないため） |
 | 固定攻撃対策 | ログイン成功時にセッション ID を再発行 |
 | CSRF | 状態変更 API は BFF でトークン検証（Double Submit Cookie） |
 | ロック | `login_attempts` で 5 回/15 分を判定し `locked_until` を設定。通知メール。手動解除は F-039（P3） |
@@ -843,6 +843,8 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 - セキュリティ試験: IDOR（他人の注文番号で 404）、改ざん金額で 409、`/docs` が 404、他オリジンの preflight 拒否、応答とバンドルに秘密が 0 件、XSS ペイロードで Cookie が読めない、CSRF トークン無しで 403
 - 受け入れ: US-01（ゲスト購入）を P1 の出口条件に。375px での全操作
 - 非機能: 一覧・詳細 95%tile 2.0 秒は P2 の Azure 環境で計測
+- 既知の穴（P1 受容）: DS-PRC-014-1 手順 6 の決済 NG 経路は「決済失敗を COMMIT → 別トランザクションで在庫を戻す」の 2 段。間でプロセスが落ちると在庫が引かれたまま残る。P1 はスタブが同期で戻るため実害はほぼ無い。P2 の決済待ち期限切れ処理（DS-DEC-26）で「決済失敗のまま在庫が戻っていない注文」も回収対象に含めること
+- 注文番号 `GU-YYMMDD` の日付は JST で生成する（DS-DEC-16 は保存 UTC・表示 JST。顧客が見る番号なので表示側に合わせる）。UT-014-01 で日付部分を JST で検証する
 
 ### 9.5 講義の問いへの答え
 
