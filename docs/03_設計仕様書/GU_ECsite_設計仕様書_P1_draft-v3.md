@@ -525,7 +525,7 @@ erDiagram
 | DS-TBL-25 | chat_messages | chat_session_id, role(user/assistant), body_masked, product_ids(JSON) | 個人情報はマスク後。90 日で削除（監査ログと同じジョブ） | F-029 | P2 |
 | DS-TBL-26 | login_attempts | subject_type, identifier, succeeded, ip, at | 5 回/15 分でロック判定 | NFR-10 | P2 |
 
-P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 13 表。ただし `orders.member_id`（NULL 可）と `carts.member_id` は P1 から列を持ち、P2 で FK を張る。
+P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 までは「13 表」と誤記。列挙を数えると 5＋5＋1＋1＝12。2026-09-18 実装時に修正）。ただし `orders.member_id`（NULL 可）と `carts.member_id` は P1 から列を持ち、P2 で FK を張る。
 
 ### 5.3 設計上の注意
 

@@ -86,7 +86,14 @@ docs/
    pre-commit run --all-files
    ```
 3. `.env.example` を `apps/api/.env` と `apps/web/.env` にコピーして値を埋める。`.env` はコミットできない（`.gitignore` と pre-commit で二重に拒否）
-4. MySQL・API・web の起動手順は `docs/00_計画/P1実装プラン_20260917.md` と Wave 0 で追加する `scripts/mysql-local/README.md` を参照
+4. MySQL（zip 版・管理者不要）を用意する。手順と注意は `scripts/mysql-local/README.md`
+   ```powershell
+   .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る
+   .\scripts\mysql-local\status.ps1    # 起動確認。停止は stop.ps1、再起動は start.ps1
+   ```
+   接続情報は `%LOCALAPPDATA%\guapp-mysql\credentials.txt`（リポジトリ外）に生成される
+5. API: `apps/api/README.md`（`uv sync` → `uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload`）
+6. web: `apps/web/README.md`（`pnpm install` → `pnpm dev`）。テストは `uv run pytest -q`（api）と `pnpm test`（web）
 
 事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。
 

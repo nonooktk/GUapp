@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py313"
+
+[lint]
+# 基本ルール: pyflakes・pycodestyle・isort・bugbear・pyupgrade
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "B008",  # FastAPI の Depends() を既定引数に置く慣習
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["B011"]

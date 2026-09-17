@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* 日本語向けフォント。Google Fonts は使わず OS 標準のゴシックにフォールバックする */
+@theme inline {
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+}
+
+html {
+  font-family: var(--font-sans);
+  color-scheme: light;
+}
