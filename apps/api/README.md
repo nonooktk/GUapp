@@ -82,10 +82,29 @@ app/
     db.py            async engine（pool 20 + overflow 10）・get_session
     testing_hooks.py APP_ENV=test 限定の同時性フック
   models/            SQLAlchemy 2.0 モデル（P1 の 12 表）
-  routers/health.py  DS-API-061
+  schemas/           Pydantic 要求／応答（契約の正本は openapi.json）
+  routers/           入出力のみ。health（061）・catalog（001〜003）・cart（010〜013）・settings（020）
+  services/          業務規則（422／409）。pricing（DS-PRC-021）・cart_rules（DS-PRC-011）・cart・catalog・settings
+  repositories/      SQL（Core／ORM）。公開商品の条件は products.published_filter() の 1 か所
 tests/
   unit/              DB 不要
   integration/       MySQL 必須（安全装置付き）
+openapi.json         API 契約（create_app().openapi() の出力。BFF はこれと突き合わせる）
+```
+
+## Wave 1 の API（DS-API-001〜003・010〜013・020）
+
+- base `/api/v1`。`/health` 以外は `X-Internal-Token` 必須
+- カートの識別は **ヘッダ `X-Cart-Token`**（BFF が Cookie から移す。URL・クエリには載せない）。
+  無し／未知なら新カートを作りトークンを発行して応答の `cart_token` に返す。
+  `ordered` のカートのトークンなら旧カートの token を NULL にし同じトークンで新 active カートを返す
+- 商品一覧・詳細・関連・カート追加は公開商品（`published=true`）のみ。非公開・不存在は 404
+- カート追加は 在庫 0 → 409 `out_of_stock`、1 明細 > 10 または合計 > 50 → 422 `limit_exceeded`。
+  数量 > 在庫 は許し、応答の `stock_status`（ok／insufficient／out_of_stock）で示す
+- 契約を更新したら `openapi.json` を再出力する:
+
+```powershell
+uv run python -c "from app.main import create_app; import json; print(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))" > openapi.json
 ```
 
 ## エラー応答（設計書 4.5 の要約）

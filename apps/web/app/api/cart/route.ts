@@ -1,33 +1,14 @@
-import { buildCartTokenCookie, CART_TOKEN_COOKIE, readCookie } from "@/lib/cookie";
-import { generateCartToken } from "@/lib/server/cart-token";
-import { getEnv } from "@/lib/server/env";
+import { proxyCartRequest } from "@/lib/server/cart-proxy";
 
 /**
- * カート BFF（DS-API-010 取り次ぎ先）。Wave 0 は Cookie 発行方式の先行確認のみ（プラン 7 章のリスク対策）。
- * GET: Cookie `cart_token` が無ければ暗号学的乱数 32 バイト（base64url）で発行する。
- *   属性: HttpOnly・SameSite=Lax・Path=/・Max-Age 90 日・Secure は APP_ENV=production のみ（設計 7.3）。
- *   本文は仮応答 `{cart_token_issued: true|false}`。FastAPI 連携は Wave 1。
+ * カート取得 BFF（DS-API-010 取り次ぎ。設計仕様書 4.3・7.3）。
+ * Cookie `cart_token` を `X-Cart-Token` に載せて FastAPI `GET /cart` を呼ぶ。トークン無し・未知なら FastAPI が
+ * 新規発行して返すので、応答の `cart_token` が Cookie と違えば `Set-Cookie` で更新する。
+ * CSRF トークン Cookie `csrf_token` も未発行ならここで発行する（クライアントは追加操作の前にこの API を叩く）。
  */
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const env = getEnv();
-  const existing = readCookie(request.headers.get("cookie"), CART_TOKEN_COOKIE);
-
-  if (existing) {
-    return Response.json({ cart_token_issued: false }, { status: 200 });
-  }
-
-  const token = generateCartToken();
-  return Response.json(
-    { cart_token_issued: true },
-    {
-      status: 200,
-      headers: {
-        "Set-Cookie": buildCartTokenCookie(token, env.APP_ENV, env.SESSION_COOKIE_DOMAIN),
-        "Cache-Control": "no-store",
-      },
-    },
-  );
+  return proxyCartRequest(request, "/cart", { method: "GET" });
 }

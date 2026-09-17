@@ -335,7 +335,7 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 | DS-API-004 | GET | /api/v1/search?q= | キーワード検索。0 件時は代替導線（類似語・おすすめカテゴリ） | F-003 | P2 |
 | DS-API-005 | GET | /api/v1/contents | 特集・お知らせ（ホーム用） | F-030 | P2（P1 はダミー） |
 | DS-API-006 | GET | /api/v1/contents/{slug} | FAQ・規約・特商法などの静的ページ | F-028 | P2 |
-| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員）。トークンのカートが `ordered` なら新しい `active` カートを作って返す（注文後に買い物を続けられるようにする） | F-009 | P1 |
+| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員）。匿名トークンは **FastAPI が発行**し（32 バイト乱数の base64url）、BFF は応答の値を Cookie に載せるだけ。トークンのカートが `ordered` なら旧カートの `anonymous_token` を NULL にしてから同じトークンで新しい `active` カートを作って返す（`anonymous_token` は UNIQUE のため。注文は `orders.cart_id` で旧カートに紐づく）。未知のトークンは無いものとして扱い新規発行する。応答に小計・送料・合計（DS-PRC-021）と明細ごとの在庫状態を含める | F-009 | P1 |
 | DS-API-011 | POST | /api/v1/cart/items | 明細追加（variant_id・quantity）。在庫 0 は 409 | F-009,007 | P1 |
 | DS-API-012 | PATCH | /api/v1/cart/items/{item_id} | 数量変更 | F-009 | P1 |
 | DS-API-013 | DELETE | /api/v1/cart/items/{item_id} | 明細削除 | F-009 | P1 |
@@ -407,7 +407,7 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 
 #### DS-PRC-011 カート追加
 
-variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422（4.5 の limit_exceeded）。
+variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422（4.5 の limit_exceeded）。 数量が在庫数を超えていても追加は許す（在庫の確定は注文時の引当 DS-PRC-014-1 で行う）。カート応答では明細ごとに `stock_status`（ok／insufficient＝数量 > 在庫／out_of_stock＝在庫 0）を返し、insufficient・out_of_stock が 1 つでもあれば「レジへ進む」を無効にする（ST-F009-05）。同じ variant の同時追加は `INSERT … ON DUPLICATE KEY UPDATE` で加算し、加算後に上限を検査して超過なら戻す。
 
 #### DS-PRC-036 画面共通の状態表示
 
@@ -731,7 +731,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | 露出面 | 対策 |
 | --- | --- |
 | URL | 注文は注文番号、会員はセッション特定、カートは Cookie。商品は内部 ID 可 |
-| API 応答 | `response_model` で白リスト化。注文・会員・カートの応答に内部 ID と外部キーを含めない |
+| API 応答 | `response_model` で白リスト化。注文・会員・カートの応答に内部 ID と外部キーを含めない。例外: カート明細の `item_id`（DS-API-012/013 の宛先として必要。所有者チェックで他人のものは 404 なので列挙されても害がない）と商品側の `variant_id`（商品は内部 ID 可） |
 | 列挙 | 商品 API は公開品のみ。未公開は 404 |
 | 総当たり | 注文番号はランダム 8 文字。ゲスト照会とログインにレート制限（100 件/時/IP） |
 | 認可 | 全 API で所有者確認。他人のものは 404。管理 API はロール必須 |

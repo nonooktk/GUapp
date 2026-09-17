@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "guapp-web",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd apps\\web && pnpm dev"],
+      "port": 3000
+    },
+    {
+      "name": "guapp-api",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd apps\\api && uv run uvicorn app.main:app --port 8000 --reload"],
+      "port": 8000
+    }
+  ]
+}

@@ -61,6 +61,11 @@ class AppError(Exception):
         return body
 
 
+def internal_error() -> AppError:
+    """サービス層から明示的に 500 を返すとき用（本文は未捕捉例外と同じ固定文言）。"""
+    return AppError(500, "internal_error", message=INTERNAL_ERROR_BODY["message"])
+
+
 def map_reason(error_type: str) -> str:
     """Pydantic のエラー型文字列を reason 固定語へ対応付ける。"""
     if error_type in _REASON_REQUIRED:
