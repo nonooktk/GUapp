@@ -3,7 +3,7 @@ import { buildCartTokenCookie, buildSetCookie, CART_TOKEN_MAX_AGE_SEC, readCooki
 
 // テスト設計書 ST-SEC-07（匿名トークン Cookie の属性）の土台。設計仕様書 7.3・プラン 5 章「Cookie の Secure」
 describe("ST-SEC-07 buildCartTokenCookie", () => {
-  const token = "abcDEF123_-xyz";
+  const token = "abcDEF123_-xyz"; // gitleaks:allow（Cookie 属性検証用のダミー値。秘密ではない）
 
   it("APP_ENV=development では HttpOnly・SameSite=Lax が付き、Secure が付かない", () => {
     const cookie = buildCartTokenCookie(token, "development");

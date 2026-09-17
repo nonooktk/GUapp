@@ -166,8 +166,9 @@ jobs:
         if: hashFiles('apps/api/uv.lock') != ''
         working-directory: apps/api
         run: |
-          uv export --frozen --no-dev --format requirements-txt --no-hashes -o requirements-audit.txt
-          uvx pip-audit -r requirements-audit.txt --strict
+          # --no-emit-project: プロジェクト自身（requires-python >=3.13）を含めない。pip-audit は 3.13 で動かす
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o requirements-audit.txt
+          uvx --python 3.13 pip-audit -r requirements-audit.txt --strict
 
       - name: pnpm をセットアップ
         if: hashFiles('apps/web/package.json') != ''
