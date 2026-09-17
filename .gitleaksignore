@@ -1,0 +1,6 @@
+# gitleaks の指紋許容（commit:file:rule:line）。PR の過去コミットに含まれるテスト用ダミー値。
+# 現行のファイルでは各行に「pragma: allowlist secret」マーカーを付けており、.gitleaks.toml で許容される。
+# 新しい指紋を足すときは、その行が本当にダミーであることを PR で説明すること。
+68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/web/tests/st-sec-07.cookie.test.ts:generic-api-key:6
+68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:generic-api-key:71
+68a7406dc9d102b8f380a8d0013c7acaab5df7e3:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:stripe-access-token:20

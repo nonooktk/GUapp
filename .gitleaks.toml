@@ -1,0 +1,15 @@
+# gitleaks の設定（CI: .github/workflows/secrets-scan.yml）。既定ルールを全部使い、許容だけ足す。
+# 許容は「行に allowlist マーカーがある」場合に限る。pre-commit の detect-secrets と同じマーカーを使い、
+# レビュー時に grep で一覧できるようにする（`git grep -n "allowlist secret\|gitleaks:allow"`）。
+title = "GUapp gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "テスト・書式例のダミー値。行内マーカーで明示されたもののみ許容"
+regexTarget = "line"
+regexes = [
+  '''pragma: allowlist secret''',
+  '''gitleaks:allow''',
+]

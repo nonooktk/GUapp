@@ -19,6 +19,7 @@ repos:
       - id: check-merge-conflict
       # YAML・JSON・TOML の構文
       - id: check-yaml
+        exclude: 'pnpm-lock\.yaml$'  # pnpm のロックは複数ドキュメント形式
       - id: check-json
       - id: check-toml
       # サブモジュールの混入を拒否

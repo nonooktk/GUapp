@@ -1,0 +1,188 @@
+# CI 骨格（P1 実装プラン 2 章・設計仕様書 8.4）。
+# api: MySQL 8.4 サービスに対して alembic upgrade head → pytest。web: Vitest → build。deps-audit は非ブロック。
+# apps/api・apps/web が無い間は各 job の "存在確認" ステップで skip する（Wave 0 並行作成中の暫定措置）。
+# 秘密スキャンは secrets-scan.yml（gitleaks）が別途担当する。
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# MySQL のユーザー・パスワードは CI 内の使い捨て値（ci-only-*）。実環境の値ではない。
+
+jobs:
+  api-test:
+    name: api-test (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-root # pragma: allowlist secret（CI 内の使い捨て値）
+          MYSQL_DATABASE: guapp_test
+          MYSQL_USER: guapp
+          MYSQL_PASSWORD: ci-only-password # pragma: allowlist secret（CI 内の使い捨て値）
+          TZ: UTC
+        ports:
+          - 3306:3306
+        # 設定値は scripts/mysql-local/setup.ps1 の my.ini と揃える（utf8mb4・UTC・max_connections=200）
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-only-root"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      APP_ENV: test
+      DATABASE_URL: mysql+asyncmy://guapp:ci-only-password@127.0.0.1:3306/guapp_test # pragma: allowlist secret
+      INTERNAL_TOKEN: ci-only-internal-token
+      CORS_ALLOW_ORIGIN: http://localhost:3000
+      PAYMENT_STUB_RESULT: ok
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: apps/api の存在確認
+        id: exists
+        working-directory: .
+        run: |
+          if [ -f apps/api/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/api/pyproject.toml が無いため api-test を skip"
+          fi
+
+      - name: uv をセットアップ
+        if: steps.exists.outputs.present == 'true'
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Python 3.13 を用意
+        if: steps.exists.outputs.present == 'true'
+        run: uv python install 3.13
+
+      - name: 依存を同期（lock 固定）
+        if: steps.exists.outputs.present == 'true'
+        run: uv sync --frozen
+
+      - name: MySQL の文字コード・タイムゾーンを揃える
+        if: steps.exists.outputs.present == 'true'
+        run: |
+          # services の mysql:8.4 に CLI 引数を渡せないため、起動後に GLOBAL で設定する
+          sudo apt-get update -qq && sudo apt-get install -y -qq mysql-client >/dev/null
+          mysql -h 127.0.0.1 -uroot -pci-only-root -e "
+            SET GLOBAL time_zone = '+00:00';
+            SET GLOBAL max_connections = 200;
+            ALTER DATABASE guapp_test CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+            SELECT VERSION(), @@global.time_zone, @@global.max_connections;"
+
+      - name: alembic upgrade head
+        if: steps.exists.outputs.present == 'true'
+        run: uv run alembic upgrade head
+
+      - name: pytest
+        if: steps.exists.outputs.present == 'true'
+        run: uv run pytest -q
+
+  web-test:
+    name: web-test (vitest + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: apps/web の存在確認
+        id: exists
+        working-directory: .
+        run: |
+          if [ -f apps/web/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::apps/web/package.json が無いため web-test を skip"
+          fi
+
+      - name: pnpm をセットアップ
+        if: steps.exists.outputs.present == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          # pnpm の版は apps/web/package.json の "packageManager" フィールドから取る（web 側で必ず書く）
+          package_json_file: apps/web/package.json
+
+      - name: Node 24 を用意
+        if: steps.exists.outputs.present == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: 依存をインストール（lock 固定）
+        if: steps.exists.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Vitest
+        if: steps.exists.outputs.present == 'true'
+        run: pnpm test -- --run
+
+      - name: Next.js build
+        if: steps.exists.outputs.present == 'true'
+        run: pnpm build
+        env:
+          # build 時に env ローダーが例外を投げないためのダミー（秘密ではない）
+          API_BASE_URL: http://127.0.0.1:8000
+          INTERNAL_TOKEN: ci-only-internal-token
+          IMAGE_BASE_URL: /images
+
+  deps-audit:
+    name: deps-audit (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # 既知脆弱性の報告のみ。PR をブロックしない（Dependabot が更新 PR を出す。プラン 4.5 #6）
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: uv をセットアップ
+        uses: astral-sh/setup-uv@v7
+
+      - name: pip-audit（apps/api）
+        if: hashFiles('apps/api/uv.lock') != ''
+        working-directory: apps/api
+        run: |
+          # --no-emit-project: プロジェクト自身（requires-python >=3.13）を含めない。pip-audit は 3.13 で動かす
+          uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o requirements-audit.txt
+          uvx --python 3.13 pip-audit -r requirements-audit.txt --strict
+
+      - name: pnpm をセットアップ
+        if: hashFiles('apps/web/package.json') != ''
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Node 24 を用意
+        if: hashFiles('apps/web/package.json') != ''
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: pnpm audit（apps/web）
+        if: hashFiles('apps/web/package.json') != ''
+        working-directory: apps/web
+        run: pnpm audit --audit-level high
