@@ -10,7 +10,8 @@ from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import setup_logging
 from app.core.security import install_cors, verify_internal_token
-from app.routers import health
+from app.routers import cart, catalog, health
+from app.routers import settings as settings_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -35,8 +36,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 
 def build_protected_router(*extra: APIRouter) -> APIRouter:
-    """内部トークン必須のルーター群を `/api/v1` 配下にまとめる。Wave 1 以降で追記する。"""
+    """内部トークン必須のルーター群を `/api/v1` 配下にまとめる。Wave 2 で注文系を追記する。"""
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(verify_internal_token)])
+    # Wave 1: 閲覧（DS-API-001〜003）・カート（010〜013）・公開設定（020）
+    api.include_router(catalog.router)
+    api.include_router(cart.router)
+    api.include_router(settings_router.router)
     for router in extra:
         api.include_router(router)
     return api

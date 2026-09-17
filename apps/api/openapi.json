@@ -1,0 +1,1157 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GU EC API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/categories": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "DS-API-001 カテゴリ階層",
+        "operationId": "get_categories_api_v1_categories_get",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoriesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "DS-API-002 商品一覧",
+        "operationId": "list_products_api_v1_products_get",
+        "parameters": [
+          {
+            "name": "gender",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Gender"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "women / men / kids_teen / all",
+              "title": "Gender"
+            },
+            "description": "women / men / kids_teen / all"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "カテゴリ slug",
+              "title": "Category"
+            },
+            "description": "カテゴリ slug"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 48,
+              "minimum": 1,
+              "default": 24,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "DS-API-003 商品詳細",
+        "operationId": "get_product_api_v1_products__product_id__get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart": {
+      "get": {
+        "tags": [
+          "cart"
+        ],
+        "summary": "DS-API-010 カート取得",
+        "operationId": "get_cart_api_v1_cart_get",
+        "parameters": [
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/items": {
+      "post": {
+        "tags": [
+          "cart"
+        ],
+        "summary": "DS-API-011 明細追加",
+        "operationId": "add_item_api_v1_cart_items_post",
+        "parameters": [
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartItemIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cart/items/{item_id}": {
+      "patch": {
+        "tags": [
+          "cart"
+        ],
+        "summary": "DS-API-012 数量変更",
+        "operationId": "update_item_api_v1_cart_items__item_id__patch",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartItemPatchIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cart"
+        ],
+        "summary": "DS-API-013 明細削除",
+        "operationId": "remove_item_api_v1_cart_items__item_id__delete",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          },
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/public": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "DS-API-020 公開設定",
+        "operationId": "public_settings_api_v1_settings_public_get",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CartItemIn": {
+        "properties": {
+          "variant_id": {
+            "type": "integer",
+            "title": "Variant Id"
+          },
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "quantity"
+        ],
+        "title": "CartItemIn",
+        "description": "POST /cart/items。上限（10・50）は業務規則なのでここには書かない（422 で返す）。"
+      },
+      "CartItemPatchIn": {
+        "properties": {
+          "quantity": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "quantity"
+        ],
+        "title": "CartItemPatchIn",
+        "description": "PATCH /cart/items/{item_id}。"
+      },
+      "CartLineOut": {
+        "properties": {
+          "item_id": {
+            "type": "integer",
+            "title": "Item Id"
+          },
+          "variant_id": {
+            "type": "integer",
+            "title": "Variant Id"
+          },
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "type": "string",
+            "title": "Product Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "size": {
+            "type": "string",
+            "title": "Size"
+          },
+          "unit_price": {
+            "type": "integer",
+            "title": "Unit Price"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "line_total": {
+            "type": "integer",
+            "title": "Line Total"
+          },
+          "stock_status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "insufficient",
+              "out_of_stock"
+            ],
+            "title": "Stock Status"
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_id",
+          "variant_id",
+          "product_id",
+          "product_name",
+          "color",
+          "size",
+          "unit_price",
+          "quantity",
+          "line_total",
+          "stock_status",
+          "image_path"
+        ],
+        "title": "CartLineOut"
+      },
+      "CartResponse": {
+        "properties": {
+          "cart_token": {
+            "type": "string",
+            "title": "Cart Token"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CartLineOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count",
+            "description": "数量の合計"
+          },
+          "subtotal": {
+            "type": "integer",
+            "title": "Subtotal"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "free_shipping_threshold": {
+            "type": "integer",
+            "title": "Free Shipping Threshold"
+          },
+          "can_checkout": {
+            "type": "boolean",
+            "title": "Can Checkout",
+            "description": "明細 1 件以上かつ全明細が ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cart_token",
+          "items",
+          "item_count",
+          "subtotal",
+          "shipping_fee",
+          "total",
+          "free_shipping_threshold",
+          "can_checkout"
+        ],
+        "title": "CartResponse"
+      },
+      "CategoriesResponse": {
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryOut"
+            },
+            "type": "array",
+            "title": "Categories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "categories"
+        ],
+        "title": "CategoriesResponse"
+      },
+      "CategoryChildOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count",
+            "description": "公開商品の件数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "product_count"
+        ],
+        "title": "CategoryChildOut"
+      },
+      "CategoryOut": {
+        "properties": {
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "women",
+              "men",
+              "kids_teen",
+              "all"
+            ],
+            "title": "Gender"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryChildOut"
+            },
+            "type": "array",
+            "title": "Children"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "gender",
+          "children"
+        ],
+        "title": "CategoryOut"
+      },
+      "Gender": {
+        "type": "string",
+        "enum": [
+          "women",
+          "men",
+          "kids_teen",
+          "all"
+        ],
+        "title": "Gender",
+        "description": "カテゴリの性別区分。要件の 3 区分（women／men／kids_teen）＋ 共通 all。"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ProductDetailOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "material": {
+            "type": "string",
+            "title": "Material"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax"
+          },
+          "images": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Images"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Colors"
+          },
+          "sizes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sizes"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/VariantOut"
+            },
+            "type": "array",
+            "title": "Variants"
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedProductOut"
+            },
+            "type": "array",
+            "title": "Related",
+            "description": "同カテゴリの公開商品。自分以外・最大 4 件"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "material",
+          "price_incl_tax",
+          "images",
+          "colors",
+          "sizes",
+          "variants",
+          "related"
+        ],
+        "title": "ProductDetailOut"
+      },
+      "ProductListItemOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax"
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path",
+            "description": "先頭画像のパス。無ければ null"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Colors"
+          },
+          "sold_out": {
+            "type": "boolean",
+            "title": "Sold Out",
+            "description": "全バリエーション在庫 0"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "price_incl_tax",
+          "image_path",
+          "colors",
+          "sold_out"
+        ],
+        "title": "ProductListItemOut"
+      },
+      "ProductListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductListItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "per_page",
+          "total",
+          "has_more"
+        ],
+        "title": "ProductListResponse"
+      },
+      "PublicSettingsOut": {
+        "properties": {
+          "tax_rate": {
+            "type": "string",
+            "title": "Tax Rate",
+            "description": "税率。\"0.10\" 形式の文字列（DS-DEC-31）"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "free_shipping_threshold": {
+            "type": "integer",
+            "title": "Free Shipping Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tax_rate",
+          "shipping_fee",
+          "free_shipping_threshold"
+        ],
+        "title": "PublicSettingsOut"
+      },
+      "RelatedProductOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax"
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path"
+          },
+          "sold_out": {
+            "type": "boolean",
+            "title": "Sold Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "price_incl_tax",
+          "image_path",
+          "sold_out"
+        ],
+        "title": "RelatedProductOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VariantOut": {
+        "properties": {
+          "variant_id": {
+            "type": "integer",
+            "title": "Variant Id"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "size": {
+            "type": "string",
+            "title": "Size"
+          },
+          "in_stock": {
+            "type": "boolean",
+            "title": "In Stock"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "color",
+          "size",
+          "in_stock"
+        ],
+        "title": "VariantOut"
+      }
+    }
+  }
+}
