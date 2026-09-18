@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
 from app.seed import seed, truncate_p1_tables
+from tests.integration.live_server import live_server  # noqa: F401  # フィクスチャ登録
 
 ENV_KEY = "DATABASE_URL_TEST"
 SKIP_REASON = f"integration: 環境変数 {ENV_KEY} が未設定のため未実行（MySQL 未起動）"

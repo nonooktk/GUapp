@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     PAYMENT_STUB_RESULT: Literal["ok", "ng"] | None = None
     # 商品画像の配信ベース URL（DS-DEC-22）
     IMAGE_BASE_URL: str = ""
+    # テスト専用: 注文確定の金額照合と在庫引当の間に入れる待ち（ms）。
+    # APP_ENV=test 以外では無視される（テスト設計書 1.4 #7）
+    TEST_RESERVE_DELAY_MS: int = 0
 
     @property
     def is_production(self) -> bool:

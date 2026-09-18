@@ -61,6 +61,28 @@ async def test_ut_hooks_active_when_test(app_env) -> None:
     th.reset_all()
 
 
+@pytest.mark.parametrize("env", ["development", "production"])
+async def test_ut_test_routes_absent_outside_test_env(make_app, client_factory, env: str) -> None:
+    """`/_test/metrics`・`/_test/reset` は APP_ENV=test 以外では登録されない（404）。"""
+    client = client_factory(make_app(APP_ENV=env))
+    assert (await client.get("/_test/metrics")).status_code == 404
+    assert (await client.post("/_test/reset")).status_code == 404
+
+
+async def test_ut_test_routes_present_in_test_env(make_app, client_factory) -> None:
+    client = client_factory(make_app(APP_ENV="test", TEST_RESERVE_DELAY_MS="7"))
+    from app.core import testing_hooks as th
+
+    assert th.get_delay_ms() == 7  # 環境変数から遅延が設定される
+    res = await client.get("/_test/metrics")
+    assert res.status_code == 200
+    assert set(res.json()) == {"inflight_now", "inflight_max"}
+    th.allocation_counter.max_seen = 5
+    assert (await client.post("/_test/reset")).status_code == 200
+    assert (await client.get("/_test/metrics")).json() == {"inflight_now": 0, "inflight_max": 0}
+    th.reset_all()
+
+
 def test_ut_hooks_not_imported_by_production_path() -> None:
     """`app.main` を import しただけでは testing_hooks が読み込まれない（別プロセスで確認）。"""
     code = (

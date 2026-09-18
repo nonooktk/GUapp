@@ -46,11 +46,15 @@ class AppError(Exception):
         → 409 `{"code": "out_of_stock", "items": [1, 2]}`
     """
 
-    def __init__(self, status: int, code: str, **detail: Any) -> None:
+    def __init__(
+        self, status: int, code: str, *, headers: dict[str, str] | None = None, **detail: Any
+    ) -> None:
         super().__init__(f"{status} {code}")
         self.status = status
         self.code = code
         self.detail = detail
+        # 429 の `Retry-After` など、本文以外に付ける応答ヘッダ（任意）
+        self.headers = headers
 
     def to_body(self) -> dict[str, Any]:
         # code を先頭に置く（detail が code を上書きしないよう順序を固定）
@@ -99,7 +103,7 @@ def validation_error_body(exc: RequestValidationError) -> dict[str, Any]:
 
 
 async def _app_error_handler(_: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content=exc.to_body())
+    return JSONResponse(status_code=exc.status, content=exc.to_body(), headers=exc.headers)
 
 
 async def _validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
