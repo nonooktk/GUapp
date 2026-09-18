@@ -70,24 +70,24 @@ flowchart LR
 
 ## 2. 技術スタック・バージョン
 
-版は 2026-09-06 時点の調査に基づく。実装時に固定した版をロックファイルに残し、本表を更新する。
+版は 2026-09-06 時点の調査に基づき、**2026-09-18 の P1 実装で固定した版**を「実装版」列に追記した（正本は `apps/api/uv.lock`・`apps/web/pnpm-lock.yaml`）。
 
-| 領域 | 採用 | 版 | 理由 |
-| --- | --- | --- | --- |
-| Node.js | Node.js | 24 LTS | Active LTS。26 は 2026-10 に LTS 化するが演習中は切り替えない |
-| フロント | Next.js（App Router・TypeScript） | 16.x | 最新安定。Route Handlers を BFF に使う |
-| Python | CPython | 3.13 | FastAPI 最新系で動作確認済み。App Service では起動コマンドを明示する（8 章） |
-| バックエンド | FastAPI ＋ Pydantic v2 | 0.14x 系 | 型定義が入力検証を兼ねる（7 章） |
-| ORM | SQLAlchemy 2.0（async）＋ asyncmy | 2.0 系 | DB 待ちの間に他リクエストを処理できる。asyncmy は MySQL 8.x の認証方式に対応 |
-| マイグレーション | Alembic | 最新 | テーブル変更の履歴を残す |
-| DB | MySQL | 8.4 LTS | 8.0 は 2026-04 に EOL。ローカルも Docker で 8.4 |
-| 決済 | Stripe（Checkout・Webhook）、stripe-python | 15.x | 実装例が多く設計の説明がしやすい |
-| メール | Azure Communication Services Email、azure-communication-email | 1.0 系 | Azure 一式との整合 |
-| LLM | Claude API、anthropic | 1.x | F-029。モデルは Claude Sonnet 5 を想定 |
-| 認証 | 自前（argon2id ＋ サーバー側セッション） | argon2-cffi | 外部 ID 連携の余地を残す（A-07） |
-| テスト | pytest（API）、Vitest（フロント）、Stripe CLI（Webhook） | 最新 | README の jest は Vitest に変更済み |
-| パッケージ管理 | pnpm、uv | 最新 | 版固定が明確（DS-DEC-24）。演習期間中は版を固定し、脆弱性は Week8 のチェックで更新する。api は App Service が requirements.txt を読むため CI で `uv export` する（8.4） |
-| ローカル環境 | Docker Compose（MySQL 8.4・utf8mb4・UTC） | — | Azure と揃える（DS-DEC-25）。Azure Database for MySQL Flexible Server の 8.4 提供状況は構築時に要確認。無ければ両方 8.0（Azure 延長サポート）に揃える |
+| 領域 | 採用 | 版 | 実装版（2026-09-18） | 理由 |
+| --- | --- | --- | --- | --- |
+| Node.js | Node.js | 24 LTS | 24.14.0 | Active LTS。26 は 2026-10 に LTS 化するが演習中は切り替えない |
+| フロント | Next.js（App Router・TypeScript） | 16.x | Next.js 16.3.5・React 19.2.8・TypeScript 5.9・Tailwind CSS 4.3 | 最新安定。Route Handlers を BFF に使う |
+| Python | CPython | 3.13 | 3.13.15（uv 管理） | FastAPI 最新系で動作確認済み。App Service では起動コマンドを明示する（8 章） |
+| バックエンド | FastAPI ＋ Pydantic v2 | 0.14x 系 | FastAPI 0.141.1・Pydantic 2.13.5・uvicorn 0.53.0 | 型定義が入力検証を兼ねる（7 章） |
+| ORM | SQLAlchemy 2.0（async）＋ asyncmy | 2.0 系 | SQLAlchemy 2.0.54・asyncmy 0.2.14（＋cryptography 50.0.1: MySQL 8.4 の caching_sha2_password に必須）・tzdata 2026.4（Windows の ZoneInfo 用） | DB 待ちの間に他リクエストを処理できる。asyncmy は MySQL 8.x の認証方式に対応 |
+| マイグレーション | Alembic | 最新 | 1.20.0 | テーブル変更の履歴を残す |
+| DB | MySQL | 8.4 LTS | 8.4.11（ローカルは zip 版。Docker は未検証） | 8.0 は 2026-04 に EOL。ローカルも Docker で 8.4 |
+| 決済 | Stripe（Checkout・Webhook）、stripe-python | 15.x | P1 未導入（スタブ） | 実装例が多く設計の説明がしやすい |
+| メール | Azure Communication Services Email、azure-communication-email | 1.0 系 | P1 未導入（outbox スタブ） | Azure 一式との整合 |
+| LLM | Claude API、anthropic | 1.x | P2 | F-029。モデルは Claude Sonnet 5 を想定 |
+| 認証 | 自前（argon2id ＋ サーバー側セッション） | argon2-cffi | P2 | 外部 ID 連携の余地を残す（A-07） |
+| テスト | pytest（API）、Vitest（フロント）、Stripe CLI（Webhook） | 最新 | pytest 9.1.1・Vitest 5.0.1・Testing Library 16.3 | README の jest は Vitest に変更済み |
+| パッケージ管理 | pnpm、uv | 最新 | pnpm 12.4.2・uv 0.12.15 | 版固定が明確（DS-DEC-24）。演習期間中は版を固定し、脆弱性は Week8 のチェックで更新する。api は App Service が requirements.txt を読むため CI で `uv export` する（8.4） |
+| ローカル環境 | Docker Compose（MySQL 8.4・utf8mb4・UTC） | — | 本機は Docker 無しのため zip 版（`scripts/mysql-local/`）。compose は未検証 | Azure と揃える（DS-DEC-25）。Azure Database for MySQL Flexible Server の 8.4 提供状況は構築時に要確認。無ければ両方 8.0（Azure 延長サポート）に揃える |
 
 ## 3. UML
 

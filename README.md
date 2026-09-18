@@ -75,6 +75,8 @@ docs/
 
 ## 開発の始め方（P1）
 
+別 PC での再現確認（`docs/05_検収/README再現確認_20260918.md`）の結果を反映した手順。上から順に実行する。
+
 1. 必要なツール: Node.js 24、pnpm、Python 3.13（uv 経由）、uv、pre-commit。管理者権限は不要
    ```powershell
    npm install -g pnpm
@@ -86,17 +88,22 @@ docs/
    pre-commit install
    pre-commit run --all-files
    ```
-3. `.env.example` を `apps/api/.env` と `apps/web/.env` にコピーして値を埋める。`.env` はコミットできない（`.gitignore` と pre-commit で二重に拒否）
-4. MySQL（zip 版・管理者不要）を用意する。手順と注意は `scripts/mysql-local/README.md`
+3. MySQL（zip 版・管理者不要）を用意する。手順と注意は `scripts/mysql-local/README.md`
    ```powershell
-   .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る
+   .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る（2 回目以降は冪等スキップ）
    .\scripts\mysql-local\status.ps1    # 起動確認。停止は stop.ps1、再起動は start.ps1
    ```
-   接続情報は `%LOCALAPPDATA%\guapp-mysql\credentials.txt`（リポジトリ外）に生成される
-5. API: `apps/api/README.md`（`uv sync` → `uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload`）
-6. web: `apps/web/README.md`（`pnpm install` → `pnpm dev`）。テストは `uv run pytest -q`（api）と `pnpm test`（web）
+   接続情報（`DATABASE_URL`・`DATABASE_URL_TEST`）は `%LOCALAPPDATA%\guapp-mysql\credentials.txt`（リポジトリ外）に生成される。**手順 4 はこのファイルができてから**
+4. 環境変数ファイルを作る。`.env.example` の api 節を `apps/api/.env` に、web 節を `apps/web/.env.local` に写し、値を埋める（`DATABASE_URL` は credentials.txt の値、`INTERNAL_TOKEN` は api と web で同じ任意の値、`API_BASE_URL=http://127.0.0.1:8000`、`CORS_ALLOW_ORIGIN=http://localhost:3000`、`IMAGE_BASE_URL=http://localhost:3000`）。どちらもコミットできない（`.gitignore` と pre-commit で二重に拒否）
+5. API: `apps/api/README.md`（`uv sync` → `uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload`）。ポート 8000 が使用中なら `--port 8010` にし、web の `API_BASE_URL` も合わせる
+6. web: `apps/web/README.md`（`pnpm install` → `pnpm dev`）。ポート 3000 が使用中なら `pnpm dev -p 3010` にし、api の `CORS_ALLOW_ORIGIN` と web の `IMAGE_BASE_URL` も合わせる
+7. テスト: `pnpm test`（web、121 件）と `uv run pytest -q`（api）。**結合テスト（IT）は環境変数 `DATABASE_URL_TEST` が要る**（`.env` は読まない。conftest が guapp_test であることを確認して開発 DB を守る）
+   ```powershell
+   $env:DATABASE_URL_TEST = "<credentials.txt の DATABASE_URL_TEST>"
+   uv run pytest -q          # 207 passed。未設定なら 131 passed / 76 skipped が正常
+   ```
 
-事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。
+事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。防御外し確認（テスト設計書 1.4 #8）は `scripts/mutation-check/run.ps1 -Case all`。
 
 ## 引き継ぎ時の注意
 
