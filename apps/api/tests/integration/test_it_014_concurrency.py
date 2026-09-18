@@ -5,6 +5,9 @@
 - #3 MySQL であることは conftest が保証（`_validate_test_url`）、#4 schema は alembic upgrade head
 - #5 成功側は全応答コードと注文番号、失敗側は `code` の値まで assert
 - #6 在庫は「減少量 = 数量 × 1 回」で assert
+- IT-014-03（2 リクエスト）は IT-014-04 と同じく、同時性が成立しなかった試行（`inflight_max < 2`）を
+  無効試行として数え、注文系の表を空にしてやり直す（3 回まで。全部不成立なら赤）。
+  IT-014-02 は 20 リクエストで同時性が崩れる余地が実質なく、再試行は入れない
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.adapters.mail import DEFAULT_OUTBOX_DIR
+from tests.integration import concurrency_helpers as ch
 from tests.integration import order_helpers as oh
 from tests.integration.live_server import LiveServer
 
@@ -72,23 +76,36 @@ async def test_it_014_02_same_key_20_concurrent_requests_yield_one_order(
     print(f"\nIT-014-02: {CONCURRENCY} 同時 {elapsed:.2f}s inflight_max={metrics['inflight_max']}")
 
 
-async def test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_ordered(
-    client: httpx.AsyncClient, seed_db: AsyncEngine
-) -> None:
+async def _same_cart_two_keys_once(
+    client: httpx.AsyncClient, seed_db: AsyncEngine, vid: int
+) -> tuple[list[httpx.Response], float, dict[str, int], int]:
+    """IT-014-03 の 1 試行: 注文系の表を空にし、新カートに 1 点入れ、別キー 2 本を同時に送る。"""
+    await ch.reset_order_tables(seed_db)  # 前の無効試行が残した注文・カートを消す（初回は空振り）
+    await client.post("/_test/reset")
     token = await oh.new_token(client)
-    vid = await oh.stocked_variant_id(seed_db, 5)
     await oh.add_item(client, token, vid, 1)
     prepared_a = await oh.prepare(client, token)
     prepared_b = await oh.prepare(client, token)
     assert prepared_a["idempotency_key"] != prepared_b["idempotency_key"]
     before = await oh.stock_of(seed_db, vid)
-
-    started = time.perf_counter()
-    ra, rb = await asyncio.gather(
-        client.post("/api/v1/orders", json=oh.order_body(prepared_a), headers=oh.h(token)),
-        client.post("/api/v1/orders", json=oh.order_body(prepared_b), headers=oh.h(token)),
+    responses, elapsed = await ch.post_pair_synchronized(
+        client,
+        "/api/v1/orders",
+        [(oh.order_body(prepared_a), oh.h(token)), (oh.order_body(prepared_b), oh.h(token))],
     )
-    elapsed = time.perf_counter() - started
+    return responses, elapsed, await _metrics(client), before
+
+
+async def test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_ordered(
+    client: httpx.AsyncClient, seed_db: AsyncEngine
+) -> None:
+    vid = await oh.stocked_variant_id(seed_db, 5)
+
+    (ra, rb), elapsed, metrics, before = await ch.run_until_concurrent(
+        "IT-014-03",
+        lambda: _same_cart_two_keys_once(client, seed_db, vid),
+        metrics_of=lambda r: r[2],
+    )
 
     codes = sorted([ra.status_code, rb.status_code])
     assert codes == [201, 409], [(ra.status_code, ra.text), (rb.status_code, rb.text)]
@@ -100,7 +117,9 @@ async def test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_order
     assert await oh.count_rows(seed_db, "order_items") == 1
     assert await oh.stock_of(seed_db, vid) == before - 1
     assert await oh.scalar(seed_db, "SELECT status FROM carts") == "ordered"
-    metrics = await _metrics(client)
-    assert metrics["inflight_max"] >= 2, metrics
+    assert metrics["inflight_max"] >= 2, metrics  # 有効試行の再確認（1.4 #2）
     (DEFAULT_OUTBOX_DIR / f"{winner.json()['order_number']}.txt").unlink(missing_ok=True)
-    print(f"\nIT-014-03: 2 同時 {elapsed:.2f}s inflight_max={metrics['inflight_max']}")
+    print(
+        f"\nIT-014-03: 2 同時 {elapsed:.2f}s inflight_max={metrics['inflight_max']}"
+        f" 無効試行 {ch.invalid_attempts['IT-014-03']} 回"
+    )

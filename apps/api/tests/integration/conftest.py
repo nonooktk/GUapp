@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
 from app.seed import seed, truncate_p1_tables
+from tests.integration import concurrency_helpers
 from tests.integration.live_server import live_server  # noqa: F401  # フィクスチャ登録
 
 ENV_KEY = "DATABASE_URL_TEST"
@@ -63,6 +64,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(marker)
         return
     _validate_test_url(url)
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
+    """同時実行 IT の無効試行（inflight_max < 2 で再試行した回数）を最後に表示する。"""
+    if not os.environ.get(ENV_KEY):
+        return
+    counts = concurrency_helpers.invalid_attempts
+    total = sum(counts.values())
+    detail = ", ".join(f"{name}={n}" for name, n in sorted(counts.items())) or "なし"
+    terminalreporter.write_sep(
+        "-", f"同時実行 IT の無効試行（inflight_max < 2 → 再試行）: 合計 {total} 回（{detail}）"
+    )
 
 
 @pytest.fixture(scope="session")
