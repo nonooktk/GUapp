@@ -13,7 +13,16 @@ export const dynamic = "force-dynamic";
 
 const FALLBACK_FREE_SHIPPING_THRESHOLD = 4990;
 
-export default async function CartPage() {
+/** `?oos=1,2` → 注文確定で在庫切れになった variant_id（Wave 2 の戻し先）。数字以外は捨てる */
+function parseHighlight(v: string | string[] | undefined): number[] {
+  const s = Array.isArray(v) ? v[0] : v;
+  if (!s || !/^[0-9,]{1,200}$/.test(s)) return [];
+  return s.split(",").filter(Boolean).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+}
+
+export default async function CartPage({ searchParams }: PageProps<"/cart">) {
+  const sp = await searchParams;
+  const highlightVariantIds = parseHighlight(sp.oos);
   let initialCart: Cart | null = null;
   let refetchOnMount = false;
   try {
@@ -39,6 +48,7 @@ export default async function CartPage() {
       imageBaseUrl={imageBaseUrl}
       refetchOnMount={refetchOnMount}
       freeShippingThreshold={settings?.free_shipping_threshold ?? FALLBACK_FREE_SHIPPING_THRESHOLD}
+      highlightVariantIds={highlightVariantIds}
     />
   );
 }

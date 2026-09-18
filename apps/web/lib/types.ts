@@ -117,3 +117,77 @@ export interface ApiErrorBody {
 
 /** 1 明細の数量上限（DS-PRC-011）。セレクトの選択肢に使う */
 export const MAX_QUANTITY_PER_ITEM = 10;
+
+// ---- Wave 2: 注文（DS-API-021〜023。openapi.json の PrepareOut / OrderCreateIn / OrderOut と突き合わせ済み） ----
+
+/** DS-API-021 `POST /checkout/prepare` の応答。items はカート明細と同じ形 */
+export interface PrepareResponse {
+  /** 注文確定に 1 回だけ使う 43 文字の base64url */
+  idempotency_key: string;
+  items: CartItem[];
+  subtotal: number;
+  shipping_fee: number;
+  total: number;
+  /** うち消費税（合計 × 税率 ÷（1＋税率）、円未満切り捨て） */
+  tax_included: number;
+  /** `"0.10"` のような文字列 */
+  tax_rate: string;
+  free_shipping_threshold: number;
+}
+
+/** DS-API-022 `POST /orders` の本文 */
+export interface OrderCreateBody {
+  idempotency_key: string;
+  ship_name: string;
+  /** ハイフン除去後の 7 桁 */
+  ship_postal_code: string;
+  /** 都道府県・市区町村・番地・建物を全角スペースで結合 */
+  ship_address: string;
+  /** ハイフン除去後の 10〜11 桁 */
+  ship_phone: string;
+  guest_email: string;
+  receive_method: "delivery";
+  payment_method: "card";
+  /** 確認画面に表示した金額（FastAPI が再計算と照合する） */
+  display: { subtotal: number; shipping_fee: number; total: number };
+}
+
+export type OrderStatus =
+  | "pending_payment"
+  | "accepted"
+  | "preparing"
+  | "shipped"
+  | "delivered"
+  | "pickup_expired"
+  | "cancelled"
+  | "payment_failed";
+
+export interface OrderItem {
+  product_name: string;
+  color: string;
+  size: string;
+  unit_price: number;
+  quantity: number;
+  line_total: number;
+}
+
+/** DS-API-022／023 共通の注文応答。内部 ID は含まれない */
+export interface OrderResponse {
+  order_number: string;
+  status: OrderStatus;
+  items: OrderItem[];
+  subtotal: number;
+  shipping_fee: number;
+  total: number;
+  tax_included: number;
+  tax_rate: string;
+  ship_name: string;
+  ship_postal_code: string;
+  ship_address: string;
+  ship_phone: string;
+  guest_email: string;
+  receive_method: string;
+  payment_method: string;
+  /** ISO 8601（UTC）。表示は JST に変換する */
+  ordered_at: string;
+}
