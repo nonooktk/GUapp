@@ -1,0 +1,68 @@
+{
+  "_comment": "防御外し確認（テスト設計書 1.4 #8）のケース定義。run.ps1 と mutate.py の両方がこのファイルを読む。old は対象ファイル内にちょうど 1 回だけ現れる文字列でなければならない（見つからない・複数なら中止）。",
+  "cases": [
+    {
+      "id": 1,
+      "name": "冪等キー UNIQUE",
+      "removed": "orders.idempotency_key の UNIQUE（models/order.py の unique=True と 0001_p1_initial.py の UniqueConstraint）",
+      "files": [
+        {
+          "path": "apps/api/app/models/order.py",
+          "old": "idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)",
+          "new": "idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)"
+        },
+        {
+          "path": "apps/api/alembic/versions/0001_p1_initial.py",
+          "old": "        sa.UniqueConstraint(\"idempotency_key\", name=op.f(\"uq_orders_idempotency_key\")),\n",
+          "new": ""
+        }
+      ],
+      "import_check": ["app.models.order"],
+      "rebuild_schema": true,
+      "tests": [
+        "tests/integration/test_it_014_concurrency.py::test_it_014_02_same_key_20_concurrent_requests_yield_one_order"
+      ],
+      "expected_red": "IT-014-02（全応答 200/201・201 は 1 回・注文 1 件 が崩れる）",
+      "min_failed": 1
+    },
+    {
+      "id": 2,
+      "name": "カートの条件付き UPDATE",
+      "removed": "repositories/orders.py mark_cart_ordered の `Cart.status == CartStatus.active` 条件",
+      "files": [
+        {
+          "path": "apps/api/app/repositories/orders.py",
+          "old": ".where(Cart.id == cart_id, Cart.status == CartStatus.active)",
+          "new": ".where(Cart.id == cart_id)"
+        }
+      ],
+      "import_check": ["app.repositories.orders"],
+      "rebuild_schema": false,
+      "tests": [
+        "tests/integration/test_it_014_concurrency.py::test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_ordered"
+      ],
+      "expected_red": "IT-014-03（両方 201 になり [201, 409] が崩れる）",
+      "min_failed": 1
+    },
+    {
+      "id": 3,
+      "name": "在庫の stock >= :q",
+      "removed": "repositories/orders.py reserve_stock の `Variant.stock >= quantity` 条件",
+      "files": [
+        {
+          "path": "apps/api/app/repositories/orders.py",
+          "old": ".where(Variant.id == variant_id, Variant.stock >= quantity)",
+          "new": ".where(Variant.id == variant_id)"
+        }
+      ],
+      "import_check": ["app.repositories.orders"],
+      "rebuild_schema": false,
+      "tests": [
+        "tests/integration/test_it_014_04_stock_race.py::test_it_014_04_two_carts_race_for_last_unit",
+        "tests/unit/test_ut_014_reserve_stock.py::test_ut_014_04_quantity_over_stock_affects_0_rows_and_keeps_stock"
+      ],
+      "expected_red": "IT-014-04（両方 201 または CHECK 違反で 500）と UT-014-04（影響行数 0 のはずが 1）",
+      "min_failed": 2
+    }
+  ]
+}

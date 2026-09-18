@@ -1,5 +1,7 @@
 # CI 骨格（P1 実装プラン 2 章・設計仕様書 8.4）。
-# api: MySQL 8.4 サービスに対して alembic upgrade head → pytest。web: Vitest → build。deps-audit は非ブロック。
+# api: MySQL 8.4 サービスに対して alembic upgrade head → pytest。
+# web: Vitest → server-only ガード（違反ファイルで build が失敗すること。UT-WEB-06 の CI 移管）→ build →
+#      ST-SEC-09 先行（.next/static に INTERNAL_TOKEN の値が無い）。deps-audit は非ブロック。
 # apps/api・apps/web が無い間は各 job の "存在確認" ステップで skip する（Wave 0 並行作成中の暫定措置）。
 # 秘密スキャンは secrets-scan.yml（gitleaks）が別途担当する。
 name: ci
@@ -141,14 +143,72 @@ jobs:
         if: steps.exists.outputs.present == 'true'
         run: pnpm test -- --run
 
+      # UT-WEB-06 の CI 移管（テスト設計書 7 章）: "use client" から server-only モジュール（@/lib/server/env）を
+      # import する違反ファイルを一時生成し、`next build` が失敗することを確認する。成功したらガードが壊れているので赤にする。
+      # 注: フォルダ名を "_" で始めると Next.js のプライベートフォルダになりルートから除外される（コンパイルされず検査にならない）。
+      #     ローカル実証 2026-09-18: app/_ci-server-only-check → exit 0（偽陽性）、app/ci-server-only-check → exit 1。
+      - name: server-only ガード（違反ファイルで build が失敗すること）
+        if: steps.exists.outputs.present == 'true'
+        env:
+          # build 時に env ローダーが例外を投げないためのダミー（秘密ではない）。API は何も待ち受けないポート 9
+          API_BASE_URL: http://127.0.0.1:9
+          INTERNAL_TOKEN: ci-only-internal-token
+          IMAGE_BASE_URL: /images
+        run: |
+          dir=app/ci-server-only-check
+          mkdir -p "$dir"
+          cat > "$dir/page.tsx" <<'EOF'
+          "use client";
+          // CI の server-only ガード検査用（一時ファイル。このステップの最後で削除する）
+          import { getEnv } from "@/lib/server/env";
+          export default function Page() {
+            return <pre>{JSON.stringify(getEnv())}</pre>;
+          }
+          EOF
+          set +e
+          pnpm build > guard-build.log 2>&1
+          status=$?
+          set -e
+          rm -rf "$dir" .next
+          if [ "$status" -eq 0 ]; then
+            echo "::error::クライアントコンポーネントから @/lib/server/env を import しても next build が成功した（server-only ガードが機能していない）"
+            tail -n 40 guard-build.log
+            exit 1
+          fi
+          if ! grep -q "server-only" guard-build.log; then
+            echo "::error::build は失敗したが server-only 起因ではない（別の原因で落ちている）。ログを確認"
+            tail -n 60 guard-build.log
+            exit 1
+          fi
+          echo "OK: 違反ファイルで next build が失敗した（exit $status・server-only 起因）"
+          grep -n "server-only" guard-build.log | head -n 3
+          rm -f guard-build.log
+
       - name: Next.js build
         if: steps.exists.outputs.present == 'true'
         run: pnpm build
         env:
-          # build 時に env ローダーが例外を投げないためのダミー（秘密ではない）
-          API_BASE_URL: http://127.0.0.1:8000
+          # build 時に env ローダーが例外を投げないためのダミー（秘密ではない）。API は何も待ち受けないポート 9
+          API_BASE_URL: http://127.0.0.1:9
           INTERNAL_TOKEN: ci-only-internal-token
           IMAGE_BASE_URL: /images
+
+      # ST-SEC-09 の先行（テスト設計書 3 章）: クライアントバンドル（.next/static）に INTERNAL_TOKEN の値が
+      # 1 件でも含まれていたら赤にする。値は上の build と同じダミー
+      - name: ST-SEC-09 先行（.next/static に INTERNAL_TOKEN の値が無い）
+        if: steps.exists.outputs.present == 'true'
+        env:
+          INTERNAL_TOKEN: ci-only-internal-token
+        run: |
+          test -d .next/static || { echo "::error::.next/static が無い（build が成果物を出していない）"; exit 1; }
+          # grep は 0 件だと exit 1 を返す。Actions の bash は -e -o pipefail なので || true で握る
+          hits=$({ grep -r -l -F -- "$INTERNAL_TOKEN" .next/static || true; } | wc -l)
+          if [ "$hits" -ne 0 ]; then
+            echo "::error::.next/static に INTERNAL_TOKEN の値が $hits ファイル含まれている（クライアントへ秘密が漏れている）"
+            grep -r -l -F -- "$INTERNAL_TOKEN" .next/static
+            exit 1
+          fi
+          echo "OK: .next/static（$(find .next/static -type f | wc -l) ファイル）に INTERNAL_TOKEN の値は 0 件"
 
   deps-audit:
     name: deps-audit (non-blocking)
