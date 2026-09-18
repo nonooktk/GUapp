@@ -592,6 +592,228 @@
           }
         }
       }
+    },
+    "/api/v1/checkout/prepare": {
+      "post": {
+        "tags": [
+          "checkout"
+        ],
+        "summary": "DS-API-021 金額計算・冪等キー発行",
+        "operationId": "prepare_api_v1_checkout_prepare_post",
+        "parameters": [
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrepareOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "DS-API-022 注文確定（DS-PRC-014-1）",
+        "operationId": "create_order_api_v1_orders_post",
+        "parameters": [
+          {
+            "name": "X-Cart-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行",
+              "title": "X-Cart-Token"
+            },
+            "description": "匿名カートトークン（BFF が Cookie から移す）。無ければ新規発行"
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCreateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "同じ冪等キーの既存注文",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{order_number}/lookup": {
+      "post": {
+        "tags": [
+          "orders"
+        ],
+        "summary": "DS-API-023 ゲスト注文照会（番号＋メール一致・100 回/時/IP）",
+        "operationId": "lookup_order_api_v1_orders__order_number__lookup_post",
+        "parameters": [
+          {
+            "name": "order_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Number"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookupIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -836,6 +1058,30 @@
         ],
         "title": "CategoryOut"
       },
+      "DisplayAmounts": {
+        "properties": {
+          "subtotal": {
+            "type": "integer",
+            "title": "Subtotal"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subtotal",
+          "shipping_fee",
+          "total"
+        ],
+        "title": "DisplayAmounts",
+        "description": "確認画面に表示した金額。確定時に再計算値と照合する（1 円でも違えば 409 price_changed）。"
+      },
       "Gender": {
         "type": "string",
         "enum": [
@@ -859,6 +1105,283 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "LookupIn": {
+        "properties": {
+          "guest_email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Guest Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guest_email"
+        ],
+        "title": "LookupIn",
+        "description": "POST /orders/{order_number}/lookup（DS-API-023）。メールは本文で受ける。"
+      },
+      "OrderCreateIn": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "title": "Idempotency Key"
+          },
+          "ship_name": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Ship Name"
+          },
+          "ship_postal_code": {
+            "type": "string",
+            "pattern": "^\\d{7}$",
+            "title": "Ship Postal Code"
+          },
+          "ship_address": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ship Address"
+          },
+          "ship_phone": {
+            "type": "string",
+            "pattern": "^\\d{10,11}$",
+            "title": "Ship Phone"
+          },
+          "guest_email": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "title": "Guest Email"
+          },
+          "receive_method": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Receive Method"
+          },
+          "payment_method": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Payment Method"
+          },
+          "display": {
+            "$ref": "#/components/schemas/DisplayAmounts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "ship_name",
+          "ship_postal_code",
+          "ship_address",
+          "ship_phone",
+          "guest_email",
+          "receive_method",
+          "payment_method",
+          "display"
+        ],
+        "title": "OrderCreateIn",
+        "description": "POST /orders（DS-API-022）。"
+      },
+      "OrderItemOut": {
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "title": "Product Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "size": {
+            "type": "string",
+            "title": "Size"
+          },
+          "unit_price": {
+            "type": "integer",
+            "title": "Unit Price"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "line_total": {
+            "type": "integer",
+            "title": "Line Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_name",
+          "color",
+          "size",
+          "unit_price",
+          "quantity",
+          "line_total"
+        ],
+        "title": "OrderItemOut"
+      },
+      "OrderOut": {
+        "properties": {
+          "order_number": {
+            "type": "string",
+            "title": "Order Number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_payment",
+              "accepted",
+              "preparing",
+              "shipped",
+              "delivered",
+              "pickup_expired",
+              "cancelled",
+              "payment_failed"
+            ],
+            "title": "Status"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrderItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "subtotal": {
+            "type": "integer",
+            "title": "Subtotal"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "tax_included": {
+            "type": "integer",
+            "title": "Tax Included"
+          },
+          "tax_rate": {
+            "type": "string",
+            "title": "Tax Rate"
+          },
+          "ship_name": {
+            "type": "string",
+            "title": "Ship Name"
+          },
+          "ship_postal_code": {
+            "type": "string",
+            "title": "Ship Postal Code"
+          },
+          "ship_address": {
+            "type": "string",
+            "title": "Ship Address"
+          },
+          "ship_phone": {
+            "type": "string",
+            "title": "Ship Phone"
+          },
+          "guest_email": {
+            "type": "string",
+            "title": "Guest Email"
+          },
+          "receive_method": {
+            "type": "string",
+            "title": "Receive Method"
+          },
+          "payment_method": {
+            "type": "string",
+            "title": "Payment Method"
+          },
+          "ordered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ordered At",
+            "description": "ISO 8601（UTC）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_number",
+          "status",
+          "items",
+          "subtotal",
+          "shipping_fee",
+          "total",
+          "tax_included",
+          "tax_rate",
+          "ship_name",
+          "ship_postal_code",
+          "ship_address",
+          "ship_phone",
+          "guest_email",
+          "receive_method",
+          "payment_method",
+          "ordered_at"
+        ],
+        "title": "OrderOut",
+        "description": "注文応答（DS-API-022／023 共通）。"
+      },
+      "PrepareOut": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string",
+            "title": "Idempotency Key",
+            "description": "注文確定に 1 回だけ使う 43 文字の base64url"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CartLineOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "subtotal": {
+            "type": "integer",
+            "title": "Subtotal"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "tax_included": {
+            "type": "integer",
+            "title": "Tax Included"
+          },
+          "tax_rate": {
+            "type": "string",
+            "title": "Tax Rate"
+          },
+          "free_shipping_threshold": {
+            "type": "integer",
+            "title": "Free Shipping Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "idempotency_key",
+          "items",
+          "subtotal",
+          "shipping_fee",
+          "total",
+          "tax_included",
+          "tax_rate",
+          "free_shipping_threshold"
+        ],
+        "title": "PrepareOut",
+        "description": "POST /checkout/prepare（DS-API-021）。金額は DS-PRC-021。"
       },
       "ProductDetailOut": {
         "properties": {

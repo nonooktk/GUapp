@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, MetaData, func
+from sqlalchemy import BigInteger, DateTime, Integer, MetaData, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # 制約名を一定にして Alembic の autogenerate と衝突しないようにする
@@ -44,7 +44,11 @@ class TimestampMixin:
 
 
 class IdMixin:
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # SQLite（UT 用）は INTEGER PRIMARY KEY しか自動採番しないため方言だけ Integer にする。
+    # MySQL の DDL は BIGINT のまま（Alembic の差分は出ない）
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
 
 
 # MySQL 用の共通テーブルオプション（SQLite などでは無視される）

@@ -10,8 +10,6 @@
 
 from __future__ import annotations
 
-import re
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, internal_error
@@ -22,19 +20,10 @@ from app.services import cart_rules
 from app.services.pricing import calc_totals
 from app.services.settings import get_public_settings
 
-# ヘッダで受けるトークンの形（base64url・列は String(64)）。合わなければ「未知」と同じ扱い
-_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-
-
-def _normalize_token(token: str | None) -> str | None:
-    if token and _TOKEN_RE.match(token):
-        return token
-    return None
-
 
 async def resolve_cart(session: AsyncSession, token: str | None) -> Cart:
     """トークンから active カートを得る。無ければ作る（呼び手が commit する）。"""
-    token = _normalize_token(token)
+    token = cart_rules.normalize_token(token)
     reuse_token = False
     if token is not None:
         cart = await carts_repo.get_by_token(session, token)

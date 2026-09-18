@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from typing import Literal
 
@@ -34,3 +35,14 @@ def stock_status(*, stock: int, quantity: int, published: bool) -> StockStatus:
 def new_cart_token() -> str:
     """匿名トークン（32 バイト乱数の base64url・43 文字。DS-API-010）。"""
     return secrets.token_urlsafe(32)
+
+
+# ヘッダで受けるトークンの形（base64url・列は String(64)）。合わなければ「未知」と同じ扱い
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def normalize_token(token: str | None) -> str | None:
+    """形が合うトークンだけ返す（カート・注文の両サービスで共用）。"""
+    if token and _TOKEN_RE.match(token):
+        return token
+    return None
