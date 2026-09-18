@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Button from "@/components/Button";
 import { useCart } from "@/components/CartProvider";
+import { controlClass } from "@/components/Form";
 import Price from "@/components/Price";
 import { useToast } from "@/components/Toast";
 import { cartErrorMessage } from "@/lib/cart-messages";
@@ -10,9 +12,10 @@ import { MAX_QUANTITY_PER_ITEM, type Variant } from "@/lib/types";
 
 /**
  * 商品詳細の購入操作（設計仕様書 6.5・U-05・REQ-FR-1203、テスト UT-WEB-07/08・AT-03・ST-F005-02/03）。
- * - 色・サイズはボタン（`aria-pressed`）、数量はセレクト（1〜10）
+ * - 色・サイズはピル形チップのボタン（`aria-pressed`）、数量はセレクト（1〜10、共通 controlClass）
  * - 選択中の組合せを `variants[]` から解決。無い／`in_stock=false` なら「在庫切れ」＋追加ボタン無効
- * - 375px では下部固定バー（選択内容・価格・追加ボタン）。sm 以上ではパネル内のボタンだけ表示
+ * - 追加ボタンは primary・52px 高（デザイン基準 v1 3 章）
+ * - 375px では下部固定バー（選択内容・価格・追加ボタン。GU 実サイトに無い意図的な差 = 基準 7 章）。sm 以上ではパネル内のボタンだけ表示
  * - 追加成功: トースト＋バッジ更新＋「カートを見る」導線。409／422 は文言を出し分け
  */
 
@@ -30,10 +33,9 @@ export function resolveVariant(variants: Variant[], color: string | null, size: 
   return variants.find((v) => v.color === color && v.size === size) ?? null;
 }
 
-const chipBase =
-  "h-10 min-w-12 rounded-md border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900";
-const chipOn = "border-gray-900 bg-gray-900 text-white";
-const chipOff = "border-gray-300 bg-white text-gray-900 hover:bg-gray-50";
+const chipBase = "inline-flex h-11 min-w-12 items-center justify-center rounded-pill border px-4 text-sm";
+const chipOn = "border-primary bg-primary text-primary-fg";
+const chipOff = "border-fg-muted bg-bg text-fg hover:bg-line";
 
 export default function PurchasePanel({ productId, price, colors, sizes, variants }: PurchasePanelProps) {
   const [color, setColor] = useState<string | null>(colors.length === 1 ? colors[0] : null);
@@ -79,25 +81,27 @@ export default function PurchasePanel({ productId, price, colors, sizes, variant
   const stockLabel = !selected ? "色とサイズを選択してください" : outOfStock ? "在庫切れ" : "在庫あり";
 
   const addButton = (extra = "") => (
-    <button
-      type="button"
+    <Button
+      variant="primary"
+      size="lg"
       onClick={onAdd}
       disabled={!canAdd}
-      aria-busy={busy}
+      busy={busy}
+      busyLabel="追加中…"
       aria-label={outOfStock ? "在庫切れのため追加できません" : "カートに入れる"}
       data-testid="add-to-cart"
-      className={`h-12 rounded-md bg-gray-900 px-6 text-sm font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 ${extra}`}
+      className={extra}
     >
-      {busy ? "追加中…" : outOfStock ? "在庫切れ" : "カートに入れる"}
-    </button>
+      {outOfStock ? "在庫切れ" : "カートに入れる"}
+    </Button>
   );
 
   return (
-    <div className="space-y-5" data-product-id={productId}>
+    <div className="space-y-6" data-product-id={productId}>
       {/* 色 */}
       <fieldset>
         <legend className="mb-2 text-sm font-bold">
-          色{color && <span className="ml-2 font-normal text-gray-700">{color}</span>}
+          色{color && <span className="ml-2 font-normal text-fg-muted">{color}</span>}
         </legend>
         <div className="flex flex-wrap gap-2" role="group" aria-label="色を選択">
           {colors.map((c) => (
@@ -118,7 +122,7 @@ export default function PurchasePanel({ productId, price, colors, sizes, variant
       {/* サイズ */}
       <fieldset>
         <legend className="mb-2 text-sm font-bold">
-          サイズ{size && <span className="ml-2 font-normal text-gray-700">{size}</span>}
+          サイズ{size && <span className="ml-2 font-normal text-fg-muted">{size}</span>}
         </legend>
         <div className="flex flex-wrap gap-2" role="group" aria-label="サイズを選択">
           {sizes.map((s) => (
@@ -138,17 +142,12 @@ export default function PurchasePanel({ productId, price, colors, sizes, variant
 
       {/* 在庫表示＋数量 */}
       <div className="flex flex-wrap items-center gap-4">
-        <p data-testid="stock-status" className={`text-sm font-bold ${outOfStock ? "text-red-700" : "text-gray-700"}`} aria-live="polite">
+        <p data-testid="stock-status" className={`text-sm font-bold ${outOfStock ? "text-danger" : "text-fg-muted"}`} aria-live="polite">
           {stockLabel}
         </p>
         <label className="flex items-center gap-2 text-sm">
           <span className="font-bold">数量</span>
-          <select
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-            aria-label="数量"
-            className="h-10 rounded-md border border-gray-300 bg-white px-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-          >
+          <select value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} aria-label="数量" className={controlClass}>
             {Array.from({ length: MAX_QUANTITY_PER_ITEM }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -159,19 +158,16 @@ export default function PurchasePanel({ productId, price, colors, sizes, variant
       </div>
 
       {/* パネル内ボタン（sm 以上） */}
-      <div className="hidden sm:block">{addButton("w-full sm:w-auto")}</div>
+      <div className="hidden sm:block">{addButton("w-full sm:min-w-80 sm:w-auto")}</div>
 
       {/* 375px 下部固定バー（ST-F005-03）。本文の末尾に隠れないよう page 側で pb を確保する */}
-      <div
-        data-testid="sticky-bar"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:hidden"
-      >
-        <div className="mx-auto flex max-w-screen-xl items-center justify-between gap-3">
+      <div data-testid="sticky-bar" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur sm:hidden">
+        <div className="mx-auto flex max-w-page items-center justify-between gap-3">
           <div className="min-w-0 text-sm">
-            <p className="truncate text-gray-700">
+            <p className="truncate text-fg-muted">
               {color ?? "色未選択"} / {size ?? "サイズ未選択"} / {quantity}
             </p>
-            <Price amount={price * quantity} className="font-bold" />
+            <Price amount={price * quantity} className="text-lg font-bold tracking-heading" />
           </div>
           {addButton("shrink-0")}
         </div>

@@ -34,6 +34,9 @@ mysql-data/
 *.pid
 *.sock
 
+# ── メールスタブの出力（個人情報を含むためコミット禁止）──
+.mail-outbox/
+
 # ── ログ・一時ファイル ──
 *.log
 *.tmp
@@ -45,3 +48,6 @@ Thumbs.db
 .vscode/
 .obsidian/workspace.json
 .claude/settings.local.json
+
+# Agent の worktree 分離（isolation: worktree）の置き場。別ブランチの作業ツリーなので追跡しない
+.claude/worktrees/

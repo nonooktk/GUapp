@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Button from "@/components/Button";
 import ProductCard from "@/components/ProductCard";
 import { fetchProductsPage } from "@/lib/client/cart-api";
 import type { ProductSummary } from "@/lib/types";
 
 /**
- * 商品一覧のグリッド＋「もっと見る」（設計仕様書 6.4・ST-F001-03）。
+ * 商品一覧のグリッド＋「もっと見る」（設計仕様書 6.4・ST-F001-03、デザイン基準 v1 4 章 SCR-002）。
  * 初回 24 件はサーバーが描き、以降はクライアントが `GET /api/products?...&page=n+1` を呼んで末尾に追加する。
- * 375px で 2 列、sm で 3 列、lg で 4 列。
+ * 375px で 2 列、sm で 3 列、lg で 4 列。列間 8px・縦 24px。「もっと見る」は secondary・中央寄せ・最大 320px。
  */
 
 export interface ProductsGridProps {
@@ -47,12 +48,12 @@ export default function ProductsGrid({ initialItems, initialPage, hasMore, total
   };
 
   if (items.length === 0) {
-    return <p className="py-10 text-center text-sm text-gray-600">該当する商品がありません</p>;
+    return <p className="py-10 text-center text-sm text-fg-muted">該当する商品がありません</p>;
   }
 
   return (
     <div>
-      <ul className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4" aria-label="商品一覧">
+      <ul className="grid grid-cols-2 gap-x-2 gap-y-6 sm:grid-cols-3 lg:grid-cols-4" aria-label="商品一覧">
         {items.map((p) => (
           <li key={p.id}>
             <ProductCard
@@ -67,25 +68,19 @@ export default function ProductsGrid({ initialItems, initialPage, hasMore, total
           </li>
         ))}
       </ul>
-      <div className="mt-8 flex flex-col items-center gap-2">
-        <p className="text-xs text-gray-600" aria-live="polite">
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <p className="text-xs text-fg-muted" aria-live="polite">
           {items.length} / {total} 件を表示
         </p>
         {error && (
-          <p role="alert" className="text-sm text-red-700">
+          <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
         {more && (
-          <button
-            type="button"
-            onClick={loadMore}
-            disabled={loading}
-            aria-busy={loading}
-            className="h-11 min-w-48 rounded-md border border-gray-900 px-6 text-sm font-bold hover:bg-gray-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-          >
-            {loading ? "読み込み中…" : "もっと見る"}
-          </button>
+          <Button variant="secondary" size="lg" onClick={loadMore} busy={loading} busyLabel="読み込み中…" className="w-full max-w-80">
+            もっと見る
+          </Button>
         )}
       </div>
     </div>

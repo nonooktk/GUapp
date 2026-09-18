@@ -1,11 +1,82 @@
 @import "tailwindcss";
 
-/* 日本語向けフォント。Google Fonts は使わず OS 標準のゴシックにフォールバックする */
-@theme inline {
-  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+/*
+ * デザイン基準 v1（docs/03_設計仕様書/付録_デザイン基準_v1.md 2 章）のトークン。
+ * Tailwind 4 の @theme に置くことで CSS 変数（:root）とユーティリティ（bg-primary / text-fg-muted / rounded-pill …）の
+ * 両方が生成される。既定の色・角丸・影は `initial` で消し、トークン外の値（bg-gray-900 等）を部品で使えないようにする。
+ */
+@theme {
+  /* --- 2.1 色 --- */
+  --color-*: initial;
+  --color-bg: #ffffff; /* ページ背景 */
+  --color-fg: #1b1b1b; /* 本文・見出し・価格 */
+  --color-fg-muted: #595959; /* 補助文字（白背景でコントラスト約 7.5:1） */
+  --color-line: #e5e5e5; /* 罫線・区切り線 */
+  --color-primary: #1b1b1b; /* 主ボタン背景 */
+  --color-primary-fg: #ffffff; /* 主ボタン文字 */
+  --color-primary-hover: #000000; /* 主ボタン hover（基準 3 章） */
+  --color-accent: #ee0000; /* セール・会員価格の強調、カート点数バッジ */
+  --color-danger: #c4232b; /* エラー文言・削除確認 */
+  --color-success: #1b7a3d; /* 成功トースト */
+  --color-badge: #1b1b1b; /* 在庫切れバッジ */
+  --color-disabled-bg: #d9d9d9; /* 無効ボタン背景（基準 3 章・推定案） */
+  --color-disabled-fg: #8c8c8c; /* 無効ボタン文字 */
+  --color-overlay: rgba(0, 0, 0, 0.4); /* モーダル背面 */
+
+  /* --- 2.3 サイズ階層（px 指定。行間は見出し系 1.4／本文・価格 1.5） --- */
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 14px;
+  --text-sm--line-height: 1.5;
+  --text-base: 16px;
+  --text-base--line-height: 1.5;
+  --text-lg: 20px;
+  --text-lg--line-height: 1.5;
+  --text-xl: 24px;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 1.4;
+
+  /* 字間: 見出し・価格に 0.02em（tracking-heading） */
+  --tracking-heading: 0.02em;
+
+  /* 角丸: ピル（ボタン・チップ）と 8px（画像・カード）だけ */
+  --radius-*: initial;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+
+  /* 影: 既定 none。モーダルのみ */
+  --shadow-*: initial;
+  --shadow-modal: 0 10px 30px rgba(0, 0, 0, 0.2);
+
+  /* ページ幅（デスクトップ基準 1280px） */
+  --container-page: 1280px;
 }
 
-html {
-  font-family: var(--font-sans);
-  color-scheme: light;
+/*
+ * 2.2 書体。`next/font/google` の Noto Sans JP（layout.tsx で <html> に --font-noto-sans-jp を付与）。
+ * ウェイトで役割分担（見出し 300／本文 400／価格 700）するため heading と body を分けて持つ。
+ */
+@theme inline {
+  --font-body: var(--font-noto-sans-jp), "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --font-heading: var(--font-noto-sans-jp), "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --font-sans: var(--font-noto-sans-jp), "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-body);
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+  }
+
+  /* 3 章: フォーカス可視化は全部品共通（focus-visible のみ） */
+  :focus-visible {
+    outline: 2px solid var(--color-fg);
+    outline-offset: 2px;
+  }
 }

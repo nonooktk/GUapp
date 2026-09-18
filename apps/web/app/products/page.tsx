@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Breadcrumb, { type Crumb } from "@/components/Breadcrumb";
 import CategoryNav from "@/components/CategoryNav";
 import LoadError from "@/components/LoadError";
 import ProductsGrid from "@/components/ProductsGrid";
@@ -6,9 +6,9 @@ import { genderLabel, isGenderSlug } from "@/lib/gender";
 import { getCategories, getImageBaseUrl, getProducts, loadOrNull } from "@/lib/server/catalog";
 
 /**
- * 商品一覧 DS-SCR-002（設計仕様書 6.4、テスト ST-F001-01/03・AT-07）。
+ * 商品一覧 DS-SCR-002（設計仕様書 6.4、テスト ST-F001-01/03・AT-07、デザイン基準 v1 4 章 SCR-002）。
  * `searchParams`（gender・category・page）で DS-API-002 を呼ぶ。24 件区切りで「もっと見る」はクライアントが追加取得。
- * パンくず（WOMEN > トップス）・件数・商品カード。Next.js 16 では searchParams が Promise。
+ * パンくず（ホーム > WOMEN > トップス）・件数・商品カード。Next.js 16 では searchParams が Promise。
  */
 
 export const dynamic = "force-dynamic";
@@ -37,45 +37,25 @@ export default async function ProductsPage({ searchParams }: PageProps<"/product
   const gLabel = genderLabel(gender);
   const query = new URLSearchParams({ ...(gender ? { gender } : {}), ...(category ? { category } : {}) }).toString();
 
+  const crumbs: Crumb[] = [
+    { label: "ホーム", href: "/" },
+    gLabel ? { label: gLabel, href: `/products?gender=${gender}` } : { label: "すべての商品" },
+    ...(categoryName ? [{ label: categoryName }] : []),
+  ];
+
   return (
     <div className="space-y-6">
-      <nav aria-label="パンくず" className="text-sm text-gray-600">
-        <ol className="flex flex-wrap items-center gap-1">
-          <li>
-            <Link href="/" className="hover:underline">
-              ホーム
-            </Link>
-          </li>
-          <li aria-hidden="true">›</li>
-          {gLabel ? (
-            <li>
-              <Link href={`/products?gender=${gender}`} className="hover:underline">
-                {gLabel}
-              </Link>
-            </li>
-          ) : (
-            <li aria-current={category ? undefined : "page"}>すべての商品</li>
-          )}
-          {categoryName && (
-            <>
-              <li aria-hidden="true">›</li>
-              <li aria-current="page" className="font-bold text-gray-900">
-                {categoryName}
-              </li>
-            </>
-          )}
-        </ol>
-      </nav>
+      <Breadcrumb items={crumbs} />
 
       <CategoryNav categories={cats?.categories ?? null} gender={gender} category={category} />
 
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold">
+        <h1 className="text-xl font-light tracking-heading">
           {gLabel ?? "すべての商品"}
-          {categoryName ? ` › ${categoryName}` : ""}
+          {categoryName ? ` > ${categoryName}` : ""}
         </h1>
         {list && (
-          <p className="text-sm text-gray-700" data-testid="product-total">
+          <p className="text-sm text-fg-muted" data-testid="product-total">
             {list.total.toLocaleString("ja-JP")} 件
           </p>
         )}

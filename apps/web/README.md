@@ -122,6 +122,44 @@ import { useToast } from "@/components/Toast";            // toast.show({ kind: 
 import ConfirmDialog from "@/components/ConfirmDialog";  // open / busy / destructive / onConfirm / onCancel
 ```
 
+## デザイン基準（`docs/03_設計仕様書/付録_デザイン基準_v1.md`）
+
+見た目の規則はキキ＆ララのデザイン基準 v1 が正本。根拠は `docs/03_設計仕様書/付録_GUサイト調査_20260918.md`。GU のロゴ画像・写真・文言・アイコン素材は使わない（ロゴはテキスト）。
+
+### トークン（`app/globals.css`）
+
+- Tailwind 4 の `@theme` に基準 2 章の値を定義。`--color-*`・`--radius-*`・`--shadow-*` は `initial` で既定値を消しているので、**`bg-gray-900` のような Tailwind パレットのクラスは使えない**（生成されない）。使えるのはトークン由来のクラスだけ。
+- 色: `bg-bg`／`text-fg`／`text-fg-muted`／`border-line`／`bg-primary`＋`text-primary-fg`／`bg-accent`／`text-danger`／`text-success`／`bg-badge`／`bg-disabled-bg`＋`text-disabled-fg`／`bg-overlay`。薄い背景は `bg-line/40` のように不透明度修飾子で作る。
+- 文字サイズ: `text-xs`(12)／`text-sm`(14)／`text-base`(16)／`text-lg`(20)／`text-xl`(24)／`text-2xl`(32)。行間は見出し系（xl・2xl）1.4、他 1.5。
+- ウェイト: 見出し・商品名 `font-light`(300)、本文 `font-normal`(400)、価格・ボタン `font-bold`(700)。見出し・価格は `tracking-heading`(0.02em)。
+- 角丸: `rounded-pill`（ボタン・チップ・バッジ）／`rounded-sm`（8px。画像・カード・入力欄）。影: `shadow-modal`（ConfirmDialog のみ）。
+- 書体: `app/layout.tsx` が `next/font/google` の `Noto_Sans_JP`（300/400/700・`display: swap`）を `--font-noto-sans-jp` として `<html>` に付け、`globals.css` の `--font-body`／`--font-heading`（`font-body`／`font-heading`）が参照する。ビルド時に Google Fonts へ到達できる必要がある。
+- 寸法: 主要 CTA `h-13`(52px)、タッチターゲット `h-11`/`size-11`(44px)、ページ幅 `max-w-page`(1280px)、商品グリッドの列間 `gap-x-2`(8px)・縦 `gap-y-6`(24px)。
+- フォーカス: `:focus-visible` に共通 outline（2px `--color-fg`・offset 2px）を `@layer base` で当てているので、部品側で `focus-visible:*` を書く必要はない（暗い背景上だけ `focus-visible:outline-bg`）。
+
+### 共通部品の使い方（Wave 2 の SCR-005／006 も同じ部品を使う）
+
+```tsx
+import Button, { buttonClass } from "@/components/Button";
+<Button variant="primary" size="lg" full busy={submitting} busyLabel="送信中…" onClick={...}>確認画面へ</Button>
+// variant: primary | secondary | ghost | danger ／ size: lg(52px) | md(44px) ／ busy 中は disabled＋aria-busy＋ラベル差し替え
+<Link href="/" className={buttonClass({ variant: "secondary", size: "lg" })}>買い物を続ける</Link>
+
+import { TextField, SelectField, controlClass } from "@/components/Form";
+<TextField id="name" label="氏名" required error={errors.name} hint="全角" value={...} onChange={...} />
+<SelectField id="pref" label="都道府県" required error={errors.pref}>{options}</SelectField>
+// ラベルは上、必須は「（必須）」テキスト、error があると枠線 danger＋直下に role="alert"、aria-invalid / aria-describedby を自動付与
+<select className={controlClass} aria-label="数量">…</select> // ラベルを別に持つ場合は見た目だけ流用
+
+import Breadcrumb from "@/components/Breadcrumb";
+<Breadcrumb items={[{ label: "ホーム", href: "/" }, { label: "カート", href: "/cart" }, { label: "注文手続き" }]} />
+
+import { useToast } from "@/components/Toast";          // show({ kind: "success" | "error" | "info", message, action?, durationMs? })
+import ConfirmDialog from "@/components/ConfirmDialog";  // open / title / description / confirmLabel / destructive / busy / onConfirm / onCancel
+// 警告文: <p role="alert" className="text-sm font-bold text-danger">⚠ …</p>
+// 金額サマリのボックス: <aside className="rounded-sm border border-line bg-line/40 p-4 text-sm">（CartView と同じ）
+```
+
 ## 秘密情報の取り扱い（設計 7.2）
 
 - 秘密を触るモジュールは `lib/server/` に置き、先頭で `import "server-only"` する。クライアントコンポーネント（`"use client"`）から import すると `pnpm build` が失敗する（Wave 0 で実証済み）。

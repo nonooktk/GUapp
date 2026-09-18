@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 /**
- * 共通フッター（設計仕様書 6.2・U-04）。5 リンク。遷移先は P2 で実装するため `#`。
+ * 共通フッター（設計仕様書 6.2・U-04、デザイン基準 v1 3 章「フッター」）。5 リンク。遷移先は P2 で実装するため `#`。
+ * 文字色は --color-fg-muted。リンクは縦 py-3 でタッチターゲット 44px 以上を確保する。
  */
 
 const FOOTER_LINKS = [
@@ -14,21 +15,18 @@ const FOOTER_LINKS = [
 
 export default function Footer() {
   return (
-    <footer className="mt-auto border-t border-gray-200 bg-gray-50">
-      <nav aria-label="フッター" className="mx-auto max-w-screen-xl px-4 py-6">
-        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-700">
+    <footer className="mt-auto border-t border-line bg-line/30">
+      <nav aria-label="フッター" className="mx-auto max-w-page px-4 py-6">
+        <ul className="flex flex-wrap items-center justify-center gap-x-3 text-sm text-fg-muted">
           {FOOTER_LINKS.map((link) => (
             <li key={link.label}>
-              <Link
-                href={link.href}
-                className="inline-block py-1 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-              >
+              <Link href={link.href} className="inline-flex min-w-11 items-center justify-center px-1 py-3 hover:underline">
                 {link.label}
               </Link>
             </li>
           ))}
         </ul>
-        <p className="mt-4 text-center text-xs text-gray-500">GU EC サイト（演習用・P1）</p>
+        <p className="mt-2 text-center text-xs text-fg-muted">GU EC サイト（演習用・P1）</p>
       </nav>
     </footer>
   );
