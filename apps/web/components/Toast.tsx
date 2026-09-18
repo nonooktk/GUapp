@@ -3,8 +3,9 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
 /**
- * トースト（設計仕様書 DS-PRC-036）。成功・失敗を画面下部に数秒表示する。
+ * トースト（設計仕様書 DS-PRC-036、デザイン基準 v1 3 章「トースト」）。成功・失敗を画面下部に数秒表示する。
  * `useToast().show({ kind, message, action? })` で呼ぶ。`role="status"`＋`aria-live="polite"` で読み上げ対象にする。
+ * 色は kind ごとに --color-success／--color-danger／--color-fg-muted の枠線＋薄い背景、文字は --color-fg（コントラスト確保）。
  * Wave 2 の注文確定でもそのまま使う。
  */
 
@@ -42,9 +43,9 @@ export function useToast(): ToastContextValue {
 }
 
 const KIND_CLASS: Record<ToastKind, string> = {
-  success: "border-green-600 bg-green-50 text-green-900",
-  error: "border-red-600 bg-red-50 text-red-900",
-  info: "border-gray-700 bg-gray-50 text-gray-900",
+  success: "border-success bg-success/10",
+  error: "border-danger bg-danger/10",
+  info: "border-fg-muted bg-line/40",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -73,19 +74,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         role="status"
         aria-live="polite"
         aria-atomic="false"
-        className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex flex-col items-center gap-2 px-4 sm:bottom-6"
+        className="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4 sm:bottom-6"
       >
         {items.map((t) => (
           <div
             key={t.id}
             data-testid="toast"
             data-kind={t.kind}
-            className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-md border px-4 py-3 text-sm shadow-lg ${KIND_CLASS[t.kind]}`}
+            className={`pointer-events-auto flex w-full max-w-md items-center justify-between gap-3 rounded-sm border bg-bg px-4 py-2 text-sm text-fg ${KIND_CLASS[t.kind]}`}
           >
-            <span>{t.message}</span>
-            <span className="flex shrink-0 items-center gap-2">
+            <span className="py-1">{t.message}</span>
+            <span className="flex shrink-0 items-center gap-1">
               {t.action && (
-                <a href={t.action.href} className="font-bold underline underline-offset-2">
+                <a href={t.action.href} className="inline-flex h-11 items-center px-2 font-bold underline underline-offset-2">
                   {t.action.label}
                 </a>
               )}
@@ -93,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 type="button"
                 onClick={() => dismiss(t.id)}
                 aria-label="通知を閉じる"
-                className="inline-flex size-7 items-center justify-center rounded hover:bg-black/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                className="inline-flex size-11 items-center justify-center rounded-pill hover:bg-line"
               >
                 <span aria-hidden="true">×</span>
               </button>

@@ -390,14 +390,22 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 
 出力: 注文番号、明細、金額、状態。
 
-1. 冪等キーで `orders` に INSERT（status=決済待ち）。一意制約違反なら既存注文を返して終了
-2. `carts` を `active → ordered` に条件付き UPDATE。影響 0 行なら 409（注文済み）
-3. 明細ごとに `variants` を条件付き UPDATE（DS-DEC-08）。影響 0 行が 1 つでもあれば全体を ROLLBACK し、在庫切れの明細 ID を返す（409）
-4. 金額を再計算する。単価は `variants → products.price_incl_tax` の現在値、送料は `system_settings` のルール（初期値: 4,990 円以上で無料、未満は設定値）。表示金額と 1 円でも違えば ROLLBACK し 409（金額変更）
-5. 決済アダプタを呼ぶ。P1 はスタブで、環境変数 `PAYMENT_STUB_RESULT=ok|ng` で切替。P2 以降の Azure 環境ではこの変数を設定せず（スタブ OFF）、デプロイ時のチェック項目に「本番で `PAYMENT_STUB_RESULT` が未設定」を含める（DS-DEC-26）
-6. OK なら `orders.status=受付済`、`payments` に記録、`order_items` に確定時単価を保存、`audit_logs` に記録して COMMIT。NG なら `orders.status=決済失敗` と `payments` の失敗を COMMIT した後、別トランザクションで在庫を戻しカートを `active` に戻す
-7. メールアダプタを呼ぶ（P1 はログ出力）。失敗しても注文は成立させ、監査ログに残す
-8. 注文番号は `GU-YYMMDD-` ＋ ランダム 8 文字（英大文字と数字、紛らわしい I/O/0/1 を除く）。生成した注文番号が UNIQUE 制約に衝突した場合は 1 回だけ再生成して再試行する（32 文字 × 8 桁で衝突確率は 10,000 件あたり約 5×10⁻⁵）
+0. `X-Cart-Token` のカートを特定する。カートが既に `ordered` なら、そのカートの注文番号を添えて 409 `already_ordered`
+1. 注文番号（手順 8）を生成し、冪等キーで `orders` に INSERT（status=決済待ち、金額は表示金額、配送先をコピー）。一意制約違反なら既存注文を SELECT し、**既存注文の `cart_id` が要求者のカートと一致しなければ 404 `not_found`**（他人のキーで他人の注文を見せない。7.5）。一致し status が `payment_failed` なら 409 `payment_failed`（確認画面を再表示すると `prepare` が新しいキーを発行するので再送できる）。それ以外は 200 で既存注文を返して終了
+2. `carts` を `active → ordered` に条件付き UPDATE。影響 0 行なら ROLLBACK し 409 `already_ordered`（2 タブ）
+3. 金額を再計算する。単価は `variants → products.price_incl_tax` の現在値（非公開商品は在庫切れ扱い）、送料は `system_settings` のルール（DS-PRC-021）。表示金額と 1 円でも違えば ROLLBACK し 409 `price_changed`（再計算後の金額を添える）。**引当より前に照合する**のは、金額不一致のときに在庫行のロックを握らないため（draft-v3 までは引当→照合の順。結果は同じ）
+4. 明細ごとに `variants` を条件付き UPDATE（DS-DEC-08）。**`variant_id` 昇順で発行**し、複数カートが同じ商品群を逆順に引き当てるデッドロックを防ぐ。影響 0 行が 1 つでもあれば全体を ROLLBACK し、在庫切れの variant_id 一覧を添えて 409 `out_of_stock`
+5. 決済アダプタを呼ぶ。P1 はスタブで、環境変数 `PAYMENT_STUB_RESULT=ok|ng` で切替（アダプタは Protocol として依存注入し、テストでは差し替える）。P2 以降の Azure 環境ではこの変数を設定せず（スタブ OFF）、デプロイ時のチェック項目に「本番で `PAYMENT_STUB_RESULT` が未設定」を含める（DS-DEC-26）
+6. OK なら `orders.status=受付済`、`payments` に記録、`order_items` に確定時単価と商品名を保存、`audit_logs` に `order.confirm` を記録して COMMIT。NG なら `orders.status=決済失敗`・`payments` の失敗・`audit_logs` の `order.payment_failed` を COMMIT した後、別トランザクションで在庫を戻しカートを `active` に戻し、409 `payment_failed` を返す
+7. メールアダプタを呼ぶ。P1 のスタブは **gitignore 済みの `apps/api/.mail-outbox/` にファイル出力**し、ログには注文番号とマスク済みメール（`t***@example.com`）だけを書く（氏名・住所をログに残さない。7.2）。失敗しても注文は成立させ、`audit_logs` に `mail.failed` を残す
+8. 注文番号は `GU-YYMMDD-` ＋ ランダム 8 文字（英大文字と数字、紛らわしい I/O/0/1 を除く）。日付は JST。生成した注文番号が UNIQUE 制約に衝突した場合は 1 回だけ再生成して再試行する（32 文字 × 8 桁で衝突確率は 10,000 件あたり約 5×10⁻⁵）
+
+実装時の補足（2026-09-18・Wave 2）:
+- 手順 0 の緩和: カートが `ordered` でも、同じ冪等キーで**自分のカート**の注文が既にあれば 409 ではなく 200 で既存注文を返す（確定後の再送を成功扱いにする）。他人のカートのキーは 404
+- デッドロック再試行: 同一カートへの同時確定では、手順 1 の INSERT（FK 検査で carts 行の共有ロック）と手順 2 の UPDATE carts が互いに待ち、InnoDB のデッドロック（1213）で片方が失敗する。手順の順序は変えず、1213／1205 のときだけ ROLLBACK して手順 0 から 1 回だけ再試行する。再試行後は通常の 409 `already_ordered` になる（IT-014-03 で確認）
+- 郵便番号・電話の桁は ASCII 数字 `[0-9]` に限定（Python の `\d` は全角数字にも一致するため）
+- 空カートで `POST /orders` を呼ぶと 409 `empty_cart`（prepare と同じ pricing 経由。4.5 の 409 一覧に含める）
+- 決済 NG のときは `order_items` を書かない（注文は `payment_failed` の行と `payments` の失敗記録のみ）
 
 #### DS-PRC-021 金額計算（確認画面用）
 
@@ -553,6 +561,8 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | DS-SCR-006 | 注文確認・完了 | ○ | 6.7 |
 | DS-SCR-007〜012, 014〜017 | 会員・注文詳細・レビュー・コンテンツ・FAQ・管理・店舗 | — | P2／P3 追補 |
 | DS-SCR-013 | AI アシスタント（共通部品） | — | P2 追補。右下の起動ボタンは 375px で SCR-003 の購入操作バーと重ならない位置（U-05） |
+
+ビジュアルデザイン（色・書体・余白・部品の形）は本章のワイヤーフレームとは別に、`付録_デザイン基準_v1.md` で定める（2026-09-18 追加。GU 実サイトの調査 `付録_GUサイト調査_20260918.md` に基づく。ロゴ・写真・文言は複製しない）。実装はこの基準をトークンとして `apps/web/app/globals.css` に持つ。
 
 ### 6.2 共通レイアウト（U-04・U-06・REQ-FR-1201/1202）
 
@@ -734,7 +744,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | API 応答 | `response_model` で白リスト化。注文・会員・カートの応答に内部 ID と外部キーを含めない。例外: カート明細の `item_id`（DS-API-012/013 の宛先として必要。所有者チェックで他人のものは 404 なので列挙されても害がない）と商品側の `variant_id`（商品は内部 ID 可） |
 | 列挙 | 商品 API は公開品のみ。未公開は 404 |
 | 総当たり | 注文番号はランダム 8 文字。ゲスト照会とログインにレート制限（100 件/時/IP） |
-| 認可 | 全 API で所有者確認。他人のものは 404。管理 API はロール必須 |
+| 認可 | 全 API で所有者確認。他人のものは 404。管理 API はロール必須。冪等キーの重複時も既存注文の `cart_id` と要求者のカートを照合する（DS-PRC-014-1 手順 1） |
 
 ### 7.6 その他
 
@@ -769,6 +779,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | ACS_CONNECTION_STRING / MAIL_FROM | api | P2 |
 | ANTHROPIC_API_KEY | api | P2 |
 | PAYMENT_STUB_RESULT | api | P1 のスタブ切替（ok/ng） |
+| （ヘッダ）X-Forwarded-For | web→api | BFF が利用者の送信元 IP を付与。FastAPI は内部トークン付きの呼び出しに限りこれを信用し、ゲスト照会のレート制限（100 回/時/IP）に使う |
 | SESSION_COOKIE_DOMAIN | web | |
 
 ### 8.3 ローカル開発
@@ -843,6 +854,7 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 - セキュリティ試験: IDOR（他人の注文番号で 404）、改ざん金額で 409、`/docs` が 404、他オリジンの preflight 拒否、応答とバンドルに秘密が 0 件、XSS ペイロードで Cookie が読めない、CSRF トークン無しで 403
 - 受け入れ: US-01（ゲスト購入）を P1 の出口条件に。375px での全操作
 - 非機能: 一覧・詳細 95%tile 2.0 秒は P2 の Azure 環境で計測
+- レート制限（DS-API-023 の 100 回/時/IP）は P1 ではプロセス内メモリ。P2 の gunicorn 2 ワーカーでは共有ストア（MySQL 表または Redis）に置き換えること
 - 既知の穴（P1 受容）: DS-PRC-014-1 手順 6 の決済 NG 経路は「決済失敗を COMMIT → 別トランザクションで在庫を戻す」の 2 段。間でプロセスが落ちると在庫が引かれたまま残る。P1 はスタブが同期で戻るため実害はほぼ無い。P2 の決済待ち期限切れ処理（DS-DEC-26）で「決済失敗のまま在庫が戻っていない注文」も回収対象に含めること
 - 注文番号 `GU-YYMMDD` の日付は JST で生成する（DS-DEC-16 は保存 UTC・表示 JST。顧客が見る番号なので表示側に合わせる）。UT-014-01 で日付部分を JST で検証する
 

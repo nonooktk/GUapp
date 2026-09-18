@@ -4,6 +4,7 @@ import type { Category } from "@/lib/types";
 
 /**
  * 商品一覧のカテゴリ導線（設計仕様書 6.4・AT-07）。上部に性別タブ、その下に選択中性別の子カテゴリを横スクロールで並べる。
+ * タブはピル形（デザイン基準 v1 2.3）・高さ 44px。選択中は --color-primary 背景。
  * `categories` は DS-API-001 の応答。取得に失敗したときは性別タブだけ出す。
  */
 
@@ -13,10 +14,9 @@ export interface CategoryNavProps {
   category?: string;
 }
 
-const tabBase =
-  "inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900";
-const tabOn = "border-gray-900 bg-gray-900 text-white";
-const tabOff = "border-gray-300 bg-white hover:bg-gray-50";
+const tabBase = "inline-flex h-11 shrink-0 items-center rounded-pill border px-4 text-sm";
+const tabOn = "border-primary bg-primary text-primary-fg";
+const tabOff = "border-line bg-bg text-fg hover:bg-line";
 
 export default function CategoryNav({ categories, gender, category }: CategoryNavProps) {
   // 親（性別）slug を key に含める。ALL 表示では WOMEN／MEN に同名・同 slug の子が並びうる
@@ -58,7 +58,7 @@ export default function CategoryNav({ categories, gender, category }: CategoryNa
                   aria-current={on ? "page" : undefined}
                 >
                   {c.name}
-                  <span className={`ml-1 text-xs ${on ? "text-gray-300" : "text-gray-500"}`}>{c.product_count}</span>
+                  <span className={`ml-1 text-xs ${on ? "text-primary-fg/80" : "text-fg-muted"}`}>{c.product_count}</span>
                 </Link>
               </li>
             );

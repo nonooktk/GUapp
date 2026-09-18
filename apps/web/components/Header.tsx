@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 /**
- * 共通ヘッダー（設計仕様書 6.2・U-04・REQ-FR-1201）。
- * 左: ≡ メニュー ／ 中央: GU ロゴ（テキスト） ／ 右: 検索・お気に入り・カート（点数バッジ）・会員。
- * 375px 幅でも 1 行に収まるよう、右側は 40px 角のアイコンボタン 4 つに固定する。
+ * 共通ヘッダー（設計仕様書 6.2・U-04・REQ-FR-1201、デザイン基準 v1 3 章「ヘッダー」）。
+ * 左: ≡ メニュー ／ 中央: GU ロゴ（テキスト。ロゴ画像は使わない） ／ 右: 検索・お気に入り・カート（点数バッジ）・会員。
+ * 高さ 64px、右側は 44×44px のアイコンボタン 4 つ（タッチターゲット最小 44px）。375px 幅でも 1 行に収まる。
+ * `sticky top-0` は GU 実サイトと異なる意図的な差（基準 7 章）。
  * オールメニューの中身（U-06）と各リンク先は Wave 1 以降で実装する。
  */
 
@@ -53,18 +54,17 @@ function UserIcon() {
   );
 }
 
-const iconLinkClass =
-  "inline-flex size-10 items-center justify-center rounded-md text-gray-800 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900";
+const iconLinkClass = "inline-flex size-11 items-center justify-center rounded-pill text-fg hover:bg-line";
 
 export default function Header({ cartCount }: HeaderProps) {
   const badgeLabel = cartCount > 99 ? "99+" : String(cartCount);
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
-      <div className="mx-auto flex h-14 max-w-screen-xl items-center justify-between gap-2 px-3 sm:px-4">
+    <header className="sticky top-0 z-40 border-b border-line bg-bg">
+      <div className="mx-auto flex h-16 max-w-page items-center justify-between gap-2 px-3 sm:px-4">
         {/* 左: オールメニュー（U-06。中身は Wave 1 以降） */}
         <button
           type="button"
-          className="inline-flex h-10 items-center gap-1 rounded-md px-2 text-sm font-medium text-gray-800 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
+          className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-pill px-2 text-sm text-fg hover:bg-line sm:px-3"
           aria-label="メニューを開く"
           aria-haspopup="dialog"
           aria-expanded={false}
@@ -75,10 +75,10 @@ export default function Header({ cartCount }: HeaderProps) {
           <span className="hidden sm:inline">メニュー</span>
         </button>
 
-        {/* 中央: ロゴ（テキスト） */}
+        {/* 中央: ロゴ（テキスト）。375px は右のアイコン 4 つ（176px）と重なるため flex の流れで中央寄せ、sm 以上で画面中央に絶対配置 */}
         <Link
           href="/"
-          className="absolute left-1/2 -translate-x-1/2 text-2xl font-black tracking-tight text-gray-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
+          className="inline-flex h-11 items-center px-2 text-2xl font-bold tracking-heading text-fg sm:absolute sm:left-1/2 sm:-translate-x-1/2"
           aria-label="GU ホーム"
         >
           GU
@@ -97,7 +97,7 @@ export default function Header({ cartCount }: HeaderProps) {
             {cartCount > 0 && (
               <span
                 data-testid="cart-count-badge"
-                className="absolute -right-0.5 -top-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-bold leading-5 text-white"
+                className="absolute right-0 top-0 inline-flex min-w-5 items-center justify-center rounded-pill bg-accent px-1 text-xs font-bold leading-5 text-primary-fg"
                 aria-hidden="true"
               >
                 {badgeLabel}

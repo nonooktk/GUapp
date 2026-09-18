@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
+import Button from "@/components/Button";
 
 /**
- * 確認ダイアログ（設計仕様書 DS-PRC-036・REQ-FR-1205）。削除と Wave 2 の注文確定で使う。
+ * 確認ダイアログ（設計仕様書 DS-PRC-036・REQ-FR-1205、デザイン基準 v1 3 章「確認ダイアログ」）。削除と Wave 2 の注文確定で使う。
  * - `role="dialog"`・`aria-modal`・`aria-labelledby`・`aria-describedby`
  * - 開いたらキャンセルボタンにフォーカス、Escape で閉じる、Tab はダイアログ内で循環
  * - `busy` 中はボタンを無効化して処理中表示（二重送信の使い勝手対策。防御は冪等キー側）
+ * - ボタンはキャンセル = secondary、確定 = primary（`destructive` なら danger）。影はモーダルだけ --shadow-modal
  */
 
 export interface ConfirmDialogProps {
@@ -70,7 +72,7 @@ export default function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-overlay p-4 sm:items-center"
       onClick={() => !busy && onCancel()}
     >
       <div
@@ -81,37 +83,23 @@ export default function ConfirmDialog({
         aria-describedby={description ? descId : undefined}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
-        className="w-full max-w-sm rounded-lg bg-white p-5 shadow-xl"
+        className="w-full max-w-sm rounded-sm bg-bg p-6 shadow-modal"
       >
-        <h2 id={titleId} className="text-base font-bold">
+        <h2 id={titleId} className="text-lg font-bold tracking-heading text-fg">
           {title}
         </h2>
         {description && (
-          <p id={descId} className="mt-2 text-sm text-gray-700">
+          <p id={descId} className="mt-2 text-sm text-fg-muted">
             {description}
           </p>
         )}
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            type="button"
-            onClick={onCancel}
-            disabled={busy}
-            className="h-10 rounded-md border border-gray-300 px-4 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
-          >
+        <div className="mt-6 flex justify-end gap-2">
+          <Button ref={cancelRef} variant="secondary" size="md" onClick={onCancel} disabled={busy}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={busy}
-            aria-busy={busy}
-            className={`h-10 rounded-md px-4 text-sm font-bold text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 ${
-              destructive ? "bg-red-600 hover:bg-red-700" : "bg-gray-900 hover:bg-gray-800"
-            }`}
-          >
-            {busy ? "処理中…" : confirmLabel}
-          </button>
+          </Button>
+          <Button variant={destructive ? "danger" : "primary"} size="md" onClick={onConfirm} busy={busy}>
+            {confirmLabel}
+          </Button>
         </div>
       </div>
     </div>
