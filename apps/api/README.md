@@ -129,7 +129,7 @@ uv run python -c "from app.main import create_app; import json; print(json.dumps
 - 注文番号 `GU-YYMMDD-XXXXXXXX`（日付は JST、8 文字は I/O/0/1 を除く 32 文字。UNIQUE 衝突は 1 回再生成）。Windows では tz データベースが無いため `tzdata` を依存に含む
 - テスト専用ルート（`APP_ENV=test` のみ）: `GET /_test/metrics` `{inflight_now, inflight_max}`、`POST /_test/reset`
 
-同時実行テスト（IT-014-02〜04）は `tests/integration/live_server.py` が空きポートで uvicorn を起動し、`TEST_RESERVE_DELAY_MS=10` で回す。
+同時実行テスト（IT-014-02〜04）は `tests/integration/live_server.py` が空きポートで uvicorn を起動し、`TEST_RESERVE_DELAY_MS=30` で回す。IT-014-03／04 は同時性が成立しなかった試行（`/_test/metrics` の `inflight_max < 2`）を無効試行として数え、同じ反復を最大 3 回までやり直す（3 回とも不成立なら赤）。無効試行の回数は pytest の terminal summary に「同時実行 IT の無効試行」として出る（`tests/integration/concurrency_helpers.py`）。
 
 ## エラー応答（設計書 4.5 の要約）
 
