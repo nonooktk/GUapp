@@ -32,7 +32,8 @@ export interface ApiError {
 
 export type ApiResult<T> =
   | { ok: true; status: number; data: T }
-  | { ok: false; status: number; error: ApiError };
+  /** `retryAfter` は 429 のとき FastAPI の `Retry-After` ヘッダ（Wave 2 の注文照会が透過する） */
+  | { ok: false; status: number; error: ApiError; retryAfter?: string | null };
 
 export class UpstreamUnavailableError extends Error {
   constructor(message: string, readonly reason?: unknown) {
@@ -102,7 +103,12 @@ export async function apiFetch<T = unknown>(path: string, options: ApiFetchOptio
   }
 
   if (!res.ok) {
-    return { ok: false, status: res.status, error: sanitizeErrorBody(res.status, body) };
+    return {
+      ok: false,
+      status: res.status,
+      error: sanitizeErrorBody(res.status, body),
+      retryAfter: res.status === 429 ? res.headers.get("Retry-After") : null,
+    };
   }
   return { ok: true, status: res.status, data: body as T };
 }

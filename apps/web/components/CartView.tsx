@@ -29,9 +29,17 @@ export interface CartViewProps {
   refetchOnMount?: boolean;
   /** 送料無料の閾値。カート応答にも入るが空カートの表示に使う */
   freeShippingThreshold: number;
+  /** 注文確定で 409 out_of_stock になった variant_id（Wave 2）。該当明細を強調する */
+  highlightVariantIds?: number[];
 }
 
-export default function CartView({ initialCart, imageBaseUrl, refetchOnMount = false, freeShippingThreshold }: CartViewProps) {
+export default function CartView({
+  initialCart,
+  imageBaseUrl,
+  refetchOnMount = false,
+  freeShippingThreshold,
+  highlightVariantIds = [],
+}: CartViewProps) {
   const [cart, setCart] = useState<Cart | null>(initialCart);
   const [busyItem, setBusyItem] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<CartItem | null>(null);
@@ -133,8 +141,14 @@ export default function CartView({ initialCart, imageBaseUrl, refetchOnMount = f
           {items.map((item) => {
             const warning = stockWarning(item.stock_status);
             const busy = busyItem === item.item_id;
+            const highlighted = highlightVariantIds.includes(item.variant_id);
             return (
-              <li key={item.item_id} className="flex gap-3 py-4" data-testid="cart-item">
+              <li
+                key={item.item_id}
+                className={`flex gap-3 py-4 ${highlighted ? "-mx-2 rounded-sm border border-danger bg-danger/5 px-2" : ""}`}
+                data-testid="cart-item"
+                data-highlighted={highlighted || undefined}
+              >
                 <Link href={`/products/${item.product_id}`} className="block w-24 shrink-0 rounded-sm sm:w-28">
                   {/* eslint-disable-next-line @next/next/no-img-element -- プレースホルダー PNG を素直に表示 */}
                   <img
@@ -184,9 +198,9 @@ export default function CartView({ initialCart, imageBaseUrl, refetchOnMount = f
                       <Price amount={item.line_total} />
                     </span>
                   </div>
-                  {warning && (
+                  {(warning || highlighted) && (
                     <p role="alert" className="mt-2 text-sm font-bold text-danger">
-                      ⚠ {warning}
+                      ⚠ {warning ?? "注文時に在庫切れになりました"}
                     </p>
                   )}
                 </div>
