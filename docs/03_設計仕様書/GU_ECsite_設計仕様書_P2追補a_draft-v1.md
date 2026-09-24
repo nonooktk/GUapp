@@ -557,28 +557,28 @@ CREATE DATABASE IF NOT EXISTS guapp_nonooktk
 --   CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
 -- パスワードはここに書かず、実行時に別途安全な方法で埋める
-CREATE USER IF NOT EXISTS 'guapp_app'@'%' IDENTIFIED BY '<統括が生成するパスワード>';
+CREATE USER IF NOT EXISTS 'guapp_nonooktk_app'@'%' IDENTIFIED BY '<統括が生成するパスワード>';
 
 -- Alembic のマイグレーション（CREATE/ALTER/DROP TABLE）も同じユーザーで実行するため DDL 権限を含める
 GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, INDEX, REFERENCES
-  ON guapp_nonooktk.* TO 'guapp_app'@'%';
+  ON guapp_nonooktk.* TO 'guapp_nonooktk_app'@'%';
 -- guapp_nonooktk_test を作った場合は同じ GRANT をもう 1 行追加する
 FLUSH PRIVILEGES;
 ```
 
-`guapp_app` に `guapp_nonooktk`（および将来作る場合の `guapp_nonooktk_test`）以外のデータベースへの権限を与えない（`ON *.*` にしない）ことが最小権限の核心で、パスワード強度・ホスト制限はファイアウォールと合わせた多層防御の一部と位置づける。
+`guapp_nonooktk_app` に `guapp_nonooktk`（および将来作る場合の `guapp_nonooktk_test`）以外のデータベースへの権限を与えない（`ON *.*` にしない）ことが最小権限の核心で、パスワード強度・ホスト制限はファイアウォールと合わせた多層防御の一部と位置づける。
 
 **(4) `.env` の書式例**（値は全て `<...>` のプレースホルダ。`apps/api/.env` に統括が自分で値を書き込む）:
 
 ```
-APP_ENV=production
+APP_ENV=development  # 手元の PC から講義サーバーにつなぐ段階は開発扱い。production の値は Azure デプロイ（P2-d）で決める
 DATABASE_URL=mysql+asyncmy://<DBユーザー名>:<URLエンコード済みパスワード>@gen12-mysql-pos.mysql.database.azure.com:3306/guapp_nonooktk?ssl_ca=<CA証明書ファイルの絶対パス>
 # DB_SSL_CA_PATH は 8.1 第2案（フォールバック）を使う場合のみ設定する。第1案（DATABASE_URL の ssl_ca クエリ）で接続できれば不要
 DB_SSL_CA_PATH=<CA証明書ファイルの絶対パス。OS ごとに書式が異なる（8.7）>
 DB_POOL_SIZE=5
 DB_MAX_OVERFLOW=5
 INTERNAL_TOKEN=<web と同じ値>
-CORS_ALLOW_ORIGIN=<本番の web オリジン>
+CORS_ALLOW_ORIGIN=http://localhost:3000  # 本番の web オリジンは P2-d で設定
 ```
 
 **CA 証明書の入手**: 2026-09 時点で Microsoft Learn の記載（「Azure Database for MySQL の証明書のローテーション」）によれば、Azure Database for MySQL Flexible Server は DigiCert Global Root G2 と Microsoft RSA Root CA 2017 のチェーンを提示しており、検証を厳密に行う場合は DigiCert Global Root CA・DigiCert Global Root G2・Microsoft RSA Root Certificate Authority 2017 の 3 証明書を束ねたファイルを使うことが案内されている（`curl -sS https://cacerts.digicert.com/DigiCertGlobalRootCA.crt.pem` 等で個別取得可）。証明書のローテーションは今後も起こり得るため、**統括が実際に接続する時点で Microsoft Learn の最新ページを確認**してから証明書ファイルを作成すること（9.2 の要検証 #1）。
