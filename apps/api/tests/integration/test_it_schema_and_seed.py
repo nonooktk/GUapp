@@ -2,7 +2,7 @@
 
 ① upgrade head 後に P1 の 12 表がある
 ② `alembic check` 相当でモデルとの差分ゼロ
-③ seed 後の件数（商品 30・バリエーション 180・system_settings 4 など）
+③ seed 後の件数（商品 31・バリエーション 186・system_settings 4 など）
 ④ tax_rate が文字列 "0.10" で取り出せる（DS-DEC-31）
 ⑤ V-STOCK0 / V-STOCK1 / P-UNPUB / P-ALL0
 ⑥ seed を 2 回呼んでも件数が変わらない（冪等・データ保護側）
@@ -42,8 +42,8 @@ def test_it_schema_02_alembic_check_no_diff(migrated_schema: str) -> None:
 async def test_it_seed_03_counts(seed_db: AsyncEngine) -> None:
     async with seed_db.connect() as conn:
         counts = await count_rows(conn)
-    assert counts["products"] == seed_data.EXPECTED_PRODUCT_COUNT == 30
-    assert counts["variants"] == seed_data.EXPECTED_VARIANT_COUNT == 180
+    assert counts["products"] == seed_data.EXPECTED_PRODUCT_COUNT == 31
+    assert counts["variants"] == seed_data.EXPECTED_VARIANT_COUNT == 186
     assert counts["system_settings"] == seed_data.EXPECTED_SYSTEM_SETTING_COUNT == 4
     assert counts["categories"] == seed_data.EXPECTED_CATEGORY_COUNT
     assert counts["product_images"] == seed_data.EXPECTED_IMAGE_COUNT
