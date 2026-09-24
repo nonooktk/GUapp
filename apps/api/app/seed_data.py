@@ -34,7 +34,9 @@ COLORS: dict[str, str] = {
 SIZES: tuple[str, ...] = ("S", "M", "L")
 
 # ── 送料閾値（4,990）の組み立てに必ず要る価格（AT-08・UT-021-02）──
-REQUIRED_PRICES: frozenset[int] = frozenset({1990, 2990, 1490})
+# 4980（=2990+1990）で送料 550、4990（単品）で送料 0 の両側を組む。
+# 既存価格は下 2 桁が全て 90 のため、4,990 は単品でしか作れない（検収記録 AT-08）
+REQUIRED_PRICES: frozenset[int] = frozenset({1990, 2990, 1490, 4990})
 
 # ── system_settings 4 キー（DS-TBL-21）。tax_rate は JSON 文字列（DS-DEC-31）──
 SYSTEM_SETTINGS: tuple[tuple[str, object, str], ...] = (
@@ -127,7 +129,8 @@ def make_sku(number: int, color: str, size: str) -> str:
     return f"GU-{number:03d}-{color}-{size}"
 
 
-# 商品 30 点（各 色 2 × サイズ 3 = 6 バリエーション）。価格は税込整数円
+# 商品 31 点（各 色 2 × サイズ 3 = 6 バリエーション）。価格は税込整数円
+# 1〜30 はテスト用データの商品番号を固定するため順序・番号を変えない。31 以降に追加する
 PRODUCTS: tuple[ProductSeed, ...] = (
     # ── レディース 10 点 ──
     ProductSeed(
@@ -290,6 +293,16 @@ PRODUCTS: tuple[ProductSeed, ...] = (
         "綿100%",
         published=False,
     ),
+    # ── 追加 1 点（AT-08: 小計 4,990 を単品で組む。送料 0 の境界）──
+    ProductSeed(
+        31,
+        "ライトジャケット（メンズ）",
+        4990,
+        "men",
+        "outer",
+        ("NV", "BE"),
+        "ポリエステル100%",
+    ),
 )
 
 # ── テスト用データの所在（テスト設計書 6 章）。テストはここを参照する ──
@@ -317,7 +330,7 @@ class VariantSeed:
 
 
 def build_variants(rng: random.Random | None = None) -> list[VariantSeed]:
-    """全商品のバリエーション（30 × 6 = 180）。在庫は seed 固定の乱数 5〜30。"""
+    """全商品のバリエーション（31 × 6 = 186）。在庫は seed 固定の乱数 5〜30。"""
     rng = rng or random.Random(STOCK_RANDOM_SEED)
     out: list[VariantSeed] = []
     for p in PRODUCTS:

@@ -13,16 +13,19 @@ SKU_PATTERN = re.compile(r"^GU-\d{3}-[A-Z]{2}-(S|M|L)$")
 def test_ut_seed_01_sku_unique_and_well_formed() -> None:
     variants = seed_data.build_variants()
     skus = [v.sku for v in variants]
-    assert len(skus) == len(set(skus)) == 180
+    assert len(skus) == len(set(skus)) == 186
     assert all(SKU_PATTERN.match(s) for s in skus), "SKU は GU-<3桁>-<色2文字>-<S|M|L>"
 
 
-def test_ut_seed_02_products_30_with_required_prices() -> None:
-    assert len(seed_data.PRODUCTS) == 30
+def test_ut_seed_02_products_31_with_required_prices() -> None:
+    assert len(seed_data.PRODUCTS) == 31
     numbers = [p.number for p in seed_data.PRODUCTS]
-    assert numbers == list(range(1, 31)), "商品番号は 1〜30 の連番"
+    assert numbers == list(range(1, 32)), "商品番号は 1〜31 の連番"
     prices = {p.price_incl_tax for p in seed_data.PRODUCTS}
     assert seed_data.REQUIRED_PRICES <= prices
+    # AT-08: 送料閾値 4,990 の両側。4,980（2,990+1,990）→550、4,990（単品・公開）→0
+    assert {1990, 2990, 4990} <= prices
+    assert any(p.price_incl_tax == 4990 and p.published for p in seed_data.PRODUCTS)
     assert all(
         isinstance(p.price_incl_tax, int) and p.price_incl_tax > 0 for p in seed_data.PRODUCTS
     )
