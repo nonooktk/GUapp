@@ -129,7 +129,7 @@ jobs:
 
       - name: Node 24 を用意
         if: steps.exists.outputs.present == 'true'
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -238,7 +238,7 @@ jobs:
 
       - name: Node 24 を用意
         if: hashFiles('apps/web/package.json') != ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
