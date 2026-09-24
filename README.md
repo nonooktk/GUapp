@@ -37,8 +37,8 @@ Tech0 講義課題。GU の EC サイトを題材に、V字モデルの開発設
 | 要求仕様書 | Week1 | 完了（with_ai v2.4、2026-09-06。REQ-FR-905 を追加） | docs/01_要求仕様書/ |
 | 要件定義書 | Week2（8/26） | with_ai v1.3 完成（2026-09-06、Lv3 新機能＝AI アシスタント F-029 を確定） | docs/02_要件定義書/。業務要件・ユーザーストーリー・カスタマージャーニー含む（Lv3） |
 | 設計仕様書 | Week3（9/2）→ 9/9 提出 | P1 本編 draft-v3（2026-09-17。実装前レビューで矛盾 3 件・未定義 3 件を反映、エラー応答規則 DS-DEC-32 追加）。docx は draft-v2 を提出済み | セキュリティ考慮（BFF・CORS・型定義・Swagger 非表示・DB Firewall）＋ UML（ユースケース・アクティビティ・シーケンス・クラス図） |
-| テスト設計書 | Week4（9/9） | P1 本編 draft-v2（2026-09-17、draft-v3 に追従）。AT 8・ST 39・IT 31・UT 22（UT-WEB-06 は CI へ） | 正常値・異常値・境界値、V字の要求⇔テスト対応 |
-| コーディング＋単体テスト | Week5（9/16）目安 | 準備中（2026-09-17 環境構築・設計レビュー完了） | pytest／Vitest（2026-09-06 に jest から変更）、ブランチ戦略、GitHub Actions |
+| テスト設計書 | Week4（9/9） | P1 本編 draft-v2（2026-09-17、draft-v3 に追従）。AT 8・ST 40・IT 31・UT 22（UT-WEB-06 は CI へ）。10 章に検収結果を転記済み（2026-09-24） | 正常値・異常値・境界値、V字の要求⇔テスト対応 |
+| コーディング＋単体テスト | Week5（9/16）目安 | P1 完了・マージ待ち（2026-09-24。検収 AT 8・ST 40 全件合格、IT 31・UT 22 全件緑。記録は docs/05_検収/） | pytest／Vitest（2026-09-06 に jest から変更）、ブランチ戦略、GitHub Actions |
 | コードレビュー | Week6（9/23） | 未着手 | 同 Lv 間ローテーション |
 | Azure デプロイ | Week7（9/30） | 未着手 | CI に単体テスト組込み |
 | セキュリティチェック | Week8（10/7） | 未着手 | Snyk・SQLi 対策等で他人のアプリを確認 |
@@ -54,7 +54,7 @@ docs/
   00_計画/
     実装フェーズ計画.md … 機能 39 件を P1（ゲスト購買最小構成）〜P4 に分解。Lv3 新機能＝AI アシスタント（F-029）は P2
     実装前レビュー記録_20260917.md … UT 23 件 × 設計書の突合。矛盾 3・レベル不一致 3・未定義 3 の判定と決定理由
-    P1実装プラン_20260917.md … コーディング＋単体テストの進め方（v1.2）。Wave 0〜3・MySQL zip 版・完了条件と証拠
+    P1実装プラン_20260917.md … コーディング＋単体テストの進め方（v1.3・Wave 3 完了）。Wave 0〜3・MySQL zip 版・完了条件と証拠
     P2_事前レビュー観点_v1.md … P1 の実装時発見 8 件を P2 追補設計の机上チェック 8 問に変換
     引継ぎメモ_20260924.md … P1 検収の途中状態・残作業・環境再開手順・未決事項（他 PC で続きをやる人向け）
   05_検収/
@@ -91,7 +91,7 @@ docs/
    pre-commit install
    pre-commit run --all-files
    ```
-3. MySQL（zip 版・管理者不要）を用意する。手順と注意は `scripts/mysql-local/README.md`
+3. MySQL を用意する。Windows は zip 版（管理者不要）で手順は `scripts/mysql-local/README.md`、Mac は Docker 版で手順は `scripts/mysql-docker/README.md`
    ```powershell
    .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る（2 回目以降は冪等スキップ）
    .\scripts\mysql-local\status.ps1    # 起動確認。停止は stop.ps1、再起動は start.ps1
