@@ -45,3 +45,7 @@
 
 - 設計書 `GU_ECsite_設計仕様書_P1_draft-v3.md` 9.1 の DS-DEC のうち DB・秘密情報に関するもの: DS-DEC-02（MySQL 8.4 LTS の採用）、DS-DEC-13（秘密情報は 6 層で漏えい防止）、DS-DEC-30（gitleaks〈pre-commit・CI〉＋ GitHub Secret scanning／Push protection）
 - 設計書 7.2（秘密情報がフロントへ出ない仕組み）・8.2（環境変数）
+
+## 変更履歴
+
+- 2026-09-24: P2 追補a（DS-DEC-44）で、結合テストは講義サーバーで流さずローカル DB で回すことにしたため、`guapp_nonooktk_test` は当面作らない。
