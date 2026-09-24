@@ -62,7 +62,7 @@ async def test_it_002_01_products_first_page_24_and_total(client) -> None:
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["page"] == 1 and body["per_page"] == 24
-    assert body["total"] == _published_count() == 29
+    assert body["total"] == _published_count() == 30
     assert len(body["items"]) == 24
     assert body["has_more"] is True
     names = {i["name"] for i in body["items"]}
@@ -72,10 +72,10 @@ async def test_it_002_01_products_first_page_24_and_total(client) -> None:
     assert item["image_path"] and item["image_path"].startswith("products/")
     assert len(item["colors"]) == 2
 
-    # 2 ページ目に残り 5 件。P-ALL0 は sold_out=true
+    # 2 ページ目に残り 6 件（公開 30 − 24）。P-ALL0 は sold_out=true
     res2 = await client.get("/api/v1/products", params={"page": 2}, headers=HEADERS)
     body2 = res2.json()
-    assert len(body2["items"]) == 5 and body2["has_more"] is False
+    assert len(body2["items"]) == _published_count() - 24 == 6 and body2["has_more"] is False
     all_items = body["items"] + body2["items"]
     all0 = next(i for i in all_items if i["name"] == seed_data.TEST_PRODUCT_NAME_ALL0)
     assert all0["sold_out"] is True
@@ -92,7 +92,8 @@ async def test_it_002_01_filter_by_gender_and_category(client) -> None:
     )
     assert res.status_code == 200
     expected = sum(1 for p in seed_data.PRODUCTS if p.published and p.category_slug == "men-outer")
-    assert res.json()["total"] == expected == 2
+    # メンズ・アウターは MA-1／ボアフリース／ライトジャケット（AT-08 用 4,990 円）の 3 点
+    assert res.json()["total"] == expected == 3
 
     res = await client.get("/api/v1/products", params={"gender": "unicorn"}, headers=HEADERS)
     assert res.status_code == 400
@@ -110,7 +111,7 @@ async def test_it_002_02_page_0_is_400_and_beyond_last_is_empty(client) -> None:
     res = await client.get("/api/v1/products", params={"page": 3}, headers=HEADERS)
     assert res.status_code == 200
     body = res.json()
-    assert body["items"] == [] and body["total"] == 29 and body["has_more"] is False
+    assert body["items"] == [] and body["total"] == 30 and body["has_more"] is False
 
     res = await client.get("/api/v1/products", params={"per_page": 49}, headers=HEADERS)
     assert res.status_code == 400

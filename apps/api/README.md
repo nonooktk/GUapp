@@ -19,7 +19,7 @@ DB の初期化（MySQL は `scripts/mysql-local/README.md` の手順で起動�
 ```powershell
 $env:DATABASE_URL = "<credentials.txt の DATABASE_URL>"   # 値は書き写さず、ファイルから読む
 uv run alembic upgrade head        # 12 表を作る（alembic/versions/0001_p1_initial.py）
-uv run python -m app.seed          # 商品 30 点・テスト用データ・system_settings 4 キーを投入
+uv run python -m app.seed          # 商品 31 点・テスト用データ・system_settings 4 キーを投入
 ```
 
 seed は冪等で、既に商品があれば何もしない。作り直すときだけ `--reset`（確認プロンプトあり。`--yes` で省略）。

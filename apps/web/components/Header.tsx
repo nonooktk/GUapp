@@ -1,16 +1,24 @@
+"use client";
+
 import Link from "next/link";
+import { useId, useRef, useState } from "react";
+import AllMenu from "@/components/AllMenu";
+import type { Category } from "@/lib/types";
 
 /**
  * 共通ヘッダー（設計仕様書 6.2・U-04・REQ-FR-1201、デザイン基準 v1 3 章「ヘッダー」）。
  * 左: ≡ メニュー ／ 中央: GU ロゴ（テキスト。ロゴ画像は使わない） ／ 右: 検索・お気に入り・カート（点数バッジ）・会員。
  * 高さ 64px、右側は 44×44px のアイコンボタン 4 つ（タッチターゲット最小 44px）。375px 幅でも 1 行に収まる。
  * `sticky top-0` は GU 実サイトと異なる意図的な差（基準 7 章）。
- * オールメニューの中身（U-06）と各リンク先は Wave 1 以降で実装する。
+ * 「≡ メニュー」はオールメニューのドロワー（AllMenu・U-06・AT-07）を開閉する。閉じたらフォーカスを「≡」へ戻す。
+ * 検索・お気に入り・会員の遷移先は P2。
  */
 
 export interface HeaderProps {
   /** カートの点数。0 のときはバッジを表示しない */
   cartCount: number;
+  /** オールメニューに出すカテゴリ階層（GET /categories）。取得失敗時は null */
+  categories?: Category[] | null;
 }
 
 const iconClass = "size-6";
@@ -56,18 +64,31 @@ function UserIcon() {
 
 const iconLinkClass = "inline-flex size-11 items-center justify-center rounded-pill text-fg hover:bg-line";
 
-export default function Header({ cartCount }: HeaderProps) {
+export default function Header({ cartCount, categories = null }: HeaderProps) {
   const badgeLabel = cartCount > 99 ? "99+" : String(cartCount);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 閉じたら「≡」へフォーカスを戻す（デザイン基準 6 章: キーボード操作の連続性）
+  const closeMenu = () => {
+    setMenuOpen(false);
+    menuButtonRef.current?.focus();
+  };
+
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="mx-auto flex h-16 max-w-page items-center justify-between gap-2 px-3 sm:px-4">
-        {/* 左: オールメニュー（U-06。中身は Wave 1 以降） */}
+        {/* 左: オールメニュー（U-06） */}
         <button
+          ref={menuButtonRef}
           type="button"
+          onClick={() => setMenuOpen((v) => !v)}
           className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-pill px-2 text-sm text-fg hover:bg-line sm:px-3"
           aria-label="メニューを開く"
           aria-haspopup="dialog"
-          aria-expanded={false}
+          aria-expanded={menuOpen}
+          aria-controls={menuId}
         >
           <span aria-hidden="true" className="text-xl leading-none">
             ≡
@@ -109,6 +130,7 @@ export default function Header({ cartCount }: HeaderProps) {
           </Link>
         </nav>
       </div>
+      <AllMenu id={menuId} open={menuOpen} categories={categories} onClose={closeMenu} />
     </header>
   );
 }
