@@ -37,8 +37,8 @@ Tech0 講義課題。GU の EC サイトを題材に、V字モデルの開発設
 | 要求仕様書 | Week1 | 完了（with_ai v2.4、2026-09-06。REQ-FR-905 を追加） | docs/01_要求仕様書/ |
 | 要件定義書 | Week2（8/26） | with_ai v1.3 完成（2026-09-06、Lv3 新機能＝AI アシスタント F-029 を確定） | docs/02_要件定義書/。業務要件・ユーザーストーリー・カスタマージャーニー含む（Lv3） |
 | 設計仕様書 | Week3（9/2）→ 9/9 提出 | P1 本編 draft-v3（2026-09-17。実装前レビューで矛盾 3 件・未定義 3 件を反映、エラー応答規則 DS-DEC-32 追加）。docx は draft-v2 を提出済み | セキュリティ考慮（BFF・CORS・型定義・Swagger 非表示・DB Firewall）＋ UML（ユースケース・アクティビティ・シーケンス・クラス図） |
-| テスト設計書 | Week4（9/9） | P1 本編 draft-v2（2026-09-17、draft-v3 に追従）。AT 8・ST 39・IT 31・UT 22（UT-WEB-06 は CI へ） | 正常値・異常値・境界値、V字の要求⇔テスト対応 |
-| コーディング＋単体テスト | Week5（9/16）目安 | 準備中（2026-09-17 環境構築・設計レビュー完了） | pytest／Vitest（2026-09-06 に jest から変更）、ブランチ戦略、GitHub Actions |
+| テスト設計書 | Week4（9/9） | P1 本編 draft-v2（2026-09-17、draft-v3 に追従）。AT 8・ST 40・IT 31・UT 22（UT-WEB-06 は CI へ）。10 章に検収結果を転記済み（2026-09-24） | 正常値・異常値・境界値、V字の要求⇔テスト対応 |
+| コーディング＋単体テスト | Week5（9/16）目安 | P1 完了・マージ待ち（2026-09-24。検収 AT 8・ST 40 全件合格、IT 31・UT 22 全件緑。記録は docs/05_検収/） | pytest／Vitest（2026-09-06 に jest から変更）、ブランチ戦略、GitHub Actions |
 | コードレビュー | Week6（9/23） | 未着手 | 同 Lv 間ローテーション |
 | Azure デプロイ | Week7（9/30） | 未着手 | CI に単体テスト組込み |
 | セキュリティチェック | Week8（10/7） | 未着手 | Snyk・SQLi 対策等で他人のアプリを確認 |
@@ -54,8 +54,11 @@ docs/
   00_計画/
     実装フェーズ計画.md … 機能 39 件を P1（ゲスト購買最小構成）〜P4 に分解。Lv3 新機能＝AI アシスタント（F-029）は P2
     実装前レビュー記録_20260917.md … UT 23 件 × 設計書の突合。矛盾 3・レベル不一致 3・未定義 3 の判定と決定理由
-    P1実装プラン_20260917.md … コーディング＋単体テストの進め方（v1.2）。Wave 0〜3・MySQL zip 版・完了条件と証拠
+    P1実装プラン_20260917.md … コーディング＋単体テストの進め方（v1.3・Wave 3 完了）。Wave 0〜3・MySQL zip 版・完了条件と証拠
     P2_事前レビュー観点_v1.md … P1 の実装時発見 8 件を P2 追補設計の机上チェック 8 問に変換
+    引継ぎメモ_20260924.md … P1 検収の途中状態・残作業・環境再開手順・未決事項（他 PC で続きをやる人向け）
+  05_検収/
+    README再現確認_20260918.md、ST-AT実施記録_正常系_20260918.md … Wave 3 検収の記録（異常・境界はばつ丸の実施後に追加）
   01_要求仕様書/
     GU_ECsite_要求仕様書_noai_20260821.docx      … no_ai 版（ユーザー起案の整理）
     GU_ECsite_要求仕様書_ai_v2.1_20260821.docx   … ai 版（Claude 単独設計・テンプレート適用）
@@ -75,6 +78,8 @@ docs/
 
 ## 開発の始め方（P1）
 
+別 PC での再現確認（`docs/05_検収/README再現確認_20260918.md`）の結果を反映した手順。上から順に実行する。
+
 1. 必要なツール: Node.js 24、pnpm、Python 3.13（uv 経由）、uv、pre-commit。管理者権限は不要
    ```powershell
    npm install -g pnpm
@@ -86,17 +91,22 @@ docs/
    pre-commit install
    pre-commit run --all-files
    ```
-3. `.env.example` を `apps/api/.env` と `apps/web/.env` にコピーして値を埋める。`.env` はコミットできない（`.gitignore` と pre-commit で二重に拒否）
-4. MySQL（zip 版・管理者不要）を用意する。手順と注意は `scripts/mysql-local/README.md`
+3. MySQL を用意する。Windows は zip 版（管理者不要）で手順は `scripts/mysql-local/README.md`、Mac は Docker 版で手順は `scripts/mysql-docker/README.md`
    ```powershell
-   .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る
+   .\scripts\mysql-local\setup.ps1     # 初回のみ。8.4.11 の zip を取得し guapp / guapp_test を作る（2 回目以降は冪等スキップ）
    .\scripts\mysql-local\status.ps1    # 起動確認。停止は stop.ps1、再起動は start.ps1
    ```
-   接続情報は `%LOCALAPPDATA%\guapp-mysql\credentials.txt`（リポジトリ外）に生成される
-5. API: `apps/api/README.md`（`uv sync` → `uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload`）
-6. web: `apps/web/README.md`（`pnpm install` → `pnpm dev`）。テストは `uv run pytest -q`（api）と `pnpm test`（web）
+   接続情報（`DATABASE_URL`・`DATABASE_URL_TEST`）は `%LOCALAPPDATA%\guapp-mysql\credentials.txt`（リポジトリ外）に生成される。**手順 4 はこのファイルができてから**
+4. 環境変数ファイルを作る。`.env.example` の api 節を `apps/api/.env` に、web 節を `apps/web/.env.local` に写し、値を埋める（`DATABASE_URL` は credentials.txt の値、`INTERNAL_TOKEN` は api と web で同じ任意の値、`API_BASE_URL=http://127.0.0.1:8000`、`CORS_ALLOW_ORIGIN=http://localhost:3000`、`IMAGE_BASE_URL=http://localhost:3000`）。どちらもコミットできない（`.gitignore` と pre-commit で二重に拒否）
+5. API: `apps/api/README.md`（`uv sync` → `uv run alembic upgrade head` → `uv run python -m app.seed` → `uv run uvicorn app.main:app --reload`）。ポート 8000 が使用中なら `--port 8010` にし、web の `API_BASE_URL` も合わせる
+6. web: `apps/web/README.md`（`pnpm install` → `pnpm dev`）。ポート 3000 が使用中なら `pnpm dev -p 3010` にし、api の `CORS_ALLOW_ORIGIN` と web の `IMAGE_BASE_URL` も合わせる
+7. テスト: `pnpm test`（web、121 件）と `uv run pytest -q`（api）。**結合テスト（IT）は環境変数 `DATABASE_URL_TEST` が要る**（`.env` は読まない。conftest が guapp_test であることを確認して開発 DB を守る）
+   ```powershell
+   $env:DATABASE_URL_TEST = "<credentials.txt の DATABASE_URL_TEST>"
+   uv run pytest -q          # 207 passed。未設定なら 131 passed / 76 skipped が正常
+   ```
 
-事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。
+事故防止の仕組み（何が止まるか）は実装プラン 4.5 に一覧がある。agent 作業では `.claude/settings.json` の deny により force push・`reset --hard`・`add -A` 等が実行できない。防御外し確認（テスト設計書 1.4 #8）は `scripts/mutation-check/run.ps1 -Case all`。
 
 ## 引き継ぎ時の注意
 
