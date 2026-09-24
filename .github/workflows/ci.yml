@@ -122,7 +122,7 @@ jobs:
 
       - name: pnpm をセットアップ
         if: steps.exists.outputs.present == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           # pnpm の版は apps/web/package.json の "packageManager" フィールドから取る（web 側で必ず書く）
           package_json_file: apps/web/package.json
@@ -232,7 +232,7 @@ jobs:
 
       - name: pnpm をセットアップ
         if: hashFiles('apps/web/package.json') != ''
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           package_json_file: apps/web/package.json
 
