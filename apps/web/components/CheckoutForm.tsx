@@ -6,7 +6,6 @@ import Button from "@/components/Button";
 import { SelectField, TextField } from "@/components/Form";
 import { useToast } from "@/components/Toast";
 import {
-  EMPTY_CHECKOUT_FORM,
   mapServerFieldErrors,
   normalizeDigitsInput,
   PREFECTURES,
@@ -16,6 +15,7 @@ import {
   type CheckoutFormValues,
 } from "@/lib/checkout-validation";
 import { CHECKOUT_KEY, clearCheckoutSession, saveCheckoutSession, type CheckoutSession } from "@/lib/checkout-session";
+import { DEMO_CHECKOUT_FORM, DEMO_NOTICE_BODY, DEMO_NOTICE_TITLE } from "@/lib/demo-defaults";
 import { parseJsonOrNull, useHydrated, useSessionItem } from "@/lib/client/use-session-item";
 import { CartApiError } from "@/lib/client/cart-api";
 import { prepareCheckout } from "@/lib/client/order-api";
@@ -28,6 +28,8 @@ import { routeOrderError } from "@/lib/order-errors";
  * - 受け取り方法（配送のみ）・支払い方法（クレジットカード＝テスト決済のみ）はラジオカード。店舗受け取りは P2 として無効
  * - 「確認画面へ」: クライアント検査 → `POST /api/checkout/prepare` → 応答とフォーム値を sessionStorage に保存 → /checkout/confirm
  * - prepare の 409／404 は lib/order-errors.ts の戻し先へ。サーバーの 400 `fields` は同じ赤字表示に対応付ける
+ * - デモの個人情報対策（P2 追補a 9.1 DS-DEC-47）: sessionStorage に復元値が無いときは `lib/demo-defaults.ts` の
+ *   ダミー値を初期値にし、お届け先の直前に注意書きを常時表示する（本番でも出し分けない）
  */
 
 const SECTION_TITLE = "text-lg font-light tracking-heading";
@@ -98,7 +100,7 @@ function CheckoutFormInner({ session }: { session: CheckoutSession | null }) {
   const router = useRouter();
   const toast = useToast();
   // 確認画面から戻ったとき（戻る・price_changed・payment_failed・400）はフォーム値とサーバーエラーを復元する
-  const [values, setValues] = useState<CheckoutFormValues>(() => ({ ...EMPTY_CHECKOUT_FORM, ...(session?.form ?? {}) }));
+  const [values, setValues] = useState<CheckoutFormValues>(() => ({ ...DEMO_CHECKOUT_FORM, ...(session?.form ?? {}) }));
   const [errors, setErrors] = useState<CheckoutErrors>(() => session?.serverErrors ?? {});
   const [submitting, setSubmitting] = useState(false);
   const paymentRef = useRef<HTMLElement>(null);
@@ -195,6 +197,10 @@ function CheckoutFormInner({ session }: { session: CheckoutSession | null }) {
         <h2 id="ship-heading" className={SECTION_TITLE}>
           お届け先
         </h2>
+        <div role="note" aria-label="デモに関する注意" className="rounded-sm border border-line bg-line/40 p-4 text-sm">
+          <p className="font-bold">{DEMO_NOTICE_TITLE}</p>
+          <p className="mt-1 text-fg-muted">{DEMO_NOTICE_BODY}</p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             id="ship-name"
