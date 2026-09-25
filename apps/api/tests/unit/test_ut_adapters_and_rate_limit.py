@@ -33,7 +33,11 @@ def _order_out() -> OrderOut:
         status="accepted",
         items=[
             OrderItemOut(
-                product_name="テスト商品", color="黒", size="M", unit_price=1990, quantity=2,
+                product_name="テスト商品",
+                color="黒",
+                size="M",
+                unit_price=1990,
+                quantity=2,
                 line_total=3980,
             )
         ],

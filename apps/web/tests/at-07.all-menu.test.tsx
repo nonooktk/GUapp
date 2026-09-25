@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Header from "@/components/Header";
 import type { Category } from "@/lib/types";
 
 // テスト設計書 AT-07（オールメニューのカテゴリから商品一覧へ遷移）・設計仕様書 6.2 U-06・デザイン基準 v1 6 章（キーボード操作）
+// Header は P2-a の SearchBox（useRouter）を内部で使うため、App Router 無しで render するにはモックが要る
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+}));
 const CATEGORIES: Category[] = [
   {
     slug: "women",

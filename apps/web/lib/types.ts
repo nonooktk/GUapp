@@ -71,6 +71,36 @@ export interface ProductDetail {
   related: RelatedProduct[];
 }
 
+// ---- P2-a: 商品検索・検索サジェスト（DS-API-004・004a） ----
+
+export interface RecommendedCategory {
+  slug: string;
+  name: string;
+  product_count: number;
+}
+
+/** DS-API-004 検索結果。`similar_keywords`・`recommended_categories` は 0 件のときだけ中身がある */
+export interface SearchResponse {
+  query: string;
+  items: ProductSummary[];
+  page: number;
+  per_page: number;
+  total: number;
+  has_more: boolean;
+  similar_keywords: string[];
+  recommended_categories: RecommendedCategory[];
+}
+
+export interface SuggestItem {
+  id: number;
+  name: string;
+}
+
+/** DS-API-004a 検索サジェスト。最大 5 件 */
+export interface SuggestResponse {
+  items: SuggestItem[];
+}
+
 export interface PublicSettings {
   tax_rate: string;
   shipping_fee: number;

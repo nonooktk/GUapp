@@ -208,9 +208,7 @@ async def test_it_014_07_reserve_failure_rolls_back_and_lists_variants(client, s
 # ── IT-014-08 確定時単価 ─────────────────────────────────────────────────────
 
 
-async def test_it_014_08_price_change_after_confirm_does_not_affect_order(
-    client, seed_db
-) -> None:
+async def test_it_014_08_price_change_after_confirm_does_not_affect_order(client, seed_db) -> None:
     token, prepared = await _cart_with(client, seed_db, (5, 2))
     res = await client.post("/api/v1/orders", json=oh.order_body(prepared), headers=oh.h(token))
     assert res.status_code == 201, res.text
@@ -301,9 +299,7 @@ async def test_it_014_idempotency_key_of_other_cart_is_404_and_retry_is_200(
     # トークン無し／未知 → 404
     res = await client.post("/api/v1/orders", json=oh.order_body(prepared), headers=oh.h())
     assert res.status_code == 404
-    res = await client.post(
-        "/api/v1/orders", json=oh.order_body(prepared), headers=oh.h("Z" * 43)
-    )
+    res = await client.post("/api/v1/orders", json=oh.order_body(prepared), headers=oh.h("Z" * 43))
     assert res.status_code == 404
 
 

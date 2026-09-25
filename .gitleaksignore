@@ -7,3 +7,5 @@
 # PR #5（Wave 1）: テスト内の FastAPI モック URL を generic-api-key と誤検出
 7e94fc59c4752f85dbd34c61452a4d18c1b608e1:apps/web/tests/bff.cart-route.test.ts:generic-api-key:152
 7e94fc59c4752f85dbd34c61452a4d18c1b608e1:apps/web/tests/bff.cart-route.test.ts:generic-api-key:208
+1a2453cd345ad28ff9b07b42f668a5676d264115:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:stripe-access-token:21
+1a2453cd345ad28ff9b07b42f668a5676d264115:apps/api/tests/unit/test_ut_sec_01_mask_filter.py:generic-api-key:76

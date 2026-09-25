@@ -5,6 +5,10 @@ import HeaderWithCart from "@/components/HeaderWithCart";
 import type { Cart } from "@/lib/types";
 
 // テスト設計書 UT-WEB-01: カート追加のレスポンス（item_count）でヘッダーのバッジが更新される
+// Header は P2-a の SearchBox（useRouter）を内部で使うため、App Router 無しで render するにはモックが要る
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+}));
 function cartResponse(itemCount: number): Cart {
   return {
     cart_token: "tok",

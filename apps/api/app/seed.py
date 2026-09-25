@@ -90,11 +90,11 @@ async def count_rows(
     return out
 
 
-async def truncate_p1_tables(conn: AsyncConnection) -> None:
-    """P1 の 12 表 + P2-a の contents を空にする（--reset とテストの後片付け用）。
+async def truncate_all_tables(conn: AsyncConnection) -> None:
+    """P1 の 12 表 + P2-a の contents（ALL_TABLES 全件）を空にする（--reset とテストの後片付け用）。
 
-    関数名は P1 由来のままだが、P2-a 追加後は contents も合わせて空にする
-    （`_insert_all` が contents も投入するため、テストの reset サイクルで一致させる必要がある）。
+    P2-a で contents が増えたため、関数名を中身（全表を対象にする）に合わせて改名した
+    （旧名 `truncate_p1_tables`。呼び出し元・テストも本改名に合わせて更新済み）。
     """
     await conn.execute(text("SET FOREIGN_KEY_CHECKS=0"))
     try:
@@ -184,7 +184,7 @@ async def seed(engine: AsyncEngine, *, reset: bool = False) -> SeedResult:
     """
     if reset:
         async with engine.begin() as conn:
-            await truncate_p1_tables(conn)
+            await truncate_all_tables(conn)
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
         existing = (await session.execute(select(func.count()).select_from(Product))).scalar_one()

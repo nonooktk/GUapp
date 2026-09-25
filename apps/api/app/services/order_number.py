@@ -14,7 +14,8 @@ from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
 
 # A-Z から I・O、0-9 から 0・1 を除いた 32 文字
-ORDER_NUMBER_ALPHABET = "".join(c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789" if c not in "IO")  # pragma: allowlist secret  # noqa: E501
+_ALPHANUMERIC_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789"  # pragma: allowlist secret
+ORDER_NUMBER_ALPHABET = "".join(c for c in _ALPHANUMERIC_UPPER if c not in "IO")
 ORDER_NUMBER_RANDOM_LENGTH = 8
 ORDER_NUMBER_RE = re.compile(r"^GU-\d{6}-[A-HJ-NP-Z2-9]{8}$")
 

@@ -78,9 +78,7 @@ def setup_logging(level: int = logging.INFO, extra_secrets: Iterable[str] = ()) 
     root.setLevel(level)
     if not root.handlers:
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
         root.addHandler(handler)
 
     mask_filter = SecretMaskFilter(extra_secrets)

@@ -14,12 +14,27 @@ from app.services.pricing import PricingSettings, calc_totals
 from tests.integration import order_helpers as oh
 
 PREPARE_KEYS = {
-    "idempotency_key", "items", "subtotal", "shipping_fee", "total", "tax_included",
-    "tax_rate", "free_shipping_threshold",
+    "idempotency_key",
+    "items",
+    "subtotal",
+    "shipping_fee",
+    "total",
+    "tax_included",
+    "tax_rate",
+    "free_shipping_threshold",
 }
 LINE_KEYS = {
-    "item_id", "variant_id", "product_id", "product_name", "color", "size",
-    "unit_price", "quantity", "line_total", "stock_status", "image_path",
+    "item_id",
+    "variant_id",
+    "product_id",
+    "product_name",
+    "color",
+    "size",
+    "unit_price",
+    "quantity",
+    "line_total",
+    "stock_status",
+    "image_path",
 }
 
 

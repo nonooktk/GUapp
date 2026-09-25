@@ -18,12 +18,27 @@ from tests.conftest import TEST_INTERNAL_TOKEN
 
 HEADERS = {"X-Internal-Token": TEST_INTERNAL_TOKEN}
 CART_KEYS = {
-    "cart_token", "items", "item_count", "subtotal", "shipping_fee", "total",
-    "free_shipping_threshold", "can_checkout",
+    "cart_token",
+    "items",
+    "item_count",
+    "subtotal",
+    "shipping_fee",
+    "total",
+    "free_shipping_threshold",
+    "can_checkout",
 }
 LINE_KEYS = {
-    "item_id", "variant_id", "product_id", "product_name", "color", "size",
-    "unit_price", "quantity", "line_total", "stock_status", "image_path",
+    "item_id",
+    "variant_id",
+    "product_id",
+    "product_name",
+    "color",
+    "size",
+    "unit_price",
+    "quantity",
+    "line_total",
+    "stock_status",
+    "image_path",
 }
 
 
@@ -152,9 +167,7 @@ async def test_it_010_02_concurrent_get_on_ordered_cart_no_500(client, seed_db) 
 # ── IT-011 ────────────────────────────────────────────────────────────────────
 
 
-async def test_it_011_01_concurrent_add_same_variant_merges_into_one_line(
-    client, seed_db
-) -> None:
+async def test_it_011_01_concurrent_add_same_variant_merges_into_one_line(client, seed_db) -> None:
     token = await _new_token(client)
     vid = await _stocked_variant_id(seed_db)
     payload = {"variant_id": vid, "quantity": 1}
@@ -302,9 +315,7 @@ async def test_it_011_04_cart_total_50_ok_51_rejected(client, seed_db) -> None:
 # ── IT-012 ────────────────────────────────────────────────────────────────────
 
 
-async def test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404(
-    client, seed_db
-) -> None:
+async def test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404(client, seed_db) -> None:
     token = await _new_token(client)
     vid = await _stocked_variant_id(seed_db)
     res = await client.post(

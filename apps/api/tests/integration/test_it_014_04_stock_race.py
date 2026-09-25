@@ -23,7 +23,7 @@ from sqlalchemy.pool import NullPool
 
 from app import seed_data
 from app.adapters.mail import DEFAULT_OUTBOX_DIR
-from app.seed import seed, truncate_p1_tables
+from app.seed import seed, truncate_all_tables
 from tests.integration import concurrency_helpers as ch
 from tests.integration import order_helpers as oh
 from tests.integration.live_server import LiveServer
@@ -48,7 +48,7 @@ async def _truncate_all(url: str) -> None:
     engine = create_async_engine(url, poolclass=NullPool)
     try:
         async with engine.begin() as conn:
-            await truncate_p1_tables(conn)
+            await truncate_all_tables(conn)
     finally:
         await engine.dispose()
 

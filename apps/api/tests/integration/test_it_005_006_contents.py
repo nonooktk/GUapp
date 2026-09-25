@@ -81,9 +81,7 @@ async def test_it_005_04_kind_out_of_enum_is_400(
     assert res.json()["code"] == "validation_error"
 
 
-async def test_it_006_01_faq_detail(
-    it_app: FastAPI, seed_db: AsyncEngine, client_factory
-) -> None:
+async def test_it_006_01_faq_detail(it_app: FastAPI, seed_db: AsyncEngine, client_factory) -> None:
     client = client_factory(it_app)
     res = await client.get("/api/v1/contents/faq", headers=HEADERS)
     assert res.status_code == 200, res.text
@@ -131,7 +129,10 @@ async def test_it_006_03_unknown_slug_is_404_not_found(
 async def test_it_006_04_future_publish_from_is_404(
     it_app: FastAPI, seed_db: AsyncEngine, client_factory
 ) -> None:
-    """`publish_from` を未来にした static 行は 404（存在しないのと同じコード。DS-PRC-006 手順2）。"""
+    """`publish_from` を未来にした static 行は 404 になる。
+
+    存在しないのと同じコード（DS-PRC-006 手順2）。
+    """
     now = datetime.now(UTC).replace(tzinfo=None)
     async with AsyncSession(seed_db, expire_on_commit=False) as session:
         session.add(
