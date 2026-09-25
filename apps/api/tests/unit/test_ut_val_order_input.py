@@ -165,3 +165,28 @@ async def test_ut_val_02_name_51_via_router_is_too_long(make_app, client_factory
     res = await client.post("/api/v1/orders", json=valid_body(ship_name="あ" * 51), headers=HEADERS)
     assert res.status_code == 400
     assert res.json()["fields"] == [{"name": "ship_name", "reason": "too_long"}]
+
+
+# ── デモの個人情報対策（設計仕様書 P2 追補a 9.1 DS-DEC-47） ──────────────────────────
+
+
+def test_demo_dec_47_dummy_shipping_values_pass_validation() -> None:
+    """注文手続きフォーム（apps/web/lib/demo-defaults.ts）のダミー値と同じ内容が、
+    サーバー側の入力検証（OrderCreateIn）もそのまま通ることを確かめる。
+    フロントの ship_address は 都道府県・市区町村・番地・建物 を全角スペースで結合して送る。
+    """
+    dummy_ship_address = "　".join(["東京都", "千代田区", "デモ町1-2-3", "サンプルビル101"])
+    order = OrderCreateIn(
+        **valid_body(
+            ship_name="デモ 太郎",
+            ship_postal_code="000-0000",
+            ship_address=dummy_ship_address,
+            ship_phone="090-0000-0000",
+            guest_email="demo@example.com",
+        )
+    )
+    assert order.ship_name == "デモ 太郎"
+    assert order.ship_postal_code == "0000000"
+    assert order.ship_address == dummy_ship_address
+    assert order.ship_phone == "09000000000"
+    assert order.guest_email == "demo@example.com"
