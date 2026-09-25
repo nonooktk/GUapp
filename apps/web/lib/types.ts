@@ -77,6 +77,31 @@ export interface PublicSettings {
   free_shipping_threshold: number;
 }
 
+// ---- P2-a: コンテンツ・お知らせ・FAQ・静的ページ（DS-API-005・006） ----
+
+export type ContentKind = "feature" | "news" | "faq" | "static";
+
+/** DS-API-005 一覧の 1 件（body は含まない） */
+export interface ContentListItem {
+  slug: string;
+  title: string;
+  kind: ContentKind;
+  /** ISO 8601（UTC）。表示は JST に変換する（DS-DEC-40） */
+  publish_from: string;
+}
+
+export interface ContentsResponse {
+  items: ContentListItem[];
+}
+
+/** DS-API-006 FAQ・静的ページの詳細 */
+export interface ContentDetail {
+  slug: string;
+  kind: ContentKind;
+  title: string;
+  body: string;
+}
+
 export type StockStatus = "ok" | "insufficient" | "out_of_stock";
 
 export interface CartItem {

@@ -1,6 +1,8 @@
-"""P1 のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表）。
+"""P1・P2-a のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表、
+P2 追補a 5.1: DS-TBL-22 contents を加えた 13 表）。
 
-設計書本文は「13 表」と書くが、列挙された DS-TBL を数えると 12。
+設計書本文は「13 表」と書くが、P1 時点で列挙された DS-TBL を数えると 12
+（P2-a の DS-TBL-22 追加で実際に 13 になった）。
 Alembic は `Base.metadata` を参照する。
 """
 
@@ -14,6 +16,7 @@ from app.models.catalog import (
     ProductImage,
     Variant,
 )
+from app.models.content import Content, ContentKind
 from app.models.order import (
     Order,
     OrderItem,
@@ -33,6 +36,8 @@ __all__ = [
     "CartItem",
     "CartStatus",
     "Category",
+    "Content",
+    "ContentKind",
     "Gender",
     "Order",
     "OrderItem",
@@ -48,7 +53,7 @@ __all__ = [
     "Variant",
 ]
 
-# P1 で作る 12 表の名前（テストとシナモロールの Alembic 確認用）
+# P1 で作った 12 表の名前（テストと Alembic 確認用。変更しない）
 P1_TABLES: frozenset[str] = frozenset(
     {
         "categories",
@@ -65,3 +70,9 @@ P1_TABLES: frozenset[str] = frozenset(
         "audit_logs",
     }
 )
+
+# P2-a で追加した表（設計仕様書 P2 追補a 5.1 DS-TBL-22）
+P2A_TABLES: frozenset[str] = frozenset({"contents"})
+
+# 全表（P1 + P2-a）
+ALL_TABLES: frozenset[str] = P1_TABLES | P2A_TABLES

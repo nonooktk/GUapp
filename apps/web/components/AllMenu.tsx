@@ -7,8 +7,8 @@ import type { Category } from "@/lib/types";
 
 /**
  * オールメニューのドロワー（設計仕様書 6.2・U-06・AT-07、デザイン基準 v1 3 章「ヘッダー」・6 章）。
- * ヘッダー左の「≡ メニュー」で開閉する。P1 範囲は性別 3 区分（WOMEN／MEN／KIDS・TEEN）と、その下の商品カテゴリ階層だけ。
- * お知らせ・FAQ・INFO は P2 のためテキストリンク（`#`）で置くのみ。
+ * ヘッダー左の「≡ メニュー」で開閉する。P1 範囲は性別 3 区分（WOMEN／MEN／KIDS・TEEN）と、その下の商品カテゴリ階層。
+ * お知らせ・FAQ・INFO は P2-a で実装した `/contents` 系ページへのリンク（設計仕様書 P2 追補a 6.5）。
  *
  * - パネル: `role="dialog"`・`aria-modal="true"`・`aria-labelledby`。375px は全幅、sm 以上は 320px（w-80）で左から出す
  * - 開いたら閉じるボタンにフォーカス。Escape・背景クリック・リンク選択で閉じる。Tab はパネル内で循環（ConfirmDialog と同じ方式）
@@ -26,10 +26,10 @@ export interface AllMenuProps {
 
 const FOCUSABLE = "a[href], button:not([disabled])";
 
-const P2_LINKS = [
-  { label: "お知らせ", href: "#" },
-  { label: "FAQ", href: "#" },
-  { label: "INFO", href: "#" },
+const CONTENT_LINKS = [
+  { label: "お知らせ", href: "/contents?kind=news" },
+  { label: "FAQ", href: "/contents/faq" },
+  { label: "INFO", href: "/contents/company" },
 ] as const;
 
 const rowClass = "flex min-h-11 items-center justify-between px-4 py-2 text-fg hover:bg-line";
@@ -142,12 +142,11 @@ export default function AllMenu({ id, open, categories, onClose }: AllMenuProps)
             </p>
           )}
 
-          <ul className="pt-2" aria-label="その他（P2）">
-            {P2_LINKS.map((l) => (
+          <ul className="pt-2" aria-label="その他">
+            {CONTENT_LINKS.map((l) => (
               <li key={l.label}>
                 <Link href={l.href} onClick={onClose} className={`${rowClass} text-sm text-fg-muted`}>
-                  <span>{l.label}</span>{" "}
-                  <span className="text-xs">P2</span>
+                  <span>{l.label}</span>
                 </Link>
               </li>
             ))}

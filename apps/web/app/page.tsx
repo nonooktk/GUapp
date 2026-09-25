@@ -2,28 +2,29 @@ import Link from "next/link";
 import { buttonClass } from "@/components/Button";
 import LoadError from "@/components/LoadError";
 import ProductCard from "@/components/ProductCard";
+import { formatJstDate } from "@/lib/datetime";
 import { GENDERS } from "@/lib/gender";
 import { getImageBaseUrl, getProducts, loadOrNull } from "@/lib/server/catalog";
+import { getContents } from "@/lib/server/contents";
 
 /**
  * ホーム DS-SCR-001（設計仕様書 6.3・U-01〜U-03、デザイン基準 v1 4 章 SCR-001）。
  * トップ画像（プレースホルダー）→ 性別カテゴリ（375px で 3 列）→ おすすめ商品（P1 は新着 8 件 = DS-API-002 page=1・per_page=8。
- * 375px 2 列／1280px 4 列）→ お知らせ（P1 は固定文）。FastAPI 停止時はおすすめ欄だけ「読み込めませんでした」。
+ * 375px 2 列／1280px 4 列）→ お知らせ（P2-a: DS-API-005 の `news` 上位 3 件。設計仕様書 P2 追補a 6.3）。
+ * FastAPI 停止時はおすすめ・お知らせのどちらも「読み込めませんでした」。
  */
 
 export const dynamic = "force-dynamic";
 
-const NOTICES = [
-  "【お知らせ】本サイトは演習用（P1）です。実際の注文・決済は行われません。",
-  "【配送】4,990 円（税込）以上のご注文で送料無料。",
-] as const;
+const HOME_NEWS_LIMIT = 3;
 
 const headingClass = "text-xl font-light tracking-heading";
 
 export default async function HomePage() {
-  const [recommended, imageBaseUrl] = await Promise.all([
+  const [recommended, imageBaseUrl, notices] = await Promise.all([
     loadOrNull(getProducts({ page: 1, per_page: 8 }), "home recommended"),
     Promise.resolve(getImageBaseUrl()),
+    loadOrNull(getContents("news", HOME_NEWS_LIMIT), "home notices"),
   ]);
 
   return (
@@ -91,18 +92,30 @@ export default async function HomePage() {
         )}
       </section>
 
-      {/* お知らせ（P1 は固定文） */}
+      {/* お知らせ（P2-a: DS-API-005 由来。上位 3 件、もっと見るで一覧へ） */}
       <section aria-labelledby="notice-heading">
-        <h2 id="notice-heading" className={`mb-4 ${headingClass}`}>
-          お知らせ
-        </h2>
-        <ul className="divide-y divide-line rounded-sm border border-line text-sm">
-          {NOTICES.map((n) => (
-            <li key={n} className="px-4 py-3">
-              {n}
-            </li>
-          ))}
-        </ul>
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 id="notice-heading" className={headingClass}>
+            お知らせ
+          </h2>
+          <Link href="/contents?kind=news" className="inline-flex h-11 items-center text-sm text-fg-muted underline underline-offset-2 hover:no-underline">
+            もっと見る
+          </Link>
+        </div>
+        {notices === null ? (
+          <LoadError what="お知らせ" />
+        ) : notices.items.length === 0 ? (
+          <p className="text-sm text-fg-muted">お知らせはまだありません</p>
+        ) : (
+          <ul className="divide-y divide-line rounded-sm border border-line text-sm">
+            {notices.items.map((n) => (
+              <li key={n.slug} className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-3">
+                <span className="text-fg-muted">{formatJstDate(n.publish_from)}</span>
+                <span>{n.title}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

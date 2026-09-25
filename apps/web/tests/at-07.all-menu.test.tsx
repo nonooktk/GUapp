@@ -107,8 +107,10 @@ describe("AT-07 オールメニュー（Header + AllMenu）", () => {
       "/products?gender=kids_teen&category=kids-teen-outer",
     );
 
-    // P2 のテキストリンクは # のまま
-    expect(within(nav).getByRole("link", { name: "お知らせ P2" })).toHaveAttribute("href", "#");
+    // P2-a で実装したコンテンツ系リンク（設計仕様書 P2 追補a 6.5）
+    expect(within(nav).getByRole("link", { name: "お知らせ" })).toHaveAttribute("href", "/contents?kind=news");
+    expect(within(nav).getByRole("link", { name: "FAQ" })).toHaveAttribute("href", "/contents/faq");
+    expect(within(nav).getByRole("link", { name: "INFO" })).toHaveAttribute("href", "/contents/company");
   });
 
   it("リンクを選ぶとメニューが閉じる", () => {
@@ -133,7 +135,7 @@ describe("AT-07 オールメニュー（Header + AllMenu）", () => {
     openMenu();
     const dialog = screen.getByRole("dialog");
     const close = screen.getByRole("button", { name: "メニューを閉じる" });
-    const last = screen.getByRole("link", { name: "INFO P2" });
+    const last = screen.getByRole("link", { name: "INFO" });
     last.focus();
     fireEvent.keyDown(dialog, { key: "Tab" });
     expect(close).toHaveFocus();

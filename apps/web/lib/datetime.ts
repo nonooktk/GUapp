@@ -24,3 +24,22 @@ export function formatJst(iso: string): string {
   const hour = String(Number(get("hour")) % 24).padStart(2, "0");
   return `${get("year")}/${get("month")}/${get("day")} ${hour}:${get("minute")}`;
 }
+
+/**
+ * JST の日付だけを `YYYY-MM-DD` 形式で返す（設計仕様書 P2 追補a 6.3 コンテンツ・お知らせ一覧）。
+ * `publish_from` の表示専用（DS-DEC-40: 判定は UTC のまま、表示だけ JST に変換する）。
+ */
+export function formatJstDate(iso: string): string {
+  if (typeof iso !== "string" || iso.length === 0) return "";
+  const normalized = HAS_OFFSET.test(iso) ? iso : `${iso}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
