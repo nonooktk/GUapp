@@ -80,6 +80,20 @@ az webapp config set \
   --startup-file "$GUAPP_API_STARTUP_COMMAND" \
   --output none
 
+# 実行時に判明した不具合の修正（2026-09-25・タキシードサム）:
+# `az webapp deploy --type zip` は Linux App Service では既定でビルド自動化
+# （Oryx による `requirements.txt` の pip install）を行わない
+# （コマンド自体が「SCM_DO_BUILD_DURING_DEPLOYMENT=true を設定せよ」と警告する）。
+# 04-deploy-api.sh は DS-DEC-53 の方針どおり requirements.txt を zip に含める前提のため、
+# この設定が無いと依存関係がインストールされず、ワーカープロセスが起動できずに
+# デプロイが「Site failed to start within 10 mins」で失敗する（1 回目の実デプロイで実際に発生・確認済み）。
+echo "[01-create] api のビルド自動化（Oryx による pip install）を有効にします..."
+az webapp config appsettings set \
+  --name "$GUAPP_API_APP_NAME" \
+  --resource-group "$GUAPP_RESOURCE_GROUP" \
+  --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+  --output none
+
 echo "[01-create] web の起動コマンドと PORT 関連の設定をします（standalone の server.js）..."
 az webapp config set \
   --name "$GUAPP_WEB_APP_NAME" \
