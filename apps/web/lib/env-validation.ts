@@ -21,6 +21,8 @@ export interface WebEnv {
   /** Cookie の Domain 属性。ローカルは空（属性を付けない） */
   SESSION_COOKIE_DOMAIN: string;
   APP_ENV: AppEnv;
+  /** 信頼するプロキシのホップ数（X-Forwarded-For を右から数える位置。未設定は 0＝利用者送信の XFF を使わない） */
+  TRUSTED_PROXY_HOPS: number;
 }
 
 export class EnvValidationError extends Error {
@@ -44,6 +46,7 @@ export function findLeakedPublicSecretKeys(env: Record<string, string | undefine
  * - `NEXT_PUBLIC_*` に秘密の名前があれば拒否（UT-WEB-05）
  * - 必須キーの欠落・空文字を拒否
  * - APP_ENV は development | test | production のみ（未設定は development）
+ * - TRUSTED_PROXY_HOPS は任意。0 以上の整数のみ（未設定・空は 0）
  */
 export function validateEnv(env: Record<string, string | undefined>): WebEnv {
   const leaked = findLeakedPublicSecretKeys(env);
@@ -65,11 +68,19 @@ export function validateEnv(env: Record<string, string | undefined>): WebEnv {
     );
   }
 
+  // 任意。未設定・空は 0（利用者送信の X-Forwarded-For を使わない）。負数・小数・文字列は拒否
+  const hopsRaw = env.TRUSTED_PROXY_HOPS?.trim() ?? "";
+  if (hopsRaw !== "" && !/^\d+$/.test(hopsRaw)) {
+    throw new EnvValidationError(`TRUSTED_PROXY_HOPS は 0 以上の整数にしてください（現在: ${hopsRaw}）`);
+  }
+  const trustedProxyHops = hopsRaw === "" ? 0 : Number(hopsRaw);
+
   return {
     API_BASE_URL: (env.API_BASE_URL ?? "").trim().replace(/\/+$/, ""),
     INTERNAL_TOKEN: (env.INTERNAL_TOKEN ?? "").trim(),
     IMAGE_BASE_URL: (env.IMAGE_BASE_URL ?? "").trim().replace(/\/+$/, ""),
     SESSION_COOKIE_DOMAIN: env.SESSION_COOKIE_DOMAIN?.trim() ?? "",
     APP_ENV: appEnvRaw as AppEnv,
+    TRUSTED_PROXY_HOPS: trustedProxyHops,
   };
 }
