@@ -85,7 +85,7 @@ const okHeaders = {
 };
 
 describe("IT-BFF-01 POST /api/orders（CSRF 付き）", () => {
-  it("X-Internal-Token・X-Cart-Token・X-Forwarded-For を付けて FastAPI /api/v1/orders へ取り次ぎ、201 の本文をそのまま返す", async () => {
+  it("X-Internal-Token・X-Cart-Token・X-Forwarded-For を付けて FastAPI /api/v1/orders へ取り次ぎ、201 の本文をそのまま返す（利用者の x-forwarded-for は転送しない）", async () => {
     fetchMock.mockResolvedValue(upstream(201, orderOut));
     const res = await POST_ORDERS(
       new Request("http://localhost:3000/api/orders", {
@@ -106,7 +106,8 @@ describe("IT-BFF-01 POST /api/orders（CSRF 付き）", () => {
     const h = new Headers(init.headers);
     expect(h.get("X-Internal-Token")).toBe("dummy-internal-token");
     expect(h.get("X-Cart-Token")).toBe(CART_TOKEN);
-    expect(h.get("X-Forwarded-For")).toBe("203.0.113.9");
+    // ST 実施記録 2026-09-24 🟡: 利用者が付けた x-forwarded-for（203.0.113.9）は信用せず、接続元 127.0.0.1 を送る
+    expect(h.get("X-Forwarded-For")).toBe("127.0.0.1");
     expect(JSON.parse(init.body as string)).toEqual(orderBody);
   });
 
@@ -210,7 +211,7 @@ describe("POST /api/orders/[orderNumber]/lookup", () => {
   const ctx = (orderNumber: string) => ({ params: Promise.resolve({ orderNumber }) });
   const lookupBody = JSON.stringify({ guest_email: "test@example.com" });
 
-  it("形式の正しい番号は FastAPI へ取り次ぎ 200。X-Forwarded-For を付ける", async () => {
+  it("形式の正しい番号は FastAPI へ取り次ぎ 200。X-Forwarded-For を付けるが、利用者送信の値はそのまま出ない", async () => {
     fetchMock.mockResolvedValue(upstream(200, orderOut));
     const res = await POST_LOOKUP(
       new Request("http://localhost:3000/api/orders/GU-260918-7K3M9Q2X/lookup", {
@@ -224,8 +225,24 @@ describe("POST /api/orders/[orderNumber]/lookup", () => {
     expect(await res.json()).toEqual(orderOut);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://fastapi.test:8000/api/v1/orders/GU-260918-7K3M9Q2X/lookup"); // gitleaks:allow（テスト用 URL）
-    expect(new Headers(init.headers).get("X-Forwarded-For")).toBe("198.51.100.7");
+    // ST 実施記録 2026-09-24 🟡: ヘッダを付けるだけでレート制限（100 回/時/IP）を回避・他人を 429 にできないよう、利用者の値は転送しない
+    const forwarded = new Headers(init.headers).get("X-Forwarded-For");
+    expect(forwarded).not.toBe("198.51.100.7");
+    expect(forwarded).toBe("127.0.0.1");
     expect(JSON.parse(init.body as string)).toEqual({ guest_email: "test@example.com" });
+  });
+
+  it("hops=0（テストの既定）では利用者が付けた X-Client-IP も無視して 127.0.0.1 を送る", async () => {
+    fetchMock.mockResolvedValue(upstream(200, orderOut));
+    await POST_LOOKUP(
+      new Request("http://localhost:3000/api/orders/GU-260918-7K3M9Q2X/lookup", {
+        method: "POST",
+        body: lookupBody,
+        headers: { ...okHeaders, "x-client-ip": "198.51.100.7", "x-forwarded-for": "203.0.113.9, 198.51.100.7" },
+      }),
+      ctx("GU-260918-7K3M9Q2X"),
+    );
+    expect(new Headers((fetchMock.mock.calls[0] as [string, RequestInit])[1].headers).get("X-Forwarded-For")).toBe("127.0.0.1");
   });
 
   it("番号の形式が違えば FastAPI を呼ばず 404（存在を区別しない）", async () => {
