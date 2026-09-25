@@ -207,7 +207,8 @@ def _database_name(url: str) -> str:
 
 
 async def _amain(args: argparse.Namespace) -> int:
-    url = get_settings().DATABASE_URL
+    settings = get_settings()
+    url = settings.DATABASE_URL
     if not url:
         print("DATABASE_URL が未設定です（環境変数で与えてください）", file=sys.stderr)
         return 2
@@ -222,7 +223,11 @@ async def _amain(args: argparse.Namespace) -> int:
             print("中止しました（何も変更していません）")
             return 1
 
-    engine = build_engine(url)
+    # DB_POOL_SIZE・DB_MAX_OVERFLOW（DS-DEC-46）を尊重する。共用の講義サーバーに
+    # 対しては 5／5 を渡すことで、seed 実行時も接続数を絞れる
+    engine = build_engine(
+        url, pool_size=settings.DB_POOL_SIZE, max_overflow=settings.DB_MAX_OVERFLOW
+    )
     try:
         result = await seed(engine, reset=args.reset)
     finally:

@@ -626,15 +626,15 @@ CORS_ALLOW_ORIGIN=http://localhost:3000  # 本番の web オリジンは P2-d �
 | 7 フレームワークの制約 | あり | Next.js の Server Component の制約（Cookie 発行不可等）が新規ページに影響するか確認 | `/search`・`/contents/[slug]` はいずれも読み取り専用の Server Component で Cookie を発行しない。検索欄の状態保持（開閉・入力値）はクライアントコンポーネント側で行うため、本編 P1 で確認済みの制約（P2 事前レビュー観点 #7）と同じ回避策（Client Component 化）をそのまま使う |
 | 8 ビルド時の外部到達 | なし | フォント・外部レジストリへの新規到達を増やしていない（`next/font/google` の利用は本編・デザイン基準 v1 で確認済みの Noto Sans JP のみ） | 該当なし |
 
-**要検証（本書内で解決できず、実施を IT・Wave 0 に送る事項）**:
+**要検証（2026-09-25 実施結果を追記。P2-a の接続切り替え作業〈タキシードサム・ツボツボ担当〉）**:
 
-| # | 内容 | 確認方法（予定） |
-| --- | --- | --- |
-| 1 | Azure Database for MySQL Flexible Server の CA 証明書チェーンの現行構成（8.6 に記載の DigiCert／Microsoft RSA の組み合わせ）は、証明書ローテーションにより変わり得る | 統括が接続作業を行う直前に Microsoft Learn の「Azure Database for MySQL の証明書のローテーション」ページを確認し、案内どおりの証明書ファイルを用意する |
-| 2 | `?ssl_ca=<path>` を付けた `DATABASE_URL` で実際に Azure へ接続できるか（8.1 は SQLAlchemy／asyncmy のソースコードから導いた設計であり、実機での接続確認はまだ行っていない） | P2 Wave 0（接続の素振り）で `uv run python -c "..."` の最小コードにより疎通確認する。テスト設計書 IT-AZ-01 |
-| 3 | 本編 8.2 の `?ssl=true` という書式が実際に接続エラーになるか（8.1 の「推定」の裏取り） | 同上。あえて `?ssl=true` で接続を試み、`ValueError` になることを確認してから本編修正案（9.3）を統括に提示する。テスト設計書 IT-AZ-02 |
-| 4 | 講義サーバー接続時の推奨値 `DB_POOL_SIZE=5`／`DB_MAX_OVERFLOW=5`（DS-DEC-46）で十分か、それとも講義サーバー側の `max_connections` がさらに厳しいか | Azure 側で `SHOW VARIABLES LIKE 'max_connections'` を実行して確認する。想定より厳しければ推奨値をさらに下げる（環境変数を変えるだけで対応でき、コード変更は不要） |
-| 5 | Windows のローカル開発環境から Azure MySQL への接続で、ファイアウォールの動的 IP（自宅・移動先で変わる IP）が接続の安定性に影響しないか | 実際に複数の作業場所から接続を試し、都度 IP 追加が必要になる運用上の負荷を確認する |
+| # | 内容 | 確認方法（予定） | 結果（2026-09-25） |
+| --- | --- | --- | --- |
+| 1 | Azure Database for MySQL Flexible Server の CA 証明書チェーンの現行構成（8.6 に記載の DigiCert／Microsoft RSA の組み合わせ）は、証明書ローテーションにより変わり得る | 統括が接続作業を行う直前に Microsoft Learn の「Azure Database for MySQL の証明書のローテーション」ページを確認し、案内どおりの証明書ファイルを用意する | **確認済み**。2026-09-25、Microsoft Learn の2ページ（`security-tls-how-to-connect`・`security-tls-root-certificate-rotation`）を確認。移行期間中のため、8.6 記載の2証明書（DigiCert Global Root G2・Microsoft RSA Root Certificate Authority 2017）に加え、旧 **DigiCert Global Root CA（SHA-1）を含めた3証明書**を束ねることが「Other clients（Python 等）」向けに案内されている。取得元: `https://cacerts.digicert.com/DigiCertGlobalRootCA.crt.pem`・`https://cacerts.digicert.com/DigiCertGlobalRootG2.crt.pem`・`https://www.microsoft.com/pkiops/certs/Microsoft%20RSA%20Root%20Certificate%20Authority%202017.crt`（最後の1つは DER 形式のため PEM 変換が必要）。取得・結合手順は `scripts/azure-db/fetch-ca.sh` に実装し、`~/.config/guapp/azure-mysql-ca.pem`（リポジトリ外）に保存。8.6 の「2証明書」の記載は3証明書が必要という点で不足していたことになる（差分の詳細は本件の完了報告を参照。本書 8.6・9.3 の本文は今回改訂しない） |
+| 2 | `?ssl_ca=<path>` を付けた `DATABASE_URL` で実際に Azure へ接続できるか（8.1 は SQLAlchemy／asyncmy のソースコードから導いた設計であり、実機での接続確認はまだ行っていない） | P2 Wave 0（接続の素振り）で `uv run python -c "..."` の最小コードにより疎通確認する。テスト設計書 IT-AZ-01 | **接続成功**（第1案のみで完結。第2案の実装は不要と判明）。`scripts/azure-db/check_connection.py` で `SELECT 1`→`1`、`SHOW STATUS LIKE 'Ssl_cipher'`→`TLS_AES_256_GCM_SHA384`、`Ssl_version`→`TLSv1.3` を確認。`core/db.py`・`core/config.py` のコード変更は DS-DEC-46（プール設定の環境変数化）分のみで、SSL 接続方式自体のコード変更は行っていない |
+| 3 | 本編 8.2 の `?ssl=true` という書式が実際に接続エラーになるか（8.1 の「推定」の裏取り） | 同上。あえて `?ssl=true` で接続を試み、`ValueError` になることを確認してから本編修正案（9.3）を統括に提示する。テスト設計書 IT-AZ-02 | **裏取り完了**。`?ssl=true` で接続を試みたところ `ValueError: ssl argument must be True, a dict of ssl options, or an ssl.SSLContext, got 'str'` で失敗し、8.1・9.3 の推定どおりであることを確認した |
+| 4 | 講義サーバー接続時の推奨値 `DB_POOL_SIZE=5`／`DB_MAX_OVERFLOW=5`（DS-DEC-46）で十分か、それとも講義サーバー側の `max_connections` がさらに厳しいか | Azure 側で `SHOW VARIABLES LIKE 'max_connections'` を実行して確認する。想定より厳しければ推奨値をさらに下げる（環境変数を変えるだけで対応でき、コード変更は不要） | **確認済み**。`SHOW VARIABLES LIKE 'max_connections'` → `171`（事前情報どおり）。単一 uvicorn プロセス・推奨値 5／5（最大10接続）であれば 171 に対して十分小さく、このまま妥当と判断する。将来 gunicorn 等で複数ワーカーにする場合は `ワーカー数 ×(pool_size+max_overflow) < 171` を目安に調整する |
+| 5 | Windows のローカル開発環境から Azure MySQL への接続で、ファイアウォールの動的 IP（自宅・移動先で変わる IP）が接続の安定性に影響しないか | 実際に複数の作業場所から接続を試し、都度 IP 追加が必要になる運用上の負荷を確認する | **未実施**（今回の作業は Mac 1台からの接続確認のみ。IP が変わった場合の再登録手順は `scripts/azure-db/README.md` に記載したが、複数拠点からの実接続検証は範囲外のまま） |
 
 ### 9.3 本編との差分・矛盾（2026-09-24 統括判断反映）
 
