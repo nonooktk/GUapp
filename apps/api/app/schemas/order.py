@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 from app.schemas.cart import CartLineOut
 
@@ -73,7 +74,9 @@ class OrderCreateIn(BaseModel):
     def _name_not_blank(cls, value: str) -> str:
         # 全角スペースも空白扱い（str.strip() は U+3000 を除く）
         if not value.strip():
-            raise ValueError("氏名に空白以外の文字を含めてください")
+            # 空白のみは「未入力」。空文字（min_length 違反）と同じ型で投げ、
+            # 例外ハンドラが reason=required に揃える（4.5）
+            raise PydanticCustomError("string_too_short", "氏名に空白以外の文字を含めてください")
         return value
 
 

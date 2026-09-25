@@ -199,6 +199,43 @@ def test_ut_sec_02_map_reason(ptype: str, reason: str) -> None:
     assert map_reason(ptype) == reason
 
 
+@pytest.mark.parametrize(
+    ("value", "reason"),
+    [
+        ("", "required"),  # 空文字
+        ("   ", "required"),  # 空白のみ
+        ("　", "required"),  # 全角スペースのみ
+        ("a", "out_of_range"),  # 非空の最小長違反（min_length=2 など）はそのまま
+        (None, "out_of_range"),  # 入力値不明
+    ],
+)
+def test_ut_sec_02_map_reason_string_too_short_blank_is_required(value, reason: str) -> None:
+    """最小長違反でも「空または空白のみ」は利用者から見て未入力 → required（ST 検収指摘）。"""
+    assert map_reason("string_too_short", value) == reason
+    # 最大長違反は入力値に関係なく too_long
+    assert map_reason("string_too_long", value) == "too_long"
+
+
+async def test_ut_sec_02_validation_empty_string_is_required(
+    test_app: FastAPI, client_factory
+) -> None:
+    client = client_factory(test_app)
+    res = await client.post(
+        "/t/orders",
+        json={
+            "ship_name": "",
+            "ship_postal_code": "1234567",
+            "guest_email": "test@example.com",
+            "quantity": 1,
+        },
+    )
+    assert res.status_code == 400
+    assert res.json() == {
+        "code": "validation_error",
+        "fields": [{"name": "ship_name", "reason": "required"}],
+    }
+
+
 # ── 内部トークン ─────────────────────────────────────────────────────────────
 
 

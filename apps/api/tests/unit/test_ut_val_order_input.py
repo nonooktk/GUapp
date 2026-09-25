@@ -165,3 +165,31 @@ async def test_ut_val_02_name_51_via_router_is_too_long(make_app, client_factory
     res = await client.post("/api/v1/orders", json=valid_body(ship_name="あ" * 51), headers=HEADERS)
     assert res.status_code == 400
     assert res.json()["fields"] == [{"name": "ship_name", "reason": "too_long"}]
+
+
+# ── ST 検収指摘: 空文字・空白のみは reason=required（4.5 の固定語） ────────────
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "　", "  \t"])
+async def test_ut_val_02_name_blank_via_router_is_required(
+    make_app, client_factory, blank: str
+) -> None:
+    client = client_factory(make_app())
+    res = await client.post("/api/v1/orders", json=valid_body(ship_name=blank), headers=HEADERS)
+    assert res.status_code == 400, res.text
+    assert res.json()["fields"] == [{"name": "ship_name", "reason": "required"}]
+
+
+async def test_ut_val_02_name_1_char_via_router_ok(make_app, client_factory) -> None:
+    """1 文字は許容（min_length=1）。検証は通り、DB を見る段階（カート無し）で先へ進む。"""
+    client = client_factory(make_app())
+    res = await client.post("/api/v1/orders", json=valid_body(ship_name="a"), headers=HEADERS)
+    assert res.status_code != 400, res.text
+    assert res.json().get("code") != "validation_error"
+
+
+async def test_ut_val_02_address_empty_via_router_is_required(make_app, client_factory) -> None:
+    client = client_factory(make_app())
+    res = await client.post("/api/v1/orders", json=valid_body(ship_address=""), headers=HEADERS)
+    assert res.status_code == 400, res.text
+    assert res.json()["fields"] == [{"name": "ship_address", "reason": "required"}]
