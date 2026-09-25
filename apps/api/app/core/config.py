@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     # テスト専用: 注文確定の金額照合と在庫引当の間に入れる待ち（ms）。
     # APP_ENV=test 以外では無視される（テスト設計書 1.4 #7）
     TEST_RESERVE_DELAY_MS: int = 0
+    # DB 接続プール設定（設計仕様書追補 P2-a 8.5・DS-DEC-46）。
+    # 既定値は現状どおり 20／10。共用の講義サーバーに繋ぐときだけ環境変数で絞る（推奨 5／5）
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+    # Azure MySQL の CA 証明書ファイルの絶対パス（8.1 第2案・DS-DEC-42・45 で使用）。
+    # 第1案（DATABASE_URL の ssl_ca クエリ）で接続できれば未設定のままでよい
+    DB_SSL_CA_PATH: str = ""
 
     @property
     def is_production(self) -> bool:
