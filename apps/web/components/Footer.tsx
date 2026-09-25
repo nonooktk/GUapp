@@ -1,16 +1,17 @@
 import Link from "next/link";
 
 /**
- * 共通フッター（設計仕様書 6.2・U-04、デザイン基準 v1 3 章「フッター」）。5 リンク。遷移先は P2 で実装するため `#`。
+ * 共通フッター（設計仕様書 6.2・U-04、デザイン基準 v1 3 章「フッター」）。5 リンク。
+ * 遷移先は P2-a（設計仕様書 P2 追補a 6.5）で確定した `/contents/{slug}`。
  * 文字色は --color-fg-muted。リンクは縦 py-3 でタッチターゲット 44px 以上を確保する。
  */
 
 const FOOTER_LINKS = [
-  { label: "企業情報", href: "#" },
-  { label: "利用規約", href: "#" },
-  { label: "プライバシー", href: "#" },
-  { label: "特商法", href: "#" },
-  { label: "FAQ", href: "#" },
+  { label: "企業情報", href: "/contents/company" },
+  { label: "利用規約", href: "/contents/terms" },
+  { label: "プライバシー", href: "/contents/privacy" },
+  { label: "特商法", href: "/contents/tokushoho" },
+  { label: "FAQ", href: "/contents/faq" },
 ] as const;
 
 export default function Footer() {
