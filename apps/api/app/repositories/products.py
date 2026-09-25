@@ -64,7 +64,7 @@ class ProductSummary:
     sold_out: bool
 
 
-def _summary_select() -> Select:
+def summary_select() -> Select:
     stock = _stock_summary_subquery()
     sold_out = case(
         (func.coalesce(stock.c.total_stock, 0) <= 0, True),
@@ -85,7 +85,7 @@ def _summary_select() -> Select:
     )
 
 
-def _rows_to_summaries(rows) -> list[ProductSummary]:
+def rows_to_summaries(rows) -> list[ProductSummary]:
     return [
         ProductSummary(
             id=row.id,
@@ -128,11 +128,11 @@ async def list_published(
         count_stmt = count_stmt.where(scope)
     total = int((await session.execute(count_stmt)).scalar_one())
 
-    stmt = _summary_select().offset((page - 1) * per_page).limit(per_page)
+    stmt = summary_select().offset((page - 1) * per_page).limit(per_page)
     if scope is not None:
         stmt = stmt.where(scope)
     rows = (await session.execute(stmt)).all()
-    return _rows_to_summaries(rows), total
+    return rows_to_summaries(rows), total
 
 
 async def colors_by_product(session: AsyncSession, product_ids: list[int]) -> dict[int, list[str]]:
@@ -185,13 +185,13 @@ async def list_related(
         ProductCategory.category_id.in_(own_categories)
     )
     stmt = (
-        _summary_select()
+        summary_select()
         .where(Product.id.in_(same_category))
         .where(Product.id != product_id)
         .limit(limit)
     )
     rows = (await session.execute(stmt)).all()
-    return _rows_to_summaries(rows)
+    return rows_to_summaries(rows)
 
 
 # ── カテゴリ ──
