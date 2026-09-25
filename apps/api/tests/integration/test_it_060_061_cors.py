@@ -71,9 +71,7 @@ async def test_it_cors_01_preflight_from_other_origin_not_allowed(
     assert res.status_code == 400  # CORSMiddleware は不許可 preflight に 400 を返す
 
 
-async def test_it_cors_01_preflight_from_allowed_origin(
-    it_app: FastAPI, client_factory
-) -> None:
+async def test_it_cors_01_preflight_from_allowed_origin(it_app: FastAPI, client_factory) -> None:
     client = client_factory(it_app)
     res = await client.options(
         "/api/v1/health",

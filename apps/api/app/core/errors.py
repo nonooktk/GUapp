@@ -113,9 +113,7 @@ async def _validation_error_handler(_: Request, exc: RequestValidationError) -> 
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     # 詳細はログのみ（マスクフィルタ経由）。本文は固定文言で、
     # 例外メッセージ・SQL・接続文字列を出さない
-    logger.exception(
-        "未捕捉例外 %s %s: %s", request.method, request.url.path, type(exc).__name__
-    )
+    logger.exception("未捕捉例外 %s %s: %s", request.method, request.url.path, type(exc).__name__)
     return JSONResponse(status_code=500, content=INTERNAL_ERROR_BODY)
 
 

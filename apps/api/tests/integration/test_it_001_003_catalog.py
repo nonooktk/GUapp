@@ -46,9 +46,7 @@ async def test_it_001_01_categories_hierarchy(client) -> None:
         c for c in by_slug["kids-teen"]["children"] if c["slug"] == "kids-teen-inner-goods"
     )
     expected = sum(
-        1
-        for p in seed_data.PRODUCTS
-        if p.published and p.category_slug == "kids-teen-inner-goods"
+        1 for p in seed_data.PRODUCTS if p.published and p.category_slug == "kids-teen-inner-goods"
     )
     assert kids_inner["product_count"] == expected
     total_count = sum(c["product_count"] for p in parents for c in p["children"])
@@ -87,9 +85,7 @@ async def test_it_002_01_filter_by_gender_and_category(client) -> None:
     assert res.status_code == 200
     assert res.json()["total"] == _published_count("women") == 10
 
-    res = await client.get(
-        "/api/v1/products", params={"category": "men-outer"}, headers=HEADERS
-    )
+    res = await client.get("/api/v1/products", params={"category": "men-outer"}, headers=HEADERS)
     assert res.status_code == 200
     expected = sum(1 for p in seed_data.PRODUCTS if p.published and p.category_slug == "men-outer")
     # メンズ・アウターは MA-1／ボアフリース／ライトジャケット（AT-08 用 4,990 円）の 3 点
@@ -127,8 +123,16 @@ async def test_it_003_01_product_detail_variants_and_related(client, seed_db) ->
     assert res.status_code == 200, res.text
     body = res.json()
     assert set(body) == {
-        "id", "name", "description", "material", "price_incl_tax",
-        "images", "colors", "sizes", "variants", "related",
+        "id",
+        "name",
+        "description",
+        "material",
+        "price_incl_tax",
+        "images",
+        "colors",
+        "sizes",
+        "variants",
+        "related",
     }
     assert body["id"] == v.product_id
     assert len(body["variants"]) == 6

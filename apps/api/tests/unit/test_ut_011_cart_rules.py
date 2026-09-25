@@ -62,8 +62,11 @@ def test_ut_010_cart_token_is_base64url_43_chars() -> None:
     token = new_cart_token()
     assert len(token) == 43
     # base64url の文字集合のみ（パディング無し）
-    assert set(token) <= set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"  # pragma: allowlist secret  # noqa: E501
+    assert (
+        set(token)
+        <= set(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"  # pragma: allowlist secret  # noqa: E501
+        )
     )
     raw = base64.urlsafe_b64decode(token + "=")
     assert len(raw) == 32

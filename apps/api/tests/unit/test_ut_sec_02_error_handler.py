@@ -77,8 +77,10 @@ async def test_ut_sec_02_unhandled_exception_returns_fixed_500(
     assert "mysql+asyncmy" not in body_text
     assert "RuntimeError" not in body_text
     # ログには詳細（例外種別とスタックトレース）が残る
-    assert any("RuntimeError" in (r.exc_text or "") or "未捕捉例外" in r.getMessage()
-               for r in caplog.records)
+    assert any(
+        "RuntimeError" in (r.exc_text or "") or "未捕捉例外" in r.getMessage()
+        for r in caplog.records
+    )
 
 
 async def test_ut_sec_02_unhandled_exception_log_masks_connection_string(
@@ -172,7 +174,9 @@ def test_ut_sec_02_app_error_to_body_direct() -> None:
     assert AppError(401, "unauthorized").to_body() == {"code": "unauthorized"}
     # detail は code の後ろに並ぶ（順序固定）
     assert list(AppError(422, "limit_exceeded", field="q", limit=10).to_body()) == [
-        "code", "field", "limit",
+        "code",
+        "field",
+        "limit",
     ]
 
 
@@ -225,9 +229,7 @@ async def test_ut_sec_02_internal_token_missing_and_mismatch_401(
     assert res.status_code == 200 and res.json() == {"ok": True}
 
 
-async def test_ut_sec_02_internal_token_unset_rejects_everything(
-    make_app, client_factory
-) -> None:
+async def test_ut_sec_02_internal_token_unset_rejects_everything(make_app, client_factory) -> None:
     """INTERNAL_TOKEN が未設定なら、空文字ヘッダでも素通しにならない。"""
     app = make_app(INTERNAL_TOKEN="")
     app.include_router(_protected_router(), prefix="/api/v1")

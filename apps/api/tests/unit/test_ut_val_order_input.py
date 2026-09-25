@@ -86,7 +86,9 @@ async def test_ut_val_01_via_router_returns_400_with_fields(make_app, client_fac
     res = await client.post(
         "/api/v1/orders",
         json=valid_body(
-            ship_postal_code="100000", ship_phone="0901234567a", guest_email="no-at"  # pragma: allowlist secret  # noqa: E501
+            ship_postal_code="100000",
+            ship_phone="0901234567a",  # pragma: allowlist secret
+            guest_email="no-at",
         ),
         headers=HEADERS,
     )
@@ -160,8 +162,6 @@ def test_ut_val_02_email_255_rejected() -> None:
 
 async def test_ut_val_02_name_51_via_router_is_too_long(make_app, client_factory) -> None:
     client = client_factory(make_app())
-    res = await client.post(
-        "/api/v1/orders", json=valid_body(ship_name="あ" * 51), headers=HEADERS
-    )
+    res = await client.post("/api/v1/orders", json=valid_body(ship_name="あ" * 51), headers=HEADERS)
     assert res.status_code == 400
     assert res.json()["fields"] == [{"name": "ship_name", "reason": "too_long"}]
