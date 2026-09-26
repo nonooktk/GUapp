@@ -8,6 +8,13 @@
 `apps/api/.env.azure`（`DB_USER`・`DB_PASSWORD` の2行、権限600）を編集・コピー・
 移動しないこと。値を `cat`・`echo` で見ようとしないこと。
 
+> [!warning] 講義サーバーに本物の個人情報を入れない（2026-09-25・ADR-0002 変更履歴）
+> 講義サーバーの管理者アカウントは講義で共有されており、管理者は `guapp_nonooktk`（自分の
+> スキーマ）も読める。氏名・住所・電話番号・メールアドレスなど**本物の個人情報を講義サーバーに
+> 入れないこと**。動作確認・デモは注文手続き画面のダミー値（`apps/web/lib/demo-defaults.ts`。
+> `demo@example.com` 等）で行う。ローカル MySQL（Docker／zip 版）も同様に本物の個人情報は
+> 入れない運用とする。
+
 ## 前提
 
 - `apps/api/.env.azure` に、統括が用意した `DB_USER=`・`DB_PASSWORD=` の2行がある

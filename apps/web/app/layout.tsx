@@ -2,10 +2,12 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import { cookies } from "next/headers";
 import { CartProvider } from "@/components/CartProvider";
+import DemoPeriodBanner from "@/components/DemoPeriodBanner";
 import Footer from "@/components/Footer";
 import HeaderWithCart from "@/components/HeaderWithCart";
 import { ToastProvider } from "@/components/Toast";
 import { CART_TOKEN_COOKIE } from "@/lib/cookie";
+import { parseDemoPublicUntil } from "@/lib/demo-banner";
 import { getCategories, loadOrNull } from "@/lib/server/catalog";
 import "./globals.css";
 
@@ -41,11 +43,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const store = await cookies();
   const hasCartCookie = store.has(CART_TOKEN_COOKIE);
   const cats = await loadOrNull(getCategories(), "categories (layout)");
+  // 期間限定公開の帯（公開追補 設計仕様書 6 章・DS-DEC-50）。DEMO_PUBLIC_UNTIL は実行時の
+  // 環境変数なので、ここで process.env を直接読む（NEXT_PUBLIC_ にしない＝ビルド後も延長できる）。
+  const demoUntilDisplay = parseDemoPublicUntil(process.env.DEMO_PUBLIC_UNTIL);
 
   return (
     <html lang="ja" className={`h-full antialiased ${notoSansJP.variable}`}>
       <body className="flex min-h-full flex-col bg-bg font-body text-fg">
         <ToastProvider>
+          <DemoPeriodBanner untilDisplay={demoUntilDisplay} />
           <CartProvider hasCartCookie={hasCartCookie}>
             <HeaderWithCart categories={cats?.categories ?? null} />
             <main id="main" className="mx-auto w-full max-w-page flex-1 px-4 py-6">
