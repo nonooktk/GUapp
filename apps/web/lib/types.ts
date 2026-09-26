@@ -71,10 +71,65 @@ export interface ProductDetail {
   related: RelatedProduct[];
 }
 
+// ---- P2-a: 商品検索・検索サジェスト（DS-API-004・004a） ----
+
+export interface RecommendedCategory {
+  slug: string;
+  name: string;
+  product_count: number;
+}
+
+/** DS-API-004 検索結果。`similar_keywords`・`recommended_categories` は 0 件のときだけ中身がある */
+export interface SearchResponse {
+  query: string;
+  items: ProductSummary[];
+  page: number;
+  per_page: number;
+  total: number;
+  has_more: boolean;
+  similar_keywords: string[];
+  recommended_categories: RecommendedCategory[];
+}
+
+export interface SuggestItem {
+  id: number;
+  name: string;
+}
+
+/** DS-API-004a 検索サジェスト。最大 5 件 */
+export interface SuggestResponse {
+  items: SuggestItem[];
+}
+
 export interface PublicSettings {
   tax_rate: string;
   shipping_fee: number;
   free_shipping_threshold: number;
+}
+
+// ---- P2-a: コンテンツ・お知らせ・FAQ・静的ページ（DS-API-005・006） ----
+
+export type ContentKind = "feature" | "news" | "faq" | "static";
+
+/** DS-API-005 一覧の 1 件（body は含まない） */
+export interface ContentListItem {
+  slug: string;
+  title: string;
+  kind: ContentKind;
+  /** ISO 8601（UTC）。表示は JST に変換する（DS-DEC-40） */
+  publish_from: string;
+}
+
+export interface ContentsResponse {
+  items: ContentListItem[];
+}
+
+/** DS-API-006 FAQ・静的ページの詳細 */
+export interface ContentDetail {
+  slug: string;
+  kind: ContentKind;
+  title: string;
+  body: string;
 }
 
 export type StockStatus = "ok" | "insufficient" | "out_of_stock";

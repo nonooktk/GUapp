@@ -21,7 +21,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
-from app.seed import seed, truncate_p1_tables
+from app.seed import seed, truncate_all_tables
 from tests.integration import concurrency_helpers
 from tests.integration.live_server import live_server  # noqa: F401  # フィクスチャ登録
 
@@ -130,4 +130,4 @@ async def seed_db(it_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
         yield it_engine
     finally:
         async with it_engine.begin() as conn:
-            await truncate_p1_tables(conn)
+            await truncate_all_tables(conn)

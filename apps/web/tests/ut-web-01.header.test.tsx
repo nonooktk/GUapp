@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Header from "@/components/Header";
 
 // テスト設計書 UT-WEB-01（カート点数バッジ）の土台。設計仕様書 6.2 共通レイアウト
+// Header は P2-a の SearchBox（useRouter）を内部で使うため、App Router 無しで render するにはモックが要る
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+}));
 describe("UT-WEB-01 Header", () => {
   it("props の点数がバッジに表示される", () => {
     render(<Header cartCount={3} />);
@@ -25,7 +29,8 @@ describe("UT-WEB-01 Header", () => {
     render(<Header cartCount={0} />);
     expect(screen.getByRole("button", { name: "メニューを開く" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GU ホーム" })).toHaveAttribute("href", "/");
-    expect(screen.getByRole("link", { name: "検索" })).toBeInTheDocument();
+    // 検索は P2-a で実装（モバイルはパネルを開くボタン、デスクトップは常設の入力欄。SearchBox.test.tsx 参照）
+    expect(screen.getByRole("button", { name: "検索" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "お気に入り" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "会員" })).toBeInTheDocument();
   });

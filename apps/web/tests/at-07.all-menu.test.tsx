@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Header from "@/components/Header";
 import type { Category } from "@/lib/types";
 
 // テスト設計書 AT-07（オールメニューのカテゴリから商品一覧へ遷移）・設計仕様書 6.2 U-06・デザイン基準 v1 6 章（キーボード操作）
+// Header は P2-a の SearchBox（useRouter）を内部で使うため、App Router 無しで render するにはモックが要る
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+}));
 const CATEGORIES: Category[] = [
   {
     slug: "women",
@@ -107,8 +111,10 @@ describe("AT-07 オールメニュー（Header + AllMenu）", () => {
       "/products?gender=kids_teen&category=kids-teen-outer",
     );
 
-    // P2 のテキストリンクは # のまま
-    expect(within(nav).getByRole("link", { name: "お知らせ P2" })).toHaveAttribute("href", "#");
+    // P2-a で実装したコンテンツ系リンク（設計仕様書 P2 追補a 6.5）
+    expect(within(nav).getByRole("link", { name: "お知らせ" })).toHaveAttribute("href", "/contents?kind=news");
+    expect(within(nav).getByRole("link", { name: "FAQ" })).toHaveAttribute("href", "/contents/faq");
+    expect(within(nav).getByRole("link", { name: "INFO" })).toHaveAttribute("href", "/contents/company");
   });
 
   it("リンクを選ぶとメニューが閉じる", () => {
@@ -133,7 +139,7 @@ describe("AT-07 オールメニュー（Header + AllMenu）", () => {
     openMenu();
     const dialog = screen.getByRole("dialog");
     const close = screen.getByRole("button", { name: "メニューを閉じる" });
-    const last = screen.getByRole("link", { name: "INFO P2" });
+    const last = screen.getByRole("link", { name: "INFO" });
     last.focus();
     fireEvent.keyDown(dialog, { key: "Tab" });
     expect(close).toHaveFocus();

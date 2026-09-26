@@ -47,7 +47,5 @@ async def get_public_settings(session: AsyncSession) -> PricingSettings:
     return PricingSettings(
         tax_rate=_to_tax_rate(raw["tax_rate"]),
         shipping_fee=_to_int("shipping_fee", raw["shipping_fee"]),
-        free_shipping_threshold=_to_int(
-            "free_shipping_threshold", raw["free_shipping_threshold"]
-        ),
+        free_shipping_threshold=_to_int("free_shipping_threshold", raw["free_shipping_threshold"]),
     )

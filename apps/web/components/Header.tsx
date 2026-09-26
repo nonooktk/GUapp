@@ -3,15 +3,20 @@
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import AllMenu from "@/components/AllMenu";
+import SearchBox from "@/components/SearchBox";
+import SearchPanel from "@/components/SearchPanel";
 import type { Category } from "@/lib/types";
 
 /**
- * 共通ヘッダー（設計仕様書 6.2・U-04・REQ-FR-1201、デザイン基準 v1 3 章「ヘッダー」）。
+ * 共通ヘッダー（設計仕様書 6.2・U-04・REQ-FR-1201、デザイン基準 v1 3 章「ヘッダー」、
+ * P2 追補a 6.1「ヘッダーの検索欄」）。
  * 左: ≡ メニュー ／ 中央: GU ロゴ（テキスト。ロゴ画像は使わない） ／ 右: 検索・お気に入り・カート（点数バッジ）・会員。
  * 高さ 64px、右側は 44×44px のアイコンボタン 4 つ（タッチターゲット最小 44px）。375px 幅でも 1 行に収まる。
  * `sticky top-0` は GU 実サイトと異なる意図的な差（基準 7 章）。
  * 「≡ メニュー」はオールメニューのドロワー（AllMenu・U-06・AT-07）を開閉する。閉じたらフォーカスを「≡」へ戻す。
- * 検索・お気に入り・会員の遷移先は P2。
+ * 検索: sm 以上は幅 240px 程度の入力欄を常設（`SearchBox`）。375px は検索アイコンをタップすると
+ * オーバーレイの検索パネル（`SearchPanel`）が開く。閉じたら検索アイコンへフォーカスを戻す（AllMenu と同じ規則）。
+ * お気に入り・会員の遷移先は P2 以降。
  */
 
 export interface HeaderProps {
@@ -69,11 +74,20 @@ export default function Header({ cartCount, categories = null }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchPanelId = useId();
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
 
   // 閉じたら「≡」へフォーカスを戻す（デザイン基準 6 章: キーボード操作の連続性）
   const closeMenu = () => {
     setMenuOpen(false);
     menuButtonRef.current?.focus();
+  };
+
+  // 閉じたら検索アイコンへフォーカスを戻す（AllMenu と同じ規則。設計仕様書 P2 追補a 6.1）
+  const closeSearch = () => {
+    setSearchOpen(false);
+    searchButtonRef.current?.focus();
   };
 
   return (
@@ -96,20 +110,35 @@ export default function Header({ cartCount, categories = null }: HeaderProps) {
           <span className="hidden sm:inline">メニュー</span>
         </button>
 
-        {/* 中央: ロゴ（テキスト）。375px は右のアイコン 4 つ（176px）と重なるため flex の流れで中央寄せ、sm 以上で画面中央に絶対配置 */}
-        <Link
-          href="/"
-          className="inline-flex h-11 items-center px-2 text-2xl font-bold tracking-heading text-fg sm:absolute sm:left-1/2 sm:-translate-x-1/2"
-          aria-label="GU ホーム"
-        >
-          GU
-        </Link>
-
-        {/* 右: 検索・お気に入り・カート・会員 */}
-        <nav aria-label="ユーティリティ" className="flex items-center">
-          <Link href="#" className={iconLinkClass} aria-label="検索">
-            <SearchIcon />
+        {/* 中央: ロゴ（テキスト）＋sm 以上は検索欄をひとまとめにして、menu / このグループ / nav の
+            3 グループを justify-between で配置する（P2 追補a 6.1 のワイヤーどおり、ロゴのすぐ右に検索欄）。
+            375px は検索欄が無い（hidden）ため、実質ロゴ 1 個の従来どおりの flex 中央寄せになる */}
+        <div className="flex shrink-0 items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex h-11 shrink-0 items-center px-2 text-2xl font-bold tracking-heading text-fg"
+            aria-label="GU ホーム"
+          >
+            GU
           </Link>
+          {/* sm 以上の常設検索欄（幅 240px 程度。P2 追補a 6.1） */}
+          <SearchBox className="hidden w-60 sm:block" />
+        </div>
+
+        {/* 右: 検索（375px のみアイコン）・お気に入り・カート・会員 */}
+        <nav aria-label="ユーティリティ" className="flex items-center">
+          <button
+            ref={searchButtonRef}
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className={`${iconLinkClass} sm:hidden`}
+            aria-label="検索"
+            aria-haspopup="dialog"
+            aria-expanded={searchOpen}
+            aria-controls={searchPanelId}
+          >
+            <SearchIcon />
+          </button>
           <Link href="#" className={iconLinkClass} aria-label="お気に入り">
             <HeartIcon />
           </Link>
@@ -131,6 +160,7 @@ export default function Header({ cartCount, categories = null }: HeaderProps) {
         </nav>
       </div>
       <AllMenu id={menuId} open={menuOpen} categories={categories} onClose={closeMenu} />
+      <SearchPanel id={searchPanelId} open={searchOpen} onClose={closeSearch} />
     </header>
   );
 }

@@ -97,12 +97,14 @@ def test_ut_hooks_not_imported_by_production_path() -> None:
 
 
 def test_ut_models_export_13_tables() -> None:
-    from app.models import P1_TABLES, Base
+    from app.models import ALL_TABLES, P1_TABLES, P2A_TABLES, Base
 
     names = set(Base.metadata.tables)
-    assert names == P1_TABLES
-    # 設計書 5.2 は「13 表」と書くが、DS-TBL-05〜09・12〜16・21・23 を数えると 12 表
-    assert len(names) == 12
+    # P1（12 表）に P2-a の DS-TBL-22 contents（1 表）を加えて 13 表になった
+    assert P1_TABLES | P2A_TABLES == ALL_TABLES
+    assert names == ALL_TABLES
+    assert len(P1_TABLES) == 12
+    assert len(names) == 13
 
 
 def test_ut_models_key_constraints() -> None:
@@ -134,8 +136,14 @@ def test_ut_models_key_constraints() -> None:
     status_type = t["orders"].c.status.type
     assert isinstance(status_type, Enum)
     assert set(status_type.enums) == {
-        "pending_payment", "accepted", "preparing", "shipped",
-        "delivered", "pickup_expired", "cancelled", "payment_failed",
+        "pending_payment",
+        "accepted",
+        "preparing",
+        "shipped",
+        "delivered",
+        "pickup_expired",
+        "cancelled",
+        "payment_failed",
     }
     # P1 では member_id に FK 無し
     assert not t["orders"].c.member_id.foreign_keys

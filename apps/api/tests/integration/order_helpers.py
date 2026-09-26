@@ -26,9 +26,22 @@ DUMMY_SHIPPING: dict[str, str] = {
 }
 
 ORDER_KEYS = {
-    "order_number", "status", "items", "subtotal", "shipping_fee", "total", "tax_included",
-    "tax_rate", "ship_name", "ship_postal_code", "ship_address", "ship_phone", "guest_email",
-    "receive_method", "payment_method", "ordered_at",
+    "order_number",
+    "status",
+    "items",
+    "subtotal",
+    "shipping_fee",
+    "total",
+    "tax_included",
+    "tax_rate",
+    "ship_name",
+    "ship_postal_code",
+    "ship_address",
+    "ship_phone",
+    "guest_email",
+    "receive_method",
+    "payment_method",
+    "ordered_at",
 }
 ORDER_ITEM_KEYS = {"product_name", "color", "size", "unit_price", "quantity", "line_total"}
 

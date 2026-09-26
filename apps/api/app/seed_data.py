@@ -352,3 +352,138 @@ EXPECTED_VARIANT_COUNT = len(PRODUCTS) * 2 * len(SIZES)
 EXPECTED_IMAGE_COUNT = len(PRODUCTS)
 EXPECTED_PRODUCT_CATEGORY_COUNT = len(PRODUCTS)
 EXPECTED_SYSTEM_SETTING_COUNT = len(SYSTEM_SETTINGS)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# P2-a: contents（DS-TBL-22。設計仕様書 P2 追補a 5.2）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# `news`・`feature` の掲載期間は固定日付ではなく、seed 実行時刻からの相対値（日数オフセット）で
+# 持つ（設計仕様書 5.2: 固定日付だと演習を続けるうちに掲載期間外で表示されなくなる事故が起きる）。
+# `publish_to_offset_days` が None は「無期限」。
+
+
+@dataclass(frozen=True)
+class ContentSeed:
+    slug: str
+    kind: str  # ContentKind の値（feature / news / faq / static）
+    title: str
+    body: str
+    sort_order: int = 0
+    publish_from_offset_days: int = -365  # seed 実行時刻からの相対日数（負数 = 過去）
+    publish_to_offset_days: int | None = None  # None = 無期限
+
+
+_FAQ_BODY = """\
+Q. 注文後にキャンセルできますか？
+A. 出荷準備前であればマイページから取り消せます。出荷準備に入った後はキャンセルできません。
+
+Q. 送料はいくらですか？
+A. 4,990円（税込）以上のご注文で送料無料です。それ未満は一律550円（税込）です。
+
+Q. 支払い方法を教えてください。
+A. クレジットカードでのお支払いに対応しています（本サイトは演習用のため実際の決済は行われません）。
+
+Q. 商品を返品できますか？
+A. 未使用・タグ付きの状態であれば、商品到着後14日以内に限り返品を承ります。
+
+Q. 注文状況はどこで確認できますか？
+A. 注文完了メールに記載の注文番号とメールアドレスで、注文照会ページから確認できます。\
+"""
+
+_TERMS_BODY = """\
+第1条（本規約について）
+本規約は、本サイト（講義演習用のデモサイト）の利用条件を定めるものです。
+
+第2条（注文の成立）
+利用者が注文を確定した時点で、本サイト上での注文が成立するものとします。
+
+第3条（商品の受け渡し）
+商品の配送方法・配送日時は、注文確定時の画面表示によるものとします。
+
+第4条（禁止事項）
+利用者は、本サイトの運営を妨げる行為、法令に違反する行為を行ってはなりません。
+
+第5条（免責事項）
+本サイトは講義演習用のデモです。実際の注文・決済・配送は行われません。\
+"""
+
+_PRIVACY_BODY = """\
+1. 個人情報の取得
+本サイト（講義演習用のデモ）は、注文手続きに必要な範囲で氏名・住所・電話番号・メールアドレスを取得します。
+
+2. 個人情報の利用目的
+取得した情報は、注文確認・商品発送・お問い合わせ対応にのみ利用します。
+
+3. 個人情報の第三者提供
+法令に基づく場合を除き、取得した個人情報を第三者に提供することはありません。
+
+4. 本サイトについて
+本サイトは講義演習用のデモです。実際の個人情報の収集・保管は行われません。\
+"""
+
+_TOKUSHOHO_BODY = """\
+販売業者：サンプルアパレル株式会社（架空の事業者・講義演習用のダミーです）
+運営責任者：演習担当　太郎（架空の氏名）
+所在地：東京都架空区架空一丁目1番1号（架空の住所）
+電話番号：03-0000-0000（架空の番号）
+メールアドレス：sample-demo@example.com
+販売価格：各商品ページに税込価格で表示
+商品代金以外の必要料金：送料（4,990円未満のご注文は550円、以上は無料）
+お支払い方法：クレジットカード
+お支払い時期：ご注文確定時
+商品の引き渡し時期：ご注文確定後、通常3〜7営業日以内に発送
+返品・交換：未使用・タグ付きの状態に限り、商品到着後14日以内に受け付けます
+
+本サイトは講義演習用のデモです。実際の販売・決済・配送は行われません。\
+"""
+
+_COMPANY_BODY = """\
+会社名：サンプルアパレル株式会社（架空の事業者・講義演習用のダミーです）
+所在地：東京都架空区架空一丁目1番1号（架空の住所）
+電話番号：03-0000-0000（架空の番号）
+設立：架空の年月
+事業内容：衣料品の企画・販売（演習用の架空設定）
+
+本サイトは講義演習用のデモです。実在する企業・団体とは一切関係ありません。\
+"""
+
+CONTENTS: tuple[ContentSeed, ...] = (
+    ContentSeed(slug="faq", kind="faq", title="よくある質問", body=_FAQ_BODY),
+    ContentSeed(slug="terms", kind="static", title="利用規約", body=_TERMS_BODY),
+    ContentSeed(slug="privacy", kind="static", title="プライバシーポリシー", body=_PRIVACY_BODY),
+    ContentSeed(
+        slug="tokushoho",
+        kind="static",
+        title="特定商取引法に基づく表記",
+        body=_TOKUSHOHO_BODY,
+    ),
+    ContentSeed(slug="company", kind="static", title="企業情報", body=_COMPANY_BODY),
+    ContentSeed(
+        slug="news-001",
+        kind="news",
+        title="サイトオープンのお知らせ",
+        body="GU EC サイト（演習用）をオープンしました。ぜひご利用ください。",
+        publish_from_offset_days=-30,
+        publish_to_offset_days=None,
+    ),
+    ContentSeed(
+        slug="news-002",
+        kind="news",
+        title="送料無料キャンペーンのお知らせ",
+        body="期間中、4,990円（税込）未満のご注文でも送料が無料になるキャンペーンを実施中です。",
+        publish_from_offset_days=-7,
+        publish_to_offset_days=30,
+    ),
+    ContentSeed(
+        slug="feature-001",
+        kind="feature",
+        title="2026 AUTUMN 特集",
+        body="秋の新作アイテムをピックアップしてご紹介します。",
+        sort_order=0,
+        publish_from_offset_days=-1,
+        publish_to_offset_days=None,
+    ),
+)
+
+EXPECTED_CONTENT_COUNT = len(CONTENTS)

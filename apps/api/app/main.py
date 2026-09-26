@@ -11,7 +11,7 @@ from app.core.errors import install_error_handlers
 from app.core.logging import setup_logging
 from app.core.rate_limit import SlidingWindowRateLimiter
 from app.core.security import install_cors, verify_internal_token
-from app.routers import cart, catalog, checkout, health, orders
+from app.routers import cart, catalog, checkout, content, health, orders, search
 from app.routers import settings as settings_router
 
 
@@ -57,6 +57,10 @@ def build_protected_router(*extra: APIRouter) -> APIRouter:
     # Wave 2: 確認画面（021）・注文確定（022）・注文照会（023）
     api.include_router(checkout.router)
     api.include_router(orders.router)
+    # P2-a: コンテンツ・お知らせ・FAQ・静的ページ（DS-API-005・006）
+    api.include_router(content.router)
+    # P2-a: 商品検索・検索サジェスト（DS-API-004・004a）
+    api.include_router(search.router)
     for router in extra:
         api.include_router(router)
     return api
