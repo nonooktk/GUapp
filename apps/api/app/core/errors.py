@@ -5,6 +5,8 @@
 - Pydantic の入力検証エラー（FastAPI 既定 422）は 400 `validation_error` に変換する。
   reason は固定語 required／format／too_long／out_of_range。
 - 未捕捉例外は 500 固定文言。詳細（スタックトレース）はログのみ。
+- ルート不一致（404）・メソッド不一致（405）など FastAPI／Starlette が内部で投げる
+  `HTTPException` も同じ `{code}` 形に揃える（ST 検収指摘: 既定の `{"detail": ...}` を出さない）。
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("app.errors")
 
@@ -36,6 +39,16 @@ _REASON_OUT_OF_RANGE = {
     "string_too_short",
     "multiple_of",
     "finite_number",
+}
+
+
+# Starlette／FastAPI が内部で投げる HTTPException の status → 4.5 の code
+_HTTP_STATUS_CODES: dict[int, str] = {
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    429: "rate_limited",
 }
 
 
@@ -70,9 +83,15 @@ def internal_error() -> AppError:
     return AppError(500, "internal_error", message=INTERNAL_ERROR_BODY["message"])
 
 
-def map_reason(error_type: str) -> str:
-    """Pydantic のエラー型文字列を reason 固定語へ対応付ける。"""
+def map_reason(error_type: str, input_value: Any = None) -> str:
+    """Pydantic のエラー型文字列を reason 固定語へ対応付ける。
+
+    文字列の最小長違反（`string_too_short`）で入力が空または空白のみなら、利用者から見て
+    「未入力」なので `required` にする。それ以外の最小長違反は `out_of_range` のまま。
+    """
     if error_type in _REASON_REQUIRED:
+        return "required"
+    if error_type == "string_too_short" and _is_blank_string(input_value):
         return "required"
     if error_type in _REASON_TOO_LONG:
         return "too_long"
@@ -80,6 +99,11 @@ def map_reason(error_type: str) -> str:
         return "out_of_range"
     # 型不一致（int_parsing など）・パターン不一致・enum 外・メール形式などはすべて format
     return "format"
+
+
+def _is_blank_string(value: Any) -> bool:
+    # 全角スペース（U+3000）も str.strip() で除かれる
+    return isinstance(value, str) and not value.strip()
 
 
 def _field_name(loc: tuple[Any, ...]) -> str:
@@ -93,7 +117,7 @@ def validation_error_body(exc: RequestValidationError) -> dict[str, Any]:
     seen: set[tuple[str, str]] = set()
     for err in exc.errors():
         name = _field_name(tuple(err.get("loc", ())))
-        reason = map_reason(str(err.get("type", "")))
+        reason = map_reason(str(err.get("type", "")), err.get("input"))
         key = (name, reason)
         if key in seen:
             continue
@@ -110,6 +134,15 @@ async def _validation_error_handler(_: Request, exc: RequestValidationError) -> 
     return JSONResponse(status_code=400, content=validation_error_body(exc))
 
 
+async def _http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+    # ルート不一致 404・メソッド不一致 405・本番の /docs 無効化 404 など。
+    # 405 は Starlette が付ける `Allow` ヘッダをそのまま返す
+    if exc.status_code >= 500:
+        return JSONResponse(status_code=exc.status_code, content=INTERNAL_ERROR_BODY)
+    code = _HTTP_STATUS_CODES.get(exc.status_code, "http_error")
+    return JSONResponse(status_code=exc.status_code, content={"code": code}, headers=exc.headers)
+
+
 async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
     # 詳細はログのみ（マスクフィルタ経由）。本文は固定文言で、
     # 例外メッセージ・SQL・接続文字列を出さない
@@ -121,4 +154,5 @@ def install_error_handlers(app: FastAPI) -> None:
     """4.5 の規則に沿った例外ハンドラを 1 か所で登録する。"""
     app.add_exception_handler(AppError, _app_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(StarletteHTTPException, _http_exception_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, _unhandled_error_handler)
