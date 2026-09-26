@@ -442,10 +442,11 @@ BFF への状態変更リクエスト中はボタンを無効化して処理中�
 
 | コード | code | 本文 | 備考 |
 | --- | --- | --- | --- |
-| 400 | validation_error | `{code, fields:[{name, reason}]}` | FastAPI 既定の 422 を例外ハンドラで 400 に変換。reason は固定語（required／format／too_long／out_of_range） |
+| 400 | validation_error | `{code, fields:[{name, reason}]}` | FastAPI 既定の 422 を例外ハンドラで 400 に変換。reason は固定語（required／format／too_long／out_of_range）。`required` は必須欠落に加え、文字列の最小長違反で値が空または空白のみ（全角含む）の場合も含む。非空の最小長違反は `out_of_range` |
 | 401 | unauthorized | `{code}` | 内部トークン不一致・セッション無効・期限切れ。管理画面は 302 で SCR-014 |
 | 403 | forbidden | `{code}` | CSRF 不一致、ロール不足、アカウントロック中（locked_until は返さない） |
-| 404 | not_found | `{code}` | 存在しない・非公開・他人のもの。3 者を区別しない |
+| 404 | not_found | `{code}` | 存在しない・非公開・他人のもの。3 者を区別しない。未定義ルート・本番で無効化した `/docs` 等も同形（FastAPI 既定の `{"detail"}` は出さない。PR #28） |
+| 405 | method_not_allowed | `{code}` ＋ `Allow` ヘッダ | ルートはあるがメソッドが違う。ルーティング時に決まるため判定順序 1 より前に返る |
 | 409 | 業務名 | `{code, ...詳細}` | out_of_stock {items}／price_changed {amounts}／already_ordered {order_number}／invalid_transition {from, to}／duplicate {field}／empty_cart |
 | 422 | limit_exceeded ほか | `{code, field, limit}` | limit_exceeded／unsupported_value |
 | 429 | rate_limited | `{code}` ＋ Retry-After ヘッダ | |
@@ -780,7 +781,8 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | ACS_CONNECTION_STRING / MAIL_FROM | api | P2 |
 | ANTHROPIC_API_KEY | api | P2 |
 | PAYMENT_STUB_RESULT | api | P1 のスタブ切替（ok/ng） |
-| （ヘッダ）X-Forwarded-For | web→api | BFF が利用者の送信元 IP を付与。FastAPI は内部トークン付きの呼び出しに限りこれを信用し、ゲスト照会のレート制限（100 回/時/IP）に使う |
+| （ヘッダ）X-Forwarded-For | web→api | BFF が利用者の送信元 IP を付与。**BFF は利用者送信の `X-Forwarded-For`・`X-Client-IP` を転送しない**。`TRUSTED_PROXY_HOPS >= 1` のときだけ `X-Client-IP`（App Service front end）→ 右から hops 番目の XFF を信用し、0 では接続元のみ（2026-09-25 検収指摘 PR #27）。FastAPI は内部トークン付きの呼び出しに限りこれを信用し、ゲスト照会のレート制限（100 回/時/IP）に使う |
+| TRUSTED_PROXY_HOPS | web | 信頼するプロキシのホップ数（既定 0。App Service 配下は 1）。利用者が付けたヘッダを送信元 IP として使わないための設定 |
 | SESSION_COOKIE_DOMAIN | web | |
 
 ### 8.3 ローカル開発
