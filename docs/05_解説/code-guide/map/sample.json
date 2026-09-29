@@ -1,0 +1,40 @@
+{
+  "intro_html": "<p>動作確認用のサンプルです。本番の説明は descriptions.json で差し替えます。</p>",
+  "blocks": [
+    {"id": "api", "path": "apps/api", "title": "apps/api", "subtitle": "業務ロジックと DB（FastAPI）", "summary": "サンプル: 注文確定などの処理を持つ。", "layer": "api"},
+    {"id": "web", "path": "apps/web", "title": "apps/web", "subtitle": "画面と BFF（Next.js）", "summary": "サンプル: 画面と、ブラウザと API の間に立つ BFF。", "layer": "web"},
+    {"id": "docs", "path": "docs", "title": "docs", "subtitle": "設計書と解説書", "summary": "サンプル: 要求から検収までの文書。", "layer": "docs"}
+  ],
+  "nodes": {
+    "apps/web": {
+      "role": "Next.js の画面と BFF",
+      "body_html": "<p>ブラウザから見えるのはここ。入口は <a class=\"ref\" data-ref=\"apps/web/proxy.ts::proxy\">proxy</a>。</p><ul><li>画面: <code>app/</code></li><li>共通処理: <code>lib/</code></li></ul>",
+      "open_when": ["画面の見た目を変えたい", "API の呼び方を追いたい"],
+      "key_files": ["apps/web/proxy.ts", "apps/web/lib/server/api.ts"],
+      "guide": ["s01", "s03-cart"]
+    },
+    "apps/web/proxy.ts": {
+      "role": "全リクエストの入口",
+      "body_html": "<p>Basic 認証や CSRF の検査をまとめて行う。</p>",
+      "ref": "apps/web/proxy.ts::proxy"
+    },
+    "apps/web/lib": {"role": "画面から使う共通処理"},
+    "apps/web/lib/server/api.ts": {"role": "サーバー側から API を呼ぶ"},
+    "apps/web/app": {"role": "画面（App Router）", "body_html": "<p>URL とフォルダが対応する。</p>"},
+    "apps/web/public/products": {"role": "商品画像"},
+    "apps/api": {
+      "role": "FastAPI の API",
+      "body_html": "<p>注文の確定は <a class=\"ref\" data-ref=\"apps/api/app/services/orders.py::create_order\">create_order</a> から始まる。</p>",
+      "open_when": ["注文や在庫のルールを確認したい"],
+      "key_files": ["apps/api/app/main.py", "apps/api/app/services/orders.py"],
+      "guide": ["s03-cart"]
+    },
+    "apps/api/app/main.py": {"role": "アプリの組み立て"},
+    "apps/api/app/services/orders.py": {"role": "注文確定のロジック", "ref": "apps/api/app/services/orders.py::create_order"},
+    "docs": {"role": "文書", "body_html": "<p>番号順に 00 計画 → 05 検収。</p>"}
+  },
+  "collapse": [
+    {"path": "apps/web/public/products", "label": "商品画像 31 枚（ファイル名は商品 ID）"}
+  ],
+  "tips_html": "<h3>IDE で探すときのコツ</h3><p>ファイル名の一部を絞り込み欄に入れると、ヒットした行だけが残ります。</p>"
+}

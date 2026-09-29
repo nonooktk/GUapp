@@ -1,8 +1,10 @@
-# GUapp コード解説書 組み立て基盤
+# GUapp コード解説書・リポジトリ地図 組み立て基盤
 
 コードレビュー中に読む解説書 HTML を、`content/*.html`（本文）と `template.html`（外枠・CSS・JS）から組み立てる。
 本文中のコード参照（関数名など）をクリックすると、右からドロワーが開き、該当コードを行番号付きで表示する。
 フロー図の各ステップも同様にクリックでコードが開く。「流れを再生」で処理の順番がアニメーションで追える。
+
+同じ `build.py` に `--map` を付けると、IDE の横に開いて「どこに何があって、どういう中身か」を引く **リポジトリ地図**（`GU_ECsite_リポジトリ地図.html`）を組み立てる。作り方は末尾の「リポジトリ地図」を参照。
 
 ## 使い方
 
@@ -21,6 +23,7 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 - `content/00-` で始まるファイルは `--include-sample` のときだけ取り込む
 - 標準出力に章数・参照数・ユニークスニペット数・出力サイズを出す
 - 検証用の追加オプション: `--content-dir <dir>`（本文ディレクトリの差し替え）、`--out <path>`（出力先の差し替え）
+- `--map-url <URL>`: ヘッダーの「リポジトリ地図」リンクの向き先（既定: `GU_ECsite_リポジトリ地図.html`。同じフォルダ）
 
 本番の再ビルド前には `git fetch origin` で `origin/main` を最新にする。
 
@@ -29,9 +32,15 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 | パス | 役割 |
 |---|---|
 | `build.py` | 組み立てスクリプト（標準ライブラリのみ） |
-| `template.html` | 外枠。CSS・JS・ヘッダー・目次。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` |
+| `template.html` | 解説書の外枠。CSS・JS・ヘッダー・目次。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{SNIPPETS_CODE}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` `{{MAP_URL}}`。`{{PARTIAL:名前}}` は `partials/名前` の中身に置き換わる |
 | `content/NN-*.html` | 本文。ファイル名順に連結される |
 | `content/00-sample.html` | 動作確認用サンプル（`--include-sample` のときだけ入る） |
+| `partials/tokens.css` | デザイントークン（ライト/ダークの色・フォント）。解説書と地図で共通 |
+| `partials/drawer.css` | コード参照チップ・コードドロワー・hljs の CSS。共通 |
+| `partials/drawer.js` | コード参照・ドロワー・ホバーのツールチップ・hljs 読み込みの JS。共通（IIFE の中に差し込む） |
+| `map/template-map.html` | 地図の外枠（CSS・JS・ヘッダー・全体図・ツリー・説明パネル） |
+| `map/descriptions.json` | 地図の説明データの本番ファイル（説明担当が作る） |
+| `map/sample.json` | 地図の動作確認用サンプル（最終出力には使わない） |
 
 ## 本文の書き方の約束
 
@@ -193,4 +202,111 @@ Tab で移動し、Enter / Space で開ける（JS が `role="button" tabindex="
 - TS の `Class.method`、Python 以外のシンボル指定（yaml 等）は未対応。必要なら `#L` 範囲で指定する
 - `type X = {...} | {...}` のように波括弧の後ろへ式が続く型は、最初の `}` の行で終わる
 - スニペットは全件を HTML に埋め込むため、参照数が増えるとファイルが大きくなる
+- スニペットのコード本体は JSON に入れず、`<script type="text/plain" data-snippet="キー">` に原文のまま置く（JSON 化すると `"` が `\"` になるなど原文と違う文字列になり、detect-secrets がリポジトリ本体では出ない誤検知を出したため）。メタ情報（path・行範囲・URL など）は `<script type="application/json" id="snippets-data">` に 1 件ずつ改行して置く。script の終端・HTML コメントに見える並びだけ、`<` の直後にバックスラッシュを 1 つ足して埋め込み、ページ側で 1 つ引いて戻す（可逆）
 - ヘッダーの目次（狭い画面）は全 h3 を展開する。広い画面のサイドバーは現在の章の h3 だけを展開する
+
+---
+
+# リポジトリ地図（`--map`）
+
+IDE のエクスプローラーの横に開いて、フォルダ・ファイルごとに「何が入っていて、どう使うか」を引く HTML。ツリーは git から自動で作り、説明は JSON から差し込む。
+
+## 作り方
+
+```bash
+python3 docs/05_解説/code-guide/build.py --map                                   # 説明は map/descriptions.json
+python3 docs/05_解説/code-guide/build.py --map --map-data docs/05_解説/code-guide/map/sample.json   # 動作確認（サンプル）
+python3 docs/05_解説/code-guide/build.py --map --check                          # 出力を書かず検証だけ
+python3 docs/05_解説/code-guide/build.py --map --tree-commit HEAD --commit <SHA> --guide-url GU_ECsite_コード解説.html
+```
+
+- 出力: `docs/05_解説/GU_ECsite_リポジトリ地図.html`（`--out` で差し替え可）
+- `--map-data`: 説明データ。既定 `code-guide/map/descriptions.json`。無ければ exit 1
+- `--tree-commit`: ツリー（フォルダ・ファイルの一覧）を作るコミット。既定 `HEAD`（ブランチ上の新しい docs も載る）。`git ls-tree -r -l -z` で読むので日本語パスもそのまま扱える
+- `--commit`: プレビュー（中身）を読むコミット。既定 `origin/main` の完全 SHA。`--tree-commit` にだけあって `--commit` に無いファイルは、ツリー側のコミットから読む（GitHub リンクもそのコミットを指す）
+- `--guide-url`: 地図から解説書へのリンク先。既定 `GU_ECsite_コード解説.html`（同じフォルダ）。説明データの `guide` の値（例 `s03-cart`）は `<guide-url>#<id>` のリンクになる
+- `--content-dir`: `guide` の id を照合する解説書の本文（既定 `code-guide/content`）
+- 解説書のヘッダーから地図へ飛ぶリンクは、解説書のビルドで `--map-url` を指定する。地図を先に作り、解説書も作り直すと両方向でつながる
+
+標準出力に、ディレクトリ数・ファイル数・説明ありのディレクトリ数/全体・プレビュー埋め込みファイル数・出力サイズを出す。
+
+## 検証
+
+| 種別 | 内容 | 結果 |
+|---|---|---|
+| エラー | `nodes` のキーがツリーに無い | exit 1（一覧を表示） |
+| エラー | `blocks` の `path` がツリーに無い、`layer` が値の候補外、`id` が空・重複 | exit 1 |
+| エラー | `ref`（`nodes[*].ref` と、説明 HTML 中の `data-ref`）が解決できない | exit 1 |
+| 警告 | 説明の無いディレクトリ（件数つき。`collapse` 配下は除く） | exit 0 |
+| 警告 | `key_files` がツリーに無い、`collapse` の `path` がディレクトリに無い、`guide` の id が解説書に無い | exit 0 |
+
+パスは前後の `/` と先頭の `./` を取って解釈する。
+
+## descriptions.json のスキーマ
+
+```json
+{
+  "intro_html": "<p>ページ冒頭のリード（任意）</p>",
+  "blocks": [
+    {"id": "web", "path": "apps/web", "title": "apps/web", "subtitle": "画面と BFF（Next.js）", "summary": "1〜2 文", "layer": "web"}
+  ],
+  "nodes": {
+    "apps/web": {
+      "role": "一言の役割（ツリーの行の右に薄く出す。20 字以内目安）",
+      "body_html": "<p>中身の説明。HTML 可（p, ul, li, code, strong, a.ref）</p>",
+      "open_when": ["こういうときに開く", "..."],
+      "key_files": ["apps/web/proxy.ts", "apps/web/lib/server/api.ts"],
+      "guide": ["s01", "s03-cart"]
+    },
+    "apps/web/proxy.ts": {"role": "...", "body_html": "...", "ref": "apps/web/proxy.ts::proxy"}
+  },
+  "collapse": [{"path": "apps/web/public/products", "label": "商品画像 31 枚（ファイル名は商品 ID）"}],
+  "tips_html": "<h3>IDE で探すときのコツ</h3><p>...</p>"
+}
+```
+
+| キー | 意味 |
+|---|---|
+| `intro_html` | ページ冒頭のリード。省略時は既定の一文 |
+| `blocks[]` | 全体図のカード。IDE のルートの並び（フォルダ→名前順）に自動で並べ替える。`path` が `""`（または `.`）のブロックはルート直下のファイル用で、最後に置く。`layer` は `web` `api` `docs` `scripts` `ci` `root`（色分け）。中身の小さなラベル（サブフォルダ名）はツリーから自動で取る。ファイル 60 件以上のブロックは大きめに表示する |
+| `nodes{パス}` | フォルダ・ファイルの説明。キーはリポジトリルートからの相対パス。全項目が任意 |
+| `nodes.*.role` | 一言の役割。ツリーの行に薄く出る。説明パネルでは見出し的に出る |
+| `nodes.*.body_html` | 本文の HTML。`<a class="ref" data-ref="path::Symbol">名前</a>` は解説書と同じ記法で解決され、クリックでコードドロワーが開く |
+| `nodes.*.open_when` | 「こういうときに開く」の箇条書き（プレーンテキスト） |
+| `nodes.*.key_files` | 「主なファイル」。押すとツリーでそのファイルを選択する。ツリーに無いパスはリンク無しで出す |
+| `nodes.*.guide` | 解説書の id（章 `sNN`、見出し `sNN-xxx`）。「解説書の関連章」に新しいタブのリンクで出る |
+| `nodes.*.ref` | ファイルの「主な関数を見る」ボタンで開く `data-ref` 記法の参照 |
+| `collapse[]` | 子を展開せず 1 行（ラベル＋件数）にまとめるディレクトリ |
+| `tips_html` | ページ下部のコツ。省略可 |
+
+説明の無いノードでも、件数・拡張子の内訳・行数は自動集計して出す。
+
+## ページの動き
+
+- 全体図のカード（とサブフォルダの小さなラベル）を押すと、下のツリーで該当フォルダまで開いてスクロール・選択し、右パネルに説明を出す
+- ツリー: フォルダ→ファイルの順、名前順。先頭ドットのファイルも出る。↑↓ で移動、← で閉じる（閉じていれば親へ）、→ で開く（開いていれば最初の子へ）、Enter で選択、Home/End で先頭・末尾。行の右に `role` と、フォルダは配下のファイル数
+- 絞り込み: パスの部分一致（スペース区切りは AND、全角半角・大文字小文字を区別しない）。ヒットした行とその祖先だけ表示し、Esc で解除
+- 説明パネル: パンくず（各段を押すとその階層を選択）、`role`、本文、こういうときに開く、主なファイル、解説書の関連章、件数・拡張子の内訳（フォルダ）または行数・サイズ（ファイル）、中身を見る・主な関数を見る・GitHub・パスをコピー。760px 未満はパネルがツリーの下に来るので、ツリー上部の「説明へ ↓」で移動できる
+- 選択状態はページ内だけで持つ。URL のハッシュにパスは入れない
+
+## プレビュー（中身を見る）の対象
+
+ファイルの中身を埋め込むのは、テキストで 200KB 以下の次のもの。
+
+- `apps/**`（ただし `apps/api/tests/**`・`apps/web/tests/**`・`apps/web/public/**` を除く）、`scripts/**`、`tools/**`、`.github/**`
+- `docs/**/*.md`
+- ルートの `README.md`・`docker-compose.yml`・`.pre-commit-config.yaml`・`.gitignore`・`.gitattributes`
+
+対象外（説明と行数だけ表示し、理由を出す）: `.env*`（中身は読まず、行数も出さない）、`.secrets.baseline`・`.gitleaks.toml`・`.gitleaksignore`、テスト、画像、docx などのバイナリ、`.html`（解説書・地図の出力）、200KB 超（例: `uv.lock`）、上記以外のファイル（`.claude/` など）。
+
+## 秘密検査
+
+出力 HTML は `gitleaks detect --no-git --source <file> --redact` と `pre-commit run detect-secrets --files <file>` を通す。埋め込みコードを原文のまま置く理由は、上の「既知の制限」のとおり。40 桁の SHA 単体も検知されるため、地図のデータでは GitHub の URL の形で持つ。説明データに新しい文字列を足して検出が出たら、まず誤検知かどうかを確認し、プレビュー対象から外す（`PREVIEW_*` 定数と `preview_reason()`）。
+
+## 既知の制限（地図）
+
+- ツリーは `--tree-commit` の内容、プレビューは `--commit` の内容で、作業ツリーの未コミットの変更は載らない
+- `collapse` したディレクトリの中は、ツリーからは辿れない（絞り込みで中のパスにヒットすると、その 1 行が出る）
+- 行数はテキストファイルのみ。`.env*` と画像・バイナリは出さない
+- ブロックの並びは「フォルダ→名前順」の近似（IDE 側の並べ替え設定が違うと一致しない）
+- ハイライトは cdnjs の highlight.js 11.9.0 に依存する（読み込めない環境では素のテキスト）

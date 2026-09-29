@@ -1,0 +1,3345 @@
+{
+  "intro_html": "<p>このページは、IDE でリポジトリを開いたときに見えるフォルダとファイルに、「何が入っているか・どんな中身か・いつ開くか」を付けた地図です。対象は git 管理下の 356 ファイル・104 フォルダで、コードの詳細は解説書の各章とコード参照に移れます。</p><p>ルート直下のファイルは設定が中心で、アプリのコードは <code>apps/</code> の下にあります。<code>README.md</code> は引き継ぎメモ、<code>.env.example</code> は環境変数の見本（値は空）、<code>docker-compose.yml</code> は Mac 用のローカル MySQL、<code>.gitignore</code>・<code>.pre-commit-config.yaml</code>・<code>.gitleaks.toml</code>・<code>.gitleaksignore</code>・<code>.secrets.baseline</code> は秘密を commit させないための検査、<code>.gitattributes</code> は改行コードの設定です。<code>.claude/</code> は AI エージェント向けの設定です。</p>",
+  "blocks": [
+    {
+      "id": "web",
+      "path": "apps/web",
+      "title": "apps/web",
+      "subtitle": "画面と BFF（Next.js）",
+      "summary": "ブラウザが話す唯一の相手。ページ・ブラウザ向けの窓口（BFF）・部品・共通関数と、サイト全体の Basic 認証を持つ。",
+      "layer": "web"
+    },
+    {
+      "id": "api",
+      "path": "apps/api",
+      "title": "apps/api",
+      "subtitle": "業務ルールと DB（FastAPI）",
+      "summary": "注文確定・在庫引当・金額計算などの業務ルールと DB アクセス。routers → services → repositories → models の 4 段で書かれている。",
+      "layer": "api"
+    },
+    {
+      "id": "docs",
+      "path": "docs",
+      "title": "docs",
+      "subtitle": "設計・テスト文書と解説書",
+      "summary": "要求仕様書から検収記録まで V 字の工程順（00〜05）に並ぶ文書と、コード解説書の組み立て基盤。",
+      "layer": "docs"
+    },
+    {
+      "id": "scripts",
+      "path": "scripts",
+      "title": "scripts",
+      "subtitle": "DB 起動・公開・検証のスクリプト",
+      "summary": "ローカル MySQL の起動、講義 DB への接続、Azure への手動デプロイ、防御外し確認、commit 時のフック。",
+      "layer": "scripts"
+    },
+    {
+      "id": "ci",
+      "path": ".github",
+      "title": ".github",
+      "subtitle": "CI と依存更新",
+      "summary": "PR ごとに動く GitHub Actions（pytest・Vitest・ビルド・gitleaks）、Dependabot、PR テンプレート。",
+      "layer": "ci"
+    },
+    {
+      "id": "tools",
+      "path": "tools",
+      "title": "tools",
+      "subtitle": "文書生成ツール",
+      "summary": "設計仕様書・テスト設計書の Markdown を docx にする作者用のスクリプト。アプリの実行には使わない。",
+      "layer": "root"
+    }
+  ],
+  "nodes": {
+    ".claude": {
+      "role": "Claude Code の設定",
+      "body_html": "<p>AI エージェント（Claude Code）向けの設定を置く。<code>launch.json</code> は web と api の開発サーバー起動定義で、Windows の <code>cmd</code> 前提。<code>settings.json</code> は force push や <code>reset --hard</code> などを実行させない deny 一覧。</p>",
+      "open_when": [
+        "エージェントに実行させないコマンドを確認するとき",
+        "プレビュー用の起動定義を直すとき"
+      ],
+      "key_files": [
+        ".claude/settings.json",
+        ".claude/launch.json"
+      ]
+    },
+    ".github": {
+      "role": "GitHub 用の設定",
+      "body_html": "<p>GitHub Actions のワークフロー、Dependabot の設定、PR テンプレートが入る。CI の中身は <code>workflows/</code>、依存更新の頻度は <code>dependabot.yml</code>、PR 本文の型は <code>pull_request_template.md</code>。</p>",
+      "open_when": [
+        "PR で何が自動実行されるか知りたいとき",
+        "PR の書き方の決まりを確認するとき"
+      ],
+      "key_files": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/secrets-scan.yml",
+        ".github/dependabot.yml",
+        ".github/pull_request_template.md"
+      ],
+      "guide": [
+        "s06-ci",
+        "s06-branch"
+      ]
+    },
+    ".github/workflows": {
+      "role": "CI の定義（2 本）",
+      "body_html": "<p><code>ci.yml</code> が api の pytest、web の Vitest とビルド、依存の脆弱性報告を実行する。<code>secrets-scan.yml</code> が gitleaks で履歴全体の秘密を走査する。どちらも PR と main への push で動く。</p>",
+      "open_when": [
+        "CI が赤になった原因を調べるとき",
+        "main の必須チェックを確認するとき"
+      ],
+      "key_files": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/secrets-scan.yml"
+      ],
+      "guide": [
+        "s06-ci",
+        "s06-protection"
+      ]
+    },
+    "apps": {
+      "role": "アプリ本体（web と api）",
+      "body_html": "<p>画面側の <code>web</code>（Next.js）とサーバー側の <code>api</code>（FastAPI）を並べて置く。2 つは別々に依存を管理し（web は pnpm、api は uv）、実行時は HTTP でつながる。共有コードはない。</p>",
+      "open_when": [
+        "画面側か API 側かを切り分けたいとき"
+      ],
+      "key_files": [
+        "apps/web/package.json",
+        "apps/api/pyproject.toml"
+      ],
+      "guide": [
+        "s01",
+        "s01-arch"
+      ]
+    },
+    "apps/api": {
+      "role": "FastAPI バックエンド",
+      "body_html": "<p>業務ルール・在庫引当・注文確定・DB アクセスを持つサーバー。<code>app/</code> が本体、<code>alembic/</code> が DB のマイグレーション、<code>tests/</code> が pytest。設定は <code>pyproject.toml</code>、API 契約は <code>openapi.json</code>。</p>",
+      "open_when": [
+        "サーバー側の処理を追うとき",
+        "起動・テストの手順を確認するとき（README.md）"
+      ],
+      "key_files": [
+        "apps/api/README.md",
+        "apps/api/app/main.py",
+        "apps/api/pyproject.toml",
+        "apps/api/openapi.json"
+      ],
+      "guide": [
+        "s01",
+        "s10-api",
+        "s07-local"
+      ]
+    },
+    "apps/api/alembic": {
+      "role": "DB マイグレーションの実行環境",
+      "body_html": "<p>Alembic の環境設定を置く。<code>env.py</code> が接続 URL を環境変数から取り、<code>script.py.mako</code> が新しいマイグレーションの雛形になる。マイグレーション本体は <code>versions/</code>。</p>",
+      "open_when": [
+        "マイグレーションの実行方法や接続先の決め方を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/alembic/env.py",
+        "apps/api/alembic/script.py.mako"
+      ],
+      "guide": [
+        "s05-migration"
+      ]
+    },
+    "apps/api/alembic/versions": {
+      "role": "マイグレーション本体（2 本）",
+      "body_html": "<p><code>0001_p1_initial.py</code> が P1 の 12 表を作り、<code>371a338f4624_p2a_contents.py</code> が <code>contents</code> 表を足す。合わせて 13 表。ファイル名は「リビジョン ID_要点」の形で、1 本目だけ手で 0001 と付けたと思う。</p>",
+      "open_when": [
+        "表の列・制約・索引を実際の定義で確認するとき",
+        "ロールバック手順を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/alembic/versions/0001_p1_initial.py",
+        "apps/api/alembic/versions/371a338f4624_p2a_contents.py"
+      ],
+      "guide": [
+        "s05-migration",
+        "s05-tables"
+      ]
+    },
+    "apps/api/app": {
+      "role": "API アプリ本体",
+      "body_html": "<p><code>main.py</code> がアプリを組み立て、routers・services・repositories・models の 4 段と、schemas・core・adapters が支える。<code>seed.py</code> と <code>seed_data.py</code> は初期データの投入。<code>__init__.py</code> は空。</p>",
+      "open_when": [
+        "API のどこに何があるか全体を見たいとき",
+        "エンドポイントから DB まで追うとき"
+      ],
+      "key_files": [
+        "apps/api/app/main.py",
+        "apps/api/app/seed.py",
+        "apps/api/app/seed_data.py"
+      ],
+      "guide": [
+        "s01-folders",
+        "s10-api"
+      ]
+    },
+    "apps/api/app/adapters": {
+      "role": "外部接続の差し替え口",
+      "body_html": "<p>決済（<code>payment.py</code>）とメール（<code>mail.py</code>）の 2 つ。どちらも現状はスタブで、決済は環境変数の ok／ng を返し、メールは送信せずファイルに書く。P2 で実物に替える想定。</p>",
+      "open_when": [
+        "決済 NG の再現方法を知りたいとき",
+        "注文確認メールの中身を確認したいとき"
+      ],
+      "key_files": [
+        "apps/api/app/adapters/payment.py",
+        "apps/api/app/adapters/mail.py"
+      ],
+      "guide": [
+        "s08-stub"
+      ]
+    },
+    "apps/api/app/core": {
+      "role": "横断の基盤（設定・DB・認証・エラー・ログ）",
+      "body_html": "<p>業務に依らない仕組みを置く。設定 <code>config.py</code>、DB 接続 <code>db.py</code>、内部トークンと CORS の <code>security.py</code>、エラー形式の <code>errors.py</code>、ログのマスク <code>logging.py</code>、レート制限 <code>rate_limit.py</code>。入口: <a class=\"ref\" data-ref=\"apps/api/app/core/security.py::verify_internal_token\">verify_internal_token（内部トークン）</a>。</p>",
+      "open_when": [
+        "環境変数の意味を確認するとき",
+        "401・4xx の形がどこで決まるかを知りたいとき"
+      ],
+      "key_files": [
+        "apps/api/app/core/config.py",
+        "apps/api/app/core/security.py",
+        "apps/api/app/core/errors.py",
+        "apps/api/app/core/db.py"
+      ],
+      "guide": [
+        "s04-token",
+        "s04-errors",
+        "s04-config"
+      ]
+    },
+    "apps/api/app/models": {
+      "role": "表の定義（SQLAlchemy ORM）",
+      "body_html": "<p>DB の 13 表を Python のクラスで定義する。<code>base.py</code> が共通の列（id・created_at・updated_at）と制約名の規則を持ち、<code>catalog.py</code>・<code>cart.py</code>・<code>order.py</code>・<code>content.py</code>・<code>system.py</code> が領域ごとに分ける。</p>",
+      "open_when": [
+        "列名・型・制約を確認するとき",
+        "注文状態の値（OrderStatus）を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/app/models/base.py",
+        "apps/api/app/models/order.py",
+        "apps/api/app/models/catalog.py"
+      ],
+      "guide": [
+        "s05-tables",
+        "s05-constraints",
+        "s05-status"
+      ]
+    },
+    "apps/api/app/repositories": {
+      "role": "SQL を書く層",
+      "body_html": "<p>SELECT と条件付き UPDATE を関数にした層で、業務判断は入れない。ファイルは表の領域ごと（carts・orders・products・contents・search・settings）。公開商品の条件は <code>products.py</code> の 1 か所に集めてある。入口: <a class=\"ref\" data-ref=\"apps/api/app/repositories/orders.py::reserve_stock\">reserve_stock（在庫引当）</a>。</p>",
+      "open_when": [
+        "在庫引当の SQL を確認するとき",
+        "検索・一覧の WHERE 条件を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/app/repositories/orders.py",
+        "apps/api/app/repositories/products.py",
+        "apps/api/app/repositories/carts.py"
+      ],
+      "guide": [
+        "s04-stock",
+        "s04-double-order"
+      ]
+    },
+    "apps/api/app/routers": {
+      "role": "URL の入口（入出力だけ）",
+      "body_html": "<p>1 ファイルが 1 機能の URL 群に対応する。業務判定は書かず、サービスを呼んで結果を返すだけ。ファイル名は機能名（cart・catalog・checkout・content・orders・search・settings）。<code>health.py</code> だけ内部トークン不要、<code>testing.py</code> はテスト時のみ有効。入口: <a class=\"ref\" data-ref=\"apps/api/app/routers/orders.py::create_order\">create_order（注文確定）</a>。</p>",
+      "open_when": [
+        "エンドポイントの一覧と設計 ID（DS-API-xxx）の対応を見たいとき",
+        "新しい URL の追加位置を探すとき"
+      ],
+      "key_files": [
+        "apps/api/app/routers/orders.py",
+        "apps/api/app/routers/cart.py",
+        "apps/api/app/routers/catalog.py"
+      ],
+      "guide": [
+        "s03",
+        "s10-api"
+      ]
+    },
+    "apps/api/app/schemas": {
+      "role": "入出力の型（Pydantic）",
+      "body_html": "<p>リクエストとレスポンスの形を定義する。入力は「形」だけを検証し、業務規則は書かない。応答は白リスト方式で、内部 ID を出さない。ファイル名は routers と対応する。</p>",
+      "open_when": [
+        "API の入力形式（桁数・必須）を確認するとき",
+        "応答に含まれる項目を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/app/schemas/order.py",
+        "apps/api/app/schemas/cart.py",
+        "apps/api/app/schemas/catalog.py"
+      ],
+      "guide": [
+        "s04-errors",
+        "s04-types"
+      ]
+    },
+    "apps/api/app/services": {
+      "role": "業務ルールの層",
+      "body_html": "<p>在庫・数量上限・金額計算・注文確定の手順を持つ。トランザクションの commit と rollback もここ。DB を見ない純粋な規則は <code>cart_rules.py</code>・<code>pricing.py</code>・<code>order_state.py</code>・<code>order_number.py</code> に分けてある。入口: <a class=\"ref\" data-ref=\"apps/api/app/services/orders.py::_confirm\">_confirm（注文確定）</a>。</p>",
+      "open_when": [
+        "注文確定の手順を読むとき（orders.py）",
+        "金額・送料の計算規則を確認するとき（pricing.py）"
+      ],
+      "key_files": [
+        "apps/api/app/services/orders.py",
+        "apps/api/app/services/pricing.py",
+        "apps/api/app/services/cart.py",
+        "apps/api/app/services/order_state.py"
+      ],
+      "guide": [
+        "s02-order-flow",
+        "s03-order",
+        "s04-double-order"
+      ]
+    },
+    "apps/api/tests": {
+      "role": "API のテスト（pytest）",
+      "body_html": "<p><code>unit/</code> は DB 不要、<code>integration/</code> は MySQL 必須。<code>conftest.py</code> が環境変数を明示的に与え、<code>.env</code> は読まない。ファイル名の <code>ut</code>・<code>it</code> はテスト設計書のレベルに対応する。</p>",
+      "open_when": [
+        "特定の設計 ID を検証するテストを探すとき",
+        "テストの走らせ方を確認するとき"
+      ],
+      "key_files": [
+        "apps/api/tests/conftest.py",
+        "apps/api/tests/unit",
+        "apps/api/tests/integration"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/api/tests/integration": {
+      "role": "結合テスト（MySQL 必須）",
+      "body_html": "<p>実際の MySQL に対して API を呼ぶ。<code>DATABASE_URL_TEST</code> が無ければ全件スキップし、DB 名が <code>_test</code> で終わらなければ即中止する。同時実行の IT-014-02〜04 は <code>live_server.py</code> で uvicorn を起動して行う。</p>",
+      "open_when": [
+        "同時注文・二重注文の防御を確認するテストを読むとき",
+        "IT が skip される理由を調べるとき"
+      ],
+      "key_files": [
+        "apps/api/tests/integration/conftest.py",
+        "apps/api/tests/integration/test_it_014_concurrency.py",
+        "apps/api/tests/integration/test_it_014_04_stock_race.py",
+        "apps/api/tests/integration/live_server.py"
+      ],
+      "guide": [
+        "s06-tests",
+        "s04-double-order"
+      ]
+    },
+    "apps/api/tests/unit": {
+      "role": "単体テスト（DB 不要）",
+      "body_html": "<p>関数・規則・ハンドラを単体で検証する。金額計算、カート規則、注文番号と状態遷移、エラー形式、マスク、CORS、seed の整合など。在庫引当の UPDATE だけは SQLite のメモリ DB で確認する。</p>",
+      "open_when": [
+        "計算規則の境界値テストを探すとき",
+        "DB なしで素早く回したいとき"
+      ],
+      "key_files": [
+        "apps/api/tests/unit/test_ut_021_pricing.py",
+        "apps/api/tests/unit/test_ut_011_cart_rules.py",
+        "apps/api/tests/unit/test_ut_014_reserve_stock.py"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/web": {
+      "role": "Next.js（画面と BFF）",
+      "body_html": "<p>ブラウザが話す唯一の相手。画面（<code>app/</code>）、ブラウザ向けの窓口（<code>app/api/</code>）、部品（<code>components/</code>）、共通関数（<code>lib/</code>）、Basic 認証の <code>proxy.ts</code> を持つ。パッケージ管理は pnpm。</p>",
+      "open_when": [
+        "画面から API までの経路を追うとき",
+        "起動・テストの手順を確認するとき（README.md）"
+      ],
+      "key_files": [
+        "apps/web/README.md",
+        "apps/web/proxy.ts",
+        "apps/web/package.json",
+        "apps/web/app/layout.tsx"
+      ],
+      "guide": [
+        "s01",
+        "s10-web",
+        "s07-local"
+      ]
+    },
+    "apps/web/app": {
+      "role": "画面（ページ）と BFF の置き場",
+      "body_html": "<p>App Router のルートで、フォルダ名が URL になる。<code>page.tsx</code> が画面、<code>api/</code> 配下の <code>route.ts</code> が BFF。<code>layout.tsx</code> が全画面共通の枠、<code>globals.css</code> がデザイントークン。</p>",
+      "open_when": [
+        "URL に対応する画面ファイルを探すとき",
+        "共通レイアウトを直すとき"
+      ],
+      "key_files": [
+        "apps/web/app/layout.tsx",
+        "apps/web/app/page.tsx",
+        "apps/web/app/globals.css",
+        "apps/web/app/not-found.tsx"
+      ],
+      "guide": [
+        "s03",
+        "s10-web"
+      ]
+    },
+    "apps/web/app/api": {
+      "role": "BFF（ブラウザ向けの窓口）",
+      "body_html": "<p>ブラウザの JavaScript が呼ぶ Route Handler を置く。フォルダ名が <code>/api/…</code> の URL になり、CSRF と入力の形を確かめて FastAPI へ取り次ぐ。サーバー内の画面描画は BFF を通らない。入口: <a class=\"ref\" data-ref=\"apps/web/app/api/orders/route.ts::POST\">POST（注文確定の BFF）</a>。</p>",
+      "open_when": [
+        "ブラウザから API までの経路を確認するとき",
+        "CSRF 検証がどこで掛かるかを確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/orders/route.ts",
+        "apps/web/app/api/cart/route.ts",
+        "apps/web/app/api/cart/items/route.ts"
+      ],
+      "guide": [
+        "s01-arch",
+        "s04-csrf",
+        "s12-bff"
+      ]
+    },
+    "apps/web/app/api/cart": {
+      "role": "カート取得の BFF（/api/cart）",
+      "body_html": "<p>GET が DS-API-010 の取り次ぎ。カートトークンが無い訪問者には FastAPI が新規発行し、<code>cart_token</code> と <code>csrf_token</code> の Cookie を発行する入口にもなる。下の <code>items/</code> が追加・変更・削除。</p>",
+      "open_when": [
+        "Cookie が最初に発行される場所を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/cart/route.ts"
+      ],
+      "guide": [
+        "s03-cart",
+        "s04-cookie"
+      ]
+    },
+    "apps/web/app/api/cart/items": {
+      "role": "カート追加の BFF（/api/cart/items）",
+      "body_html": "<p>POST が DS-API-011 の取り次ぎ（CSRF 必須）。variant_id と quantity の形を確かめて FastAPI へ渡す。数量変更・削除は <code>[id]/</code>。</p>",
+      "open_when": [
+        "「カートに入れる」のサーバー側の入口を読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/cart/items/route.ts"
+      ],
+      "guide": [
+        "s01-lifecycle",
+        "s03-cart"
+      ]
+    },
+    "apps/web/app/api/cart/items/[id]": {
+      "role": "カート明細の変更・削除の BFF",
+      "body_html": "<p>PATCH（数量変更）と DELETE（削除）が DS-API-012・013 の取り次ぎ。<code>[id]</code> は動的セグメントで、明細の item_id が入る。CSRF に通ったものだけ FastAPI へ渡す。</p>",
+      "open_when": [
+        "数量変更・削除の入力チェックを確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/cart/items/[id]/route.ts"
+      ],
+      "guide": [
+        "s03-cart"
+      ]
+    },
+    "apps/web/app/api/checkout": {
+      "role": "注文手続き系の BFF",
+      "body_html": "<p>確認画面向けの <code>prepare/</code> だけを持つ。フォルダ自体にファイルはない。</p>",
+      "open_when": [
+        "注文手続きの BFF がどこにあるか探すとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/checkout/prepare/route.ts"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/app/api/checkout/prepare": {
+      "role": "確認画面用の金額計算 BFF",
+      "body_html": "<p>POST が DS-API-021 の取り次ぎ（CSRF 必須）。FastAPI が金額を計算し、冪等キー（43 文字）を発行する。応答は画面が sessionStorage に保存する。</p>",
+      "open_when": [
+        "冪等キーの発行経路を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/checkout/prepare/route.ts"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/app/api/health": {
+      "role": "BFF の疎通確認",
+      "body_html": "<p>GET が FastAPI の health を内部トークン付きで呼び、結果を返す。FastAPI が止まっていれば 503 <code>upstream_unavailable</code>。</p>",
+      "open_when": [
+        "web から API に届いているかを確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/health/route.ts"
+      ],
+      "guide": [
+        "s03-health"
+      ]
+    },
+    "apps/web/app/api/orders": {
+      "role": "注文確定の BFF（/api/orders）",
+      "body_html": "<p>POST が DS-API-022 の取り次ぎ（CSRF 必須）。設計にある項目だけを拾って転送する。ゲスト注文照会は下の <code>[orderNumber]/lookup/</code>。</p>",
+      "open_when": [
+        "注文確定のブラウザ側の入口を読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/orders/route.ts"
+      ],
+      "guide": [
+        "s02-order-flow",
+        "s03-order"
+      ]
+    },
+    "apps/web/app/api/orders/[orderNumber]": {
+      "role": "注文番号ごとの BFF",
+      "body_html": "<p><code>[orderNumber]</code> は注文番号（GU-YYMMDD-XXXXXXXX）が入る動的セグメント。下に <code>lookup/</code> があるだけで、直下にファイルはない。</p>",
+      "open_when": [
+        "注文番号を含む URL の構造を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/orders/[orderNumber]/lookup/route.ts"
+      ],
+      "guide": [
+        "s03-complete"
+      ]
+    },
+    "apps/web/app/api/orders/[orderNumber]/lookup": {
+      "role": "ゲスト注文照会の BFF",
+      "body_html": "<p>POST が DS-API-023 の取り次ぎ。注文番号の形が違えば FastAPI を呼ばずに 404。429 のときは <code>Retry-After</code> をそのまま返す。メールは本文で受け、URL に載せない。</p>",
+      "open_when": [
+        "注文照会のレート制限が画面にどう返るかを確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/orders/[orderNumber]/lookup/route.ts"
+      ],
+      "guide": [
+        "s03-complete",
+        "s04-ratelimit"
+      ]
+    },
+    "apps/web/app/api/products": {
+      "role": "商品一覧の BFF（もっと見る用）",
+      "body_html": "<p>GET が DS-API-002 の取り次ぎ。「もっと見る」ボタンがブラウザから呼ぶ。page と per_page は範囲内に丸める。初回表示は BFF を通らず Server Component が直接取得する。</p>",
+      "open_when": [
+        "一覧の 2 ページ目以降の取得経路を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/products/route.ts"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "apps/web/app/api/search": {
+      "role": "商品検索の BFF",
+      "body_html": "<p>GET が DS-API-004 の取り次ぎで、検索結果の「もっと見る」が呼ぶ。サジェストは下の <code>suggest/</code>。</p>",
+      "open_when": [
+        "検索の 2 ページ目以降の取得経路を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/search/route.ts"
+      ],
+      "guide": [
+        "s03-search"
+      ]
+    },
+    "apps/web/app/api/search/suggest": {
+      "role": "検索サジェストの BFF",
+      "body_html": "<p>GET が DS-API-004a の取り次ぎ。検索ボックスが入力の 300 ms 後に呼ぶ。GET のみのため CSRF は使わない。</p>",
+      "open_when": [
+        "候補が出る仕組みの取得側を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/api/search/suggest/route.ts"
+      ],
+      "guide": [
+        "s03-search"
+      ]
+    },
+    "apps/web/app/cart": {
+      "role": "カート画面（/cart）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-004。Cookie があればサーバーで初期表示を取得し、以降の変更は <code>CartView</code> が BFF 経由で行う。<code>?oos=1,2</code> で注文時に在庫切れになった明細を強調する。</p>",
+      "open_when": [
+        "カート画面の初期表示の取得方法を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/cart/page.tsx",
+        "apps/web/components/CartView.tsx"
+      ],
+      "guide": [
+        "s03-cart"
+      ]
+    },
+    "apps/web/app/checkout": {
+      "role": "注文手続き画面（/checkout）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-005 で、本体は <code>CheckoutForm</code>。入力検査、prepare の呼び出し、sessionStorage への保存を経て <code>confirm/</code> へ進む。</p>",
+      "open_when": [
+        "お届け先入力から確認画面へ進む流れを読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/checkout/page.tsx",
+        "apps/web/components/CheckoutForm.tsx"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/app/checkout/confirm": {
+      "role": "注文確認画面（/checkout/confirm）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-006 の確認で、本体は <code>OrderConfirm</code>。sessionStorage の入力内容を復元し、確定ボタンから POST /api/orders を呼ぶ。</p>",
+      "open_when": [
+        "注文確定ボタンの挙動と失敗時の戻し先を読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/checkout/confirm/page.tsx",
+        "apps/web/components/OrderConfirm.tsx"
+      ],
+      "guide": [
+        "s02-order-flow",
+        "s03-order"
+      ]
+    },
+    "apps/web/app/contents": {
+      "role": "特集・お知らせ一覧（/contents）",
+      "body_html": "<p><code>page.tsx</code> が特集とお知らせの一覧。<code>?kind=news</code> でお知らせだけを出す。個別ページは <code>[slug]/</code>。</p>",
+      "open_when": [
+        "お知らせ一覧の表示条件を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/contents/page.tsx"
+      ],
+      "guide": [
+        "s03-contents"
+      ]
+    },
+    "apps/web/app/contents/[slug]": {
+      "role": "FAQ・静的ページの詳細",
+      "body_html": "<p><code>[slug]</code> が FAQ・利用規約・プライバシー・特商法・企業情報の 5 種に共通のレイアウトで表示される。本文は React の既定エスケープだけで描き、特商法だけ定義リストにする。</p>",
+      "open_when": [
+        "フッターの各リンク先の描画を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/contents/[slug]/page.tsx"
+      ],
+      "guide": [
+        "s03-contents"
+      ]
+    },
+    "apps/web/app/orders": {
+      "role": "注文関連の画面",
+      "body_html": "<p>下に <code>complete/</code>（注文完了）だけがある。フォルダ直下に page.tsx はなく、<code>/orders</code> 単独の画面は無い。</p>",
+      "open_when": [
+        "注文完了画面の位置を探すとき"
+      ],
+      "key_files": [
+        "apps/web/app/orders/complete/page.tsx"
+      ],
+      "guide": [
+        "s03-complete"
+      ]
+    },
+    "apps/web/app/orders/complete": {
+      "role": "注文完了画面（/orders/complete）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-006 の完了で、本体は <code>OrderComplete</code>。sessionStorage の注文を再掲し、無ければ注文番号とメールの照会フォームを出す。</p>",
+      "open_when": [
+        "完了画面の再掲と照会フォームの分岐を読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/orders/complete/page.tsx",
+        "apps/web/components/OrderComplete.tsx"
+      ],
+      "guide": [
+        "s03-complete"
+      ]
+    },
+    "apps/web/app/products": {
+      "role": "商品一覧画面（/products）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-002。gender・category・page を URL から受け、FastAPI を直接呼んで 24 件ずつ <code>ProductsGrid</code> に渡す。詳細は <code>[id]/</code>。</p>",
+      "open_when": [
+        "一覧のフィルタとページ分割を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/products/page.tsx",
+        "apps/web/components/ProductsGrid.tsx"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "apps/web/app/products/[id]": {
+      "role": "商品詳細画面（/products/[id]）",
+      "body_html": "<p><code>page.tsx</code> が DS-SCR-003。画像・価格・購入操作（<code>PurchasePanel</code>）・説明・関連商品を出す。存在しない・非公開の商品は 404。</p>",
+      "open_when": [
+        "色・サイズ選択と在庫表示の入口を読むとき"
+      ],
+      "key_files": [
+        "apps/web/app/products/[id]/page.tsx",
+        "apps/web/components/PurchasePanel.tsx"
+      ],
+      "guide": [
+        "s03-detail"
+      ]
+    },
+    "apps/web/app/search": {
+      "role": "検索結果画面（/search）",
+      "body_html": "<p><code>page.tsx</code> が検索結果。初回は Server Component が FastAPI を直接呼び、「もっと見る」だけ BFF 経由にする。0 件のときは類似キーワードとおすすめカテゴリを出す。</p>",
+      "open_when": [
+        "検索結果と 0 件時の表示を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/app/search/page.tsx",
+        "apps/web/components/SearchResults.tsx"
+      ],
+      "guide": [
+        "s03-search"
+      ]
+    },
+    "apps/web/components": {
+      "role": "画面部品（25 ファイル）",
+      "body_html": "<p>1 ファイル 1 部品で、ファイル名が部品名（PascalCase）。操作のある部品は <code>\"use client\"</code>。<code>lib/server</code> は import しない。共通部品は Button・Form・Toast・ConfirmDialog、画面ごとの本体は CartView・CheckoutForm・OrderConfirm など。入口: <a class=\"ref\" data-ref=\"apps/web/components/PurchasePanel.tsx::PurchasePanel\">PurchasePanel（購入操作）</a>。</p>",
+      "open_when": [
+        "画面の見た目や操作を直すとき",
+        "共通部品の使い方を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/components/PurchasePanel.tsx",
+        "apps/web/components/CartView.tsx",
+        "apps/web/components/CheckoutForm.tsx",
+        "apps/web/components/OrderConfirm.tsx",
+        "apps/web/components/Header.tsx"
+      ],
+      "guide": [
+        "s10-web",
+        "s03-nav"
+      ]
+    },
+    "apps/web/lib": {
+      "role": "共通関数と型（純粋関数が中心）",
+      "body_html": "<p>直下は、サーバーでもブラウザでも使える純粋関数（入力検証、金額表示、Cookie 文字列、CSRF・Basic 認証・IP 判定の規則）と型。ブラウザ専用は <code>client/</code>、サーバー専用は <code>server/</code>。</p>",
+      "open_when": [
+        "入力検証や表示整形の規則を確認するとき",
+        "FastAPI 応答の型を確認するとき（types.ts）"
+      ],
+      "key_files": [
+        "apps/web/lib/types.ts",
+        "apps/web/lib/checkout-validation.ts",
+        "apps/web/lib/order-errors.ts",
+        "apps/web/lib/basic-auth.ts"
+      ],
+      "guide": [
+        "s10-web",
+        "s04-types"
+      ]
+    },
+    "apps/web/lib/client": {
+      "role": "ブラウザ専用の関数",
+      "body_html": "<p>BFF を呼ぶ薄いクライアント（<code>cart-api.ts</code>・<code>order-api.ts</code>・<code>search-api.ts</code>）と、sessionStorage を読むフック <code>use-session-item.ts</code>。状態変更では Cookie の csrf_token をヘッダに載せる。</p>",
+      "open_when": [
+        "ブラウザが BFF を呼ぶ箇所を探すとき",
+        "CSRF トークンの付与を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/lib/client/cart-api.ts",
+        "apps/web/lib/client/order-api.ts",
+        "apps/web/lib/client/search-api.ts"
+      ],
+      "guide": [
+        "s04-csrf",
+        "s01-lifecycle"
+      ]
+    },
+    "apps/web/lib/server": {
+      "role": "サーバー専用の関数（server-only）",
+      "body_html": "<p>先頭で <code>import \"server-only\"</code> を付け、クライアントから読むとビルドが失敗する。FastAPI 呼び出し（<code>api.ts</code>）、カート・注文の取り次ぎ、CSRF、環境変数の読み込み、Server Component 用のデータ取得を持つ。入口: <a class=\"ref\" data-ref=\"apps/web/lib/server/api.ts::apiFetch\">apiFetch（FastAPI 呼び出し）</a>。</p>",
+      "open_when": [
+        "BFF から FastAPI への呼び出しを確認するとき",
+        "環境変数がどこで読まれるかを確認するとき"
+      ],
+      "key_files": [
+        "apps/web/lib/server/api.ts",
+        "apps/web/lib/server/cart-proxy.ts",
+        "apps/web/lib/server/order-proxy.ts",
+        "apps/web/lib/server/csrf.ts",
+        "apps/web/lib/server/env.ts"
+      ],
+      "guide": [
+        "s04-secrets",
+        "s12-server-only",
+        "s04-token"
+      ]
+    },
+    "apps/web/public": {
+      "role": "静的ファイル（画像）",
+      "body_html": "<p>Next.js がそのまま配信する置き場。現在は商品画像の <code>products/</code> だけがある。</p>",
+      "open_when": [
+        "画像の配信元を確認するとき"
+      ]
+    },
+    "apps/web/public/products": {
+      "role": "商品画像（31 点分の置き場）",
+      "body_html": "<p><code>NNN/1.jpg</code> の形で 31 フォルダ。中身は <code>scripts/gen-placeholders.mjs</code> で作った 8×8 の単色 PNG で、実写真ではない。パスは seed の <code>image_path</code> と一致する。</p>",
+      "open_when": [
+        "商品画像の URL が組み立てられる元を確認するとき"
+      ],
+      "key_files": [
+        "apps/web/scripts/gen-placeholders.mjs",
+        "apps/web/lib/image.ts"
+      ],
+      "guide": [
+        "s05-seed"
+      ]
+    },
+    "apps/web/scripts": {
+      "role": "web の補助スクリプト",
+      "body_html": "<p><code>gen-placeholders.mjs</code> の 1 本。商品画像のプレースホルダーを <code>public/products/</code> に生成する。アプリの実行時には使わない。</p>",
+      "open_when": [
+        "商品画像を作り直すとき"
+      ],
+      "key_files": [
+        "apps/web/scripts/gen-placeholders.mjs"
+      ],
+      "guide": [
+        "s05-seed"
+      ]
+    },
+    "apps/web/tests": {
+      "role": "web のテスト（Vitest、27 ファイル）",
+      "body_html": "<p>ファイル名に設計書のテスト ID が入るものが多い（<code>ut-web-05.…</code>・<code>it-bff-01-02.…</code>・<code>st-sec-07.…</code>・<code>at-07.…</code>）。ID の無いものは対象名（<code>csrf-validation.test.ts</code> など）。<code>setup.ts</code> が共通設定、<code>stubs/</code> が差し替え用の空モジュール。</p>",
+      "open_when": [
+        "特定の設計 ID を検証するテストを探すとき",
+        "BFF の取り次ぎのテストを読むとき"
+      ],
+      "key_files": [
+        "apps/web/tests/it-bff-01-02.orders-route.test.ts",
+        "apps/web/tests/bff.cart-route.test.ts",
+        "apps/web/tests/setup.ts"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/web/tests/stubs": {
+      "role": "テスト用の差し替えモジュール",
+      "body_html": "<p><code>server-only.ts</code> の 1 本。Vitest だけで <code>server-only</code> の代わりに読まれる空のモジュールで、<code>vitest.config.mts</code> の alias が指す。</p>",
+      "open_when": [
+        "server-only を含むモジュールをテストで読めない原因を調べるとき"
+      ],
+      "key_files": [
+        "apps/web/tests/stubs/server-only.ts",
+        "apps/web/vitest.config.mts"
+      ],
+      "guide": [
+        "s12-server-only"
+      ]
+    },
+    "apps/web/public/products/001": {
+      "role": "商品 001 の画像（スムースコットンT（レディース））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 001（レディース、1,490 円）の画像で、seed の <code>image_path</code> が <code>products/001/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/002": {
+      "role": "商品 002 の画像（ソフトリブタンクトップ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 002（レディース、990 円）の画像で、seed の <code>image_path</code> が <code>products/002/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/003": {
+      "role": "商品 003 の画像（オーバーサイズシャツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 003（レディース、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/003/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/004": {
+      "role": "商品 004 の画像（ハイウエストストレートジーンズ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 004（レディース、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/004/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/005": {
+      "role": "商品 005 の画像（イージーワイドパンツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 005（レディース、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/005/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/006": {
+      "role": "商品 006 の画像（フレアロングスカート）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 006（レディース、2,490 円）の画像で、seed の <code>image_path</code> が <code>products/006/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/007": {
+      "role": "商品 007 の画像（ライトダウンジャケット）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 007（レディース、3,990 円）の画像で、seed の <code>image_path</code> が <code>products/007/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/008": {
+      "role": "商品 008 の画像（カットソーワンピース）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 008（レディース、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/008/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/009": {
+      "role": "商品 009 の画像（シアーロングワンピース）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 009（レディース、3,990 円）の画像で、seed の <code>image_path</code> が <code>products/009/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/010": {
+      "role": "商品 010 の画像（ブラフィールタンクトップ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 010（レディース、1,490 円）の画像で、seed の <code>image_path</code> が <code>products/010/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/011": {
+      "role": "商品 011 の画像（ヘビーウェイトT（メンズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 011（メンズ、1,490 円）の画像で、seed の <code>image_path</code> が <code>products/011/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/012": {
+      "role": "商品 012 の画像（ドライポロシャツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 012（メンズ、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/012/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/013": {
+      "role": "商品 013 の画像（オックスフォードシャツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 013（メンズ、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/013/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/014": {
+      "role": "商品 014 の画像（スウェットプルパーカ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 014（メンズ、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/014/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/015": {
+      "role": "商品 015 の画像（スリムテーパードジーンズ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 015（メンズ、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/015/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/016": {
+      "role": "商品 016 の画像（チノショートパンツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 016（メンズ、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/016/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/017": {
+      "role": "商品 017 の画像（ストレッチイージーパンツ）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 017（メンズ、2,490 円）の画像で、seed の <code>image_path</code> が <code>products/017/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/018": {
+      "role": "商品 018 の画像（MA-1ブルゾン）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 018（メンズ、3,990 円）の画像で、seed の <code>image_path</code> が <code>products/018/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/019": {
+      "role": "商品 019 の画像（ボアフリースジャケット）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 019（メンズ、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/019/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/020": {
+      "role": "商品 020 の画像（ドライボクサーブリーフ 2枚組）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 020（メンズ、990 円）の画像で、seed の <code>image_path</code> が <code>products/020/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/021": {
+      "role": "商品 021 の画像（プリントT（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 021（キッズ・ティーン、990 円）の画像で、seed の <code>image_path</code> が <code>products/021/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/022": {
+      "role": "商品 022 の画像（ボーダーロンT（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 022（キッズ・ティーン、1,490 円）の画像で、seed の <code>image_path</code> が <code>products/022/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/023": {
+      "role": "商品 023 の画像（スウェットトレーナー（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 023（キッズ・ティーン、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/023/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/024": {
+      "role": "商品 024 の画像（ストレッチデニム（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 024（キッズ・ティーン、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/024/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/025": {
+      "role": "商品 025 の画像（イージーショートパンツ（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 025（キッズ・ティーン、1,490 円）の画像で、seed の <code>image_path</code> が <code>products/025/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/026": {
+      "role": "商品 026 の画像（ウルトラライトダウン（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 026（キッズ・ティーン、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/026/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。</p>",
+      "open_when": [
+        "この商品の画像が表示されない・差し替えたいとき"
+      ]
+    },
+    "apps/web/public/products/027": {
+      "role": "商品 027 の画像（ウィンドブレーカー（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 027（キッズ・ティーン、2,490 円）の画像で、seed の <code>image_path</code> が <code>products/027/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。この商品は在庫 1 のバリエーションを持つ（V-STOCK1。同時注文テスト用）。</p>",
+      "open_when": [
+        "この商品を使うテストの前提を確認するとき",
+        "画像の差し替えを確認するとき"
+      ]
+    },
+    "apps/web/public/products/028": {
+      "role": "商品 028 の画像（撥水パーカ（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 028（キッズ・ティーン、2,990 円）の画像で、seed の <code>image_path</code> が <code>products/028/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。この商品は全バリエーションが在庫 0（P-ALL0。在庫切れ表示の確認用）。</p>",
+      "open_when": [
+        "この商品を使うテストの前提を確認するとき",
+        "画像の差し替えを確認するとき"
+      ]
+    },
+    "apps/web/public/products/029": {
+      "role": "商品 029 の画像（リブレギンス（キッズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 029（キッズ・ティーン、990 円）の画像で、seed の <code>image_path</code> が <code>products/029/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。この商品は在庫 0 のバリエーションを持つ（V-STOCK0）。</p>",
+      "open_when": [
+        "この商品を使うテストの前提を確認するとき",
+        "画像の差し替えを確認するとき"
+      ]
+    },
+    "apps/web/public/products/030": {
+      "role": "商品 030 の画像（非公開サンプル商品）",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 030（キッズ・ティーン、1,990 円）の画像で、seed の <code>image_path</code> が <code>products/030/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。この商品は非公開（published=False）のテスト用商品（P-UNPUB）。</p>",
+      "open_when": [
+        "この商品を使うテストの前提を確認するとき",
+        "画像の差し替えを確認するとき"
+      ]
+    },
+    "apps/web/public/products/031": {
+      "role": "商品 031 の画像（ライトジャケット（メンズ））",
+      "body_html": "<p><code>1.jpg</code> 1 枚だけを置く。商品番号 031（メンズ、4,990 円）の画像で、seed の <code>image_path</code> が <code>products/031/1.jpg</code> を指す。中身は 8×8 の単色 PNG のプレースホルダー。この商品は受け入れテスト AT-08 用に追加した 4,990 円の商品（送料 0 の境界）。</p>",
+      "open_when": [
+        "この商品を使うテストの前提を確認するとき",
+        "画像の差し替えを確認するとき"
+      ]
+    },
+    "docs": {
+      "role": "設計・テスト文書と解説書",
+      "body_html": "<p>V 字モデルの工程順に、00 計画、01 要求仕様書、02 要件定義書、03 設計仕様書、04 テスト設計書、05 検収を並べる。<code>05_解説</code> は工程ではなく、コード解説書の置き場。docx と Markdown が混在し、Markdown が正本のものが多い。</p>",
+      "open_when": [
+        "設計 ID・テスト ID の出典を確認するとき",
+        "検収の記録や引き継ぎ状況を読むとき"
+      ],
+      "key_files": [
+        "docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md",
+        "docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md",
+        "docs/00_計画/引継ぎメモ_20260924.md"
+      ],
+      "guide": [
+        "s12-docs"
+      ]
+    },
+    "docs/00_計画": {
+      "role": "計画・判断・引き継ぎの記録",
+      "body_html": "<p>実装フェーズ計画（P1〜P4 の分け方）、P1 実装プラン、実装前レビュー記録、P2 事前レビュー観点、引継ぎメモが入る。計画レベルの判断は <code>ADR/</code>。日付付きのものは作成日時点の記録で、後から書き換えていない。</p>",
+      "open_when": [
+        "今どの段階か・残作業を確認するとき（引継ぎメモ）",
+        "なぜその範囲・順序にしたかを確認するとき"
+      ],
+      "key_files": [
+        "docs/00_計画/引継ぎメモ_20260924.md",
+        "docs/00_計画/実装フェーズ計画.md",
+        "docs/00_計画/P1実装プラン_20260917.md"
+      ],
+      "guide": [
+        "s08-roadmap",
+        "s06-branch"
+      ]
+    },
+    "docs/00_計画/ADR": {
+      "role": "計画レベルの判断記録（ADR 4 本）",
+      "body_html": "<p>0001 が P2 の 4 分割、0002 が講義 MySQL への接続と資格情報の扱い、0003 が検索 API のレート制限の見送り、0004 がレビュー用の App Service 公開（Basic 認証）。設計レベルの判断は DS-DEC として設計仕様書に書く。</p>",
+      "open_when": [
+        "ある方針の理由・代替案を確認するとき",
+        "新しい判断を記録するとき（README の型）"
+      ],
+      "key_files": [
+        "docs/00_計画/ADR/README.md",
+        "docs/00_計画/ADR/ADR-0001_P2の4分割.md",
+        "docs/00_計画/ADR/ADR-0004_レビュー用のAppService公開.md"
+      ],
+      "guide": [
+        "s12-adr",
+        "s08-roadmap"
+      ]
+    },
+    "docs/01_要求仕様書": {
+      "role": "要求仕様書（3 版）",
+      "body_html": "<p>「何を作るか」だけを書く工程。no_ai（ユーザー起案）、ai（Claude 単独設計）、with_ai（両者を統合した完成品）の 3 版がある。完成品は with_ai の v2.4。すべて docx。</p>",
+      "open_when": [
+        "REQ-FR-xxx の原文を確認するとき",
+        "3 版の違いを確認するとき"
+      ],
+      "key_files": [
+        "docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.4_20260906.docx"
+      ],
+      "guide": [
+        "s12-reqid"
+      ]
+    },
+    "docs/02_要件定義書": {
+      "role": "要件定義書（3 版）",
+      "body_html": "<p>要求を機能 ID（F-xxx）・画面・状態遷移・非機能に落とす工程。no_ai は部分記入の雛形、ai は申し送り A-01〜A-08 を決めた単独案、with_ai の v1.3 が完成品（AI アシスタント F-029 を確定）。すべて docx。</p>",
+      "open_when": [
+        "機能 ID（F-xxx）や注文状態の原文を確認するとき"
+      ],
+      "key_files": [
+        "docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.3_20260906.docx"
+      ],
+      "guide": [
+        "s08-must"
+      ]
+    },
+    "docs/03_設計仕様書": {
+      "role": "設計仕様書と付録",
+      "body_html": "<p>P1 本編（Markdown 正本）に、P2 追補 a と公開追補を差分で足す構成。API・DB・画面・セキュリティ・インフラの設計と、設計判断 DS-DEC の一覧を持つ。付録はデザイン基準と GU サイト調査。提出用の docx は draft-v2 時点で、正本より古い。</p>",
+      "open_when": [
+        "DS-API・DS-TBL・DS-DEC の原文を確認するとき",
+        "デザイントークンの根拠を確認するとき"
+      ],
+      "key_files": [
+        "docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md",
+        "docs/03_設計仕様書/GU_ECsite_設計仕様書_P2追補a_draft-v1.md",
+        "docs/03_設計仕様書/GU_ECsite_設計仕様書_公開追補_draft-v1.md",
+        "docs/03_設計仕様書/付録_デザイン基準_v1.md"
+      ],
+      "guide": [
+        "s12-dsdec",
+        "s12-dsid"
+      ]
+    },
+    "docs/04_テスト設計書": {
+      "role": "テスト設計書",
+      "body_html": "<p>AT・ST・IT・UT の 4 レベルのテスト項目と、要求 → 機能 → 設計 → テスト ID の対応表（10 章）を持つ。P1 本編（Markdown 正本）に P2 追補 a と公開追補を足す。docx は draft-v1 時点の提出用。</p>",
+      "open_when": [
+        "テスト ID（IT-014-03 など）の期待結果を確認するとき",
+        "要求とテストの対応を確認するとき"
+      ],
+      "key_files": [
+        "docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md",
+        "docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md",
+        "docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "docs/05_検収": {
+      "role": "検収の実施記録",
+      "body_html": "<p>AT・ST を実際に実施した結果を、実施者ごとに 1 ファイルで残す。期待結果の文言をそのまま観測できたときだけ「合格」とし、確認できないものは「未実施（理由）」と書く。公開環境の確認記録と README の再現確認も含む。</p>",
+      "open_when": [
+        "ST・AT の合否と証拠を確認するとき",
+        "デプロイのつまずき履歴を読むとき（公開環境_確認記録）"
+      ],
+      "key_files": [
+        "docs/05_検収/ST-AT実施記録_正常系_20260918.md",
+        "docs/05_検収/公開環境_確認記録_20260925.md",
+        "docs/05_検収/README再現確認_20260918.md"
+      ],
+      "guide": [
+        "s06-numbers",
+        "s07-public"
+      ]
+    },
+    "docs/05_解説": {
+      "role": "コード解説書（HTML）",
+      "body_html": "<p>読み物の HTML が 2 つ。<code>GU_ECsite_コード解説.html</code> は <code>code-guide/build.py</code> が組み立てたコードの読み方（約 2 MB、コードを埋め込み済み）、もう 1 つは設計仕様書とテスト設計書の読み方。番号は 05 だが V 字の工程ではない。</p>",
+      "open_when": [
+        "ブラウザで解説書を開くとき",
+        "解説書を再ビルドするとき（code-guide/）"
+      ],
+      "key_files": [
+        "docs/05_解説/GU_ECsite_コード解説.html",
+        "docs/05_解説/GU_ECsite_設計・テスト設計_解説.html",
+        "docs/05_解説/code-guide/README.md"
+      ],
+      "guide": [
+        "s01"
+      ]
+    },
+    "docs/05_解説/code-guide": {
+      "role": "解説書の組み立て基盤",
+      "body_html": "<p><code>content/</code> の本文 HTML を <code>template.html</code> に差し込み、<code>build.py</code> が本文中の参照を <code>git show</code> のコードに解決して 1 つの HTML にする。参照が解決できなければ exit 1。</p>",
+      "open_when": [
+        "解説書の本文を直すとき",
+        "再ビルドのコマンドを確認するとき"
+      ],
+      "key_files": [
+        "docs/05_解説/code-guide/README.md",
+        "docs/05_解説/code-guide/build.py",
+        "docs/05_解説/code-guide/template.html"
+      ]
+    },
+    "docs/05_解説/code-guide/content": {
+      "role": "解説書の本文（13 ファイル）",
+      "body_html": "<p>01〜12 が章、00 は動作確認用のサンプル。ファイル名順に連結され、章の見出しから目次が自動生成される。<code>data-ref</code> 属性の付いた語をクリックすると該当コードが開く。</p>",
+      "open_when": [
+        "特定の章の本文を探すとき"
+      ],
+      "key_files": [
+        "docs/05_解説/code-guide/content/01-overview.html",
+        "docs/05_解説/code-guide/content/10-file-index.html"
+      ],
+      "guide": [
+        "s10"
+      ]
+    },
+    "scripts": {
+      "role": "開発・運用スクリプト",
+      "body_html": "<p>用途別に 6 フォルダ。DB 起動（<code>mysql-local</code>・<code>mysql-docker</code>）、講義 DB 接続（<code>azure-db</code>）、公開（<code>azure-deploy</code>）、テストの検証（<code>mutation-check</code>）、commit 時の検査（<code>hooks</code>）。PowerShell（.ps1）は Windows 用、シェル（.sh）は Mac などの bash 環境用。</p>",
+      "open_when": [
+        "ローカル DB を立てるとき",
+        "Azure への公開・停止手順を確認するとき"
+      ],
+      "key_files": [
+        "scripts/azure-deploy/README.md",
+        "scripts/azure-db/README.md",
+        "scripts/mysql-local/README.md",
+        "scripts/mysql-docker/README.md"
+      ],
+      "guide": [
+        "s07-local",
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-db": {
+      "role": "講義の Azure MySQL への接続",
+      "body_html": "<p>CA 証明書の取得（<code>fetch-ca.sh</code>）、資格情報を画面に出さずに接続情報を組み立てて任意のコマンドを実行するラッパー（<code>with-azure-db.sh</code>）、疎通確認（<code>check_connection.py</code>）。資格情報のファイルは git 管理外。</p>",
+      "open_when": [
+        "講義の DB でマイグレーションや seed を流すとき",
+        "接続できない原因を調べるとき"
+      ],
+      "key_files": [
+        "scripts/azure-db/README.md",
+        "scripts/azure-db/with-azure-db.sh",
+        "scripts/azure-db/check_connection.py",
+        "scripts/azure-db/fetch-ca.sh"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-deploy": {
+      "role": "Azure App Service への手動デプロイ",
+      "body_html": "<p>番号順に実行する。01 作成、02 アプリ設定、03 DB のファイアウォール、04 api デプロイ、05 web デプロイ、06 マイグレーション（seed は明示時のみ）。90 が停止、99 が削除。共通値は <code>config.sh</code>。</p>",
+      "open_when": [
+        "レビュー用の公開環境を作る・止める・消すとき",
+        "デプロイが失敗した原因を調べるとき"
+      ],
+      "key_files": [
+        "scripts/azure-deploy/README.md",
+        "scripts/azure-deploy/config.sh",
+        "scripts/azure-deploy/04-deploy-api.sh",
+        "scripts/azure-deploy/05-deploy-web.sh"
+      ],
+      "guide": [
+        "s07-deploy",
+        "s07-public"
+      ]
+    },
+    "scripts/hooks": {
+      "role": "pre-commit のローカルフック",
+      "body_html": "<p><code>forbid_dotenv.py</code> の 1 本。<code>.env</code> 系ファイルのステージを名前で拒否する（<code>.env.example</code> のみ許可）。<code>.gitignore</code> と二重にした保険。</p>",
+      "open_when": [
+        ".env がコミットされない仕組みを確認するとき"
+      ],
+      "key_files": [
+        "scripts/hooks/forbid_dotenv.py",
+        ".pre-commit-config.yaml"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "scripts/mutation-check": {
+      "role": "防御外し確認（簡易ミューテーションテスト）",
+      "body_html": "<p>冪等キーの UNIQUE、カートの条件付き UPDATE、在庫の <code>stock >= :q</code> を 1 つずつ外し、同時実行テストが赤になるかを確かめる。外す箇所は <code>cases.json</code>、実行は <code>run.ps1</code>（Windows）。<code>result-*.md</code> は 2026-09-18 の実行結果。</p>",
+      "open_when": [
+        "同時実行テストが本当に防御を見ているかを確認するとき",
+        "検証結果の記録を読むとき"
+      ],
+      "key_files": [
+        "scripts/mutation-check/README.md",
+        "scripts/mutation-check/cases.json",
+        "scripts/mutation-check/run.ps1",
+        "scripts/mutation-check/mutate.py"
+      ],
+      "guide": [
+        "s06-tests",
+        "s04-double-order"
+      ]
+    },
+    "scripts/mysql-docker": {
+      "role": "Mac 用のローカル MySQL（Docker）",
+      "body_html": "<p>README のみ。実体はルートの <code>docker-compose.yml</code> で、初期化 SQL は <code>mysql-local/docker-init/</code> を共用する。</p>",
+      "open_when": [
+        "Mac で MySQL を起動・作り直すとき"
+      ],
+      "key_files": [
+        "scripts/mysql-docker/README.md",
+        "docker-compose.yml"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local": {
+      "role": "Windows 用のローカル MySQL（zip 版）",
+      "body_html": "<p>管理者権限なしで MySQL 8.4.11 を <code>%LOCALAPPDATA%\\guapp-mysql</code> に展開して動かす PowerShell 一式。setup が初回構築、start・stop・status が起動管理、<code>common.ps1</code> が共通定義。接続情報はリポジトリ外に保存する。</p>",
+      "open_when": [
+        "Windows で MySQL を用意するとき",
+        "起動しない原因を調べるとき"
+      ],
+      "key_files": [
+        "scripts/mysql-local/README.md",
+        "scripts/mysql-local/setup.ps1",
+        "scripts/mysql-local/start.ps1",
+        "scripts/mysql-local/status.ps1"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/docker-init": {
+      "role": "Docker 用の初期化 SQL",
+      "body_html": "<p><code>01_create_test_db.sql</code> の 1 本。Docker の MySQL の初回起動時に、結合テスト用の <code>guapp_test</code> を作り、<code>guapp</code> ユーザーに権限を付ける。</p>",
+      "open_when": [
+        "guapp_test が作られる場所を確認するとき"
+      ],
+      "key_files": [
+        "scripts/mysql-local/docker-init/01_create_test_db.sql"
+      ]
+    },
+    "tools": {
+      "role": "文書生成ツール置き場",
+      "body_html": "<p>現在は <code>docs/</code> のみ。アプリの実行には使わない。</p>",
+      "open_when": [
+        "docx の生成元を探すとき"
+      ],
+      "key_files": [
+        "tools/docs/README.md"
+      ]
+    },
+    "tools/docs": {
+      "role": "Markdown 正本 → docx の生成ツール",
+      "body_html": "<p>設計仕様書・テスト設計書の Markdown を docx にするスクリプト（<code>build_sd_docx.py</code>・<code>build_td_docx.py</code>）、Mermaid 図の PNG 化、docx の修復。入出力のパスは作者 PC の絶対パスで、他の PC では書き換えが要る。</p>",
+      "open_when": [
+        "提出用 docx を作り直すとき"
+      ],
+      "key_files": [
+        "tools/docs/README.md",
+        "tools/docs/build_sd_docx.py",
+        "tools/docs/render_mermaid.py",
+        "tools/docs/fix_docx.py"
+      ]
+    },
+    ".env.example": {
+      "role": "環境変数の見本（値は空）",
+      "body_html": "<p>秘匿値を空にした見本で、api 節と web 節がある。実物の <code>.env</code> は git 管理外で、<code>.gitignore</code> と pre-commit の両方で commit を拒否する。README の手順 4 で、ここから <code>apps/api/.env</code> と <code>apps/web/.env.local</code> に写す。</p>",
+      "open_when": [
+        "環境変数の名前を確認するとき",
+        "新しい環境変数を足すとき（値は空のまま）"
+      ],
+      "guide": [
+        "s07-env",
+        "s04-secrets"
+      ]
+    },
+    ".gitattributes": {
+      "role": "改行コードとバイナリの扱い",
+      "body_html": "<p>改行を LF に統一し（Windows でもシェルスクリプトが壊れないように）、<code>*.ps1</code>・<code>*.cmd</code>・<code>*.bat</code> だけ CRLF にする。docx・画像などをバイナリと宣言し、<code>pnpm-lock.yaml</code> と <code>uv.lock</code> は diff を出さない。</p>",
+      "ref": ".gitattributes",
+      "open_when": [
+        "差分に改行だけの変更が出るとき"
+      ]
+    },
+    ".gitignore": {
+      "role": "git に入れないもの",
+      "body_html": "<p>秘匿ファイル（<code>.env</code>・<code>.env.*</code>〔<code>.env.example</code> を除く〕・<code>*.pem</code>・<code>*.key</code>）、Python と Node のビルド物、メールスタブの出力先 <code>.mail-outbox/</code>、デプロイ時に生成する <code>requirements.txt</code> と <code>certs/</code>、<code>.claude/settings.local.json</code> を除外する。</p>",
+      "ref": ".gitignore",
+      "open_when": [
+        "ファイルが git に出てこない理由を調べるとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    ".gitleaks.toml": {
+      "role": "gitleaks の設定",
+      "body_html": "<p>CI の秘密スキャン（gitleaks）の設定。既定ルールをすべて使い、行内に <code>pragma: allowlist secret</code> か <code>gitleaks:allow</code> のマーカーがある行だけ許容する。</p>",
+      "open_when": [
+        "スキャンの誤検出を許容したいとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    ".gitleaksignore": {
+      "role": "gitleaks の指紋許容",
+      "body_html": "<p>過去コミットにあるテスト用ダミー値が誤検出された分を、指紋（commit:file:rule:line）で許容するファイル。足すときは PR で「ダミーである」理由を書く決まり。</p>",
+      "open_when": [
+        "過去コミットの誤検出で CI が赤になったとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    ".pre-commit-config.yaml": {
+      "role": "commit 時の自動検査",
+      "body_html": "<p>500 KB 超のファイル、秘密鍵、改行、マージ衝突マーカー、YAML・JSON・TOML の構文、サブモジュール、秘密らしき文字列（detect-secrets）、<code>.env</code> のステージを止める。lint（ruff・eslint）はここに入っていない。</p>",
+      "ref": ".pre-commit-config.yaml",
+      "open_when": [
+        "commit が拒否された理由を調べるとき"
+      ],
+      "guide": [
+        "s04-supply",
+        "s06-lint"
+      ]
+    },
+    ".secrets.baseline": {
+      "role": "detect-secrets の基準ファイル",
+      "body_html": "<p>pre-commit の detect-secrets が参照する基準ファイル。許容済みの検出結果を登録する場所で、手で編集せず detect-secrets のコマンドで更新する。</p>",
+      "open_when": [
+        "detect-secrets の警告を許容登録するとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "README.md": {
+      "role": "プロジェクトの入口と引き継ぎメモ",
+      "body_html": "<p>演習の進め方（3 版方式）、前提条件、ゲートごとの進捗表、開発の始め方（手順 1〜7）が入る。フォルダ構成の節は P1 時点で止まっていて、P2 追補・公開追補・解説書は載っていない。</p>",
+      "ref": "README.md#L1-40",
+      "open_when": [
+        "最初に何をすればよいか確認するとき",
+        "ローカル環境の再現手順を確認するとき"
+      ],
+      "guide": [
+        "s07-local",
+        "s08-week"
+      ]
+    },
+    "docker-compose.yml": {
+      "role": "Docker 用のローカル MySQL 定義",
+      "body_html": "<p>MySQL 8.4 のコンテナ <code>guapp-mysql</code> を 127.0.0.1:3306 に立てる。utf8mb4・UTC。パスワードはルートの <code>.env</code> の <code>MYSQL_PASSWORD</code> から注入し、初期化 SQL は <code>scripts/mysql-local/docker-init</code> を共用する。冒頭に作成時点は実行未確認とのコメントがあり、その後 Mac の検収で使われている。</p>",
+      "ref": "docker-compose.yml",
+      "open_when": [
+        "Mac で MySQL を起動するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    ".claude/launch.json": {
+      "role": "プレビュー用の開発サーバー起動定義",
+      "body_html": "<p><code>guapp-web</code>（port 3000）と <code>guapp-api</code>（port 8000）の 2 つ。<code>cmd /c</code> で起動する書き方なので Windows 前提。</p>",
+      "ref": ".claude/launch.json",
+      "open_when": [
+        "Claude Code から web・api を起動する定義を直すとき"
+      ]
+    },
+    ".claude/settings.json": {
+      "role": "エージェントに許さないコマンド",
+      "body_html": "<p>deny に、force push、<code>reset --hard</code>、<code>checkout -f</code>、<code>clean</code>、<code>stash</code>、<code>add -A</code>、<code>add .</code>、<code>branch -D</code>、<code>rebase</code> などを Bash 版と PowerShell 版で並べる。事故防止の仕組みの 1 つ。</p>",
+      "ref": ".claude/settings.json",
+      "open_when": [
+        "エージェントが実行できないコマンドを確認するとき"
+      ],
+      "guide": [
+        "s06-protection"
+      ]
+    },
+    ".github/dependabot.yml": {
+      "role": "Dependabot の設定",
+      "body_html": "<p>apps/web（npm）、apps/api（uv）、GitHub Actions を週次で見る。minor と patch はグループ化して PR 数を抑え、major は個別 PR にする。同時に開く PR は各 5 件まで。</p>",
+      "ref": ".github/dependabot.yml",
+      "open_when": [
+        "Dependabot の PR の出方を変えたいとき"
+      ],
+      "guide": [
+        "s04-supply",
+        "s12-dependabot"
+      ]
+    },
+    ".github/pull_request_template.md": {
+      "role": "PR の本文テンプレート",
+      "body_html": "<p>変更内容、対応する設計 ID・テスト ID、着手前チェック（秘匿情報なし・pre-commit・テスト緑・ID 対応・実動作確認）、検証の証拠の欄を持つ。</p>",
+      "ref": ".github/pull_request_template.md",
+      "open_when": [
+        "PR を書くとき"
+      ],
+      "guide": [
+        "s06-branch"
+      ]
+    },
+    ".github/workflows/ci.yml": {
+      "role": "CI（api・web・依存監査）",
+      "body_html": "<p>api-test が MySQL 8.4 で <code>alembic upgrade head</code> と pytest、web-test が Vitest・server-only ガード検査・build・<code>.next/static</code> の秘密混入検査、deps-audit が pip-audit と pnpm audit（失敗しても PR を止めない）。</p>",
+      "ref": ".github/workflows/ci.yml#L1-40",
+      "open_when": [
+        "CI のステップを確認するとき",
+        "CI が赤い原因を調べるとき"
+      ],
+      "guide": [
+        "s06-ci",
+        "s04-secrets"
+      ]
+    },
+    ".github/workflows/secrets-scan.yml": {
+      "role": "gitleaks による履歴全体の秘密スキャン",
+      "body_html": "<p><code>fetch-depth: 0</code> で履歴をすべて取得して gitleaks を走らせる。main の必須チェックはこの 1 件だけ。</p>",
+      "ref": ".github/workflows/secrets-scan.yml",
+      "open_when": [
+        "必須チェックの中身を確認するとき"
+      ],
+      "guide": [
+        "s06-protection",
+        "s04-supply"
+      ]
+    },
+    "apps/api/.gitignore": {
+      "role": "api 側の除外設定",
+      "body_html": "<p><code>.mail-outbox/</code>（注文確認メールの出力先。配送先を含むため commit しない）だけを除外する。</p>",
+      "ref": "apps/api/.gitignore"
+    },
+    "apps/api/.python-version": {
+      "role": "Python の版（3.13）",
+      "body_html": "<p>uv がこの版を使う。<code>pyproject.toml</code> の <code>requires-python</code> と揃えている。</p>",
+      "ref": "apps/api/.python-version"
+    },
+    "apps/api/README.md": {
+      "role": "api の起動・テスト・API 仕様メモ",
+      "body_html": "<p>セットアップ（uv sync → alembic → seed → uvicorn）、環境変数の表、integration テストの 3 つの安全装置、フォルダ構成、Wave 1・2 の API の要点、エラー形式をまとめる。</p>",
+      "ref": "apps/api/README.md#L1-40",
+      "open_when": [
+        "api を起動するとき",
+        "エラー応答の形を確認するとき"
+      ],
+      "guide": [
+        "s07-local",
+        "s04-errors"
+      ]
+    },
+    "apps/api/alembic.ini": {
+      "role": "Alembic の設定",
+      "body_html": "<p>マイグレーションの置き場（<code>alembic/</code>）とログ形式を定める。接続 URL は書かず環境変数から取る。cp932 で読まれるため ASCII のみで書く決まり。</p>",
+      "ref": "apps/api/alembic.ini",
+      "open_when": [
+        "alembic の設定を変えるとき"
+      ],
+      "guide": [
+        "s05-migration"
+      ]
+    },
+    "apps/api/alembic/env.py": {
+      "role": "Alembic の実行環境（非同期・MySQL）",
+      "body_html": "<p>接続 URL を <code>get_settings().DATABASE_URL</code> から取り（<code>-x url=</code> があればそちらを優先）、<code>Base.metadata</code> を対象に差分を検出する。型の差分も見る。</p>",
+      "ref": "apps/api/alembic/env.py::run_async_migrations",
+      "open_when": [
+        "マイグレーションの接続先の決まり方を確認するとき"
+      ],
+      "guide": [
+        "s05-migration"
+      ]
+    },
+    "apps/api/alembic/script.py.mako": {
+      "role": "マイグレーションの雛形",
+      "body_html": "<p><code>alembic revision</code> が新しいマイグレーションを作るときのテンプレート。upgrade と downgrade（ロールバック手順）の枠を持つ。</p>",
+      "ref": "apps/api/alembic/script.py.mako"
+    },
+    "apps/api/alembic/versions/0001_p1_initial.py": {
+      "role": "P1 の 12 表を作るマイグレーション",
+      "body_html": "<p>改訂 ID は <code>6659ce6c5164</code>。UNIQUE・CHECK・索引・外部キーを目視点検した記録が冒頭にある。<code>downgrade()</code> が外部キーの逆順に全表を drop する。</p>",
+      "ref": "apps/api/alembic/versions/0001_p1_initial.py#L1-30",
+      "open_when": [
+        "表の制約の実定義を確認するとき"
+      ],
+      "guide": [
+        "s05-migration",
+        "s05-constraints"
+      ]
+    },
+    "apps/api/alembic/versions/371a338f4624_p2a_contents.py": {
+      "role": "contents 表を足すマイグレーション",
+      "body_html": "<p>P2-a で FAQ・静的ページ・お知らせ・特集を入れる <code>contents</code> 表（DS-TBL-22）を追加する。他表への外部キーがなく、downgrade は表を 1 つ drop するだけ。</p>",
+      "ref": "apps/api/alembic/versions/371a338f4624_p2a_contents.py#L1-30",
+      "open_when": [
+        "contents 表の定義を確認するとき"
+      ],
+      "guide": [
+        "s05-migration"
+      ]
+    },
+    "apps/api/openapi.json": {
+      "role": "API 契約（OpenAPI）",
+      "body_html": "<p><code>create_app().openapi()</code> の出力。web の <code>lib/types.ts</code> はこれと突き合わせて手で保つ。P1 時点の 11 パスで止まっていて、P2-a の <code>/contents</code>・<code>/search</code> は入っていない。</p>",
+      "ref": "apps/api/openapi.json#L1-40",
+      "open_when": [
+        "API の入出力の契約を確認するとき"
+      ],
+      "guide": [
+        "s04-types"
+      ]
+    },
+    "apps/api/pyproject.toml": {
+      "role": "api の依存とテスト設定",
+      "body_html": "<p>fastapi、sqlalchemy（asyncio）、asyncmy、alembic、pydantic-settings などの依存と、pytest（<code>asyncio_mode = \"auto\"</code>）、ruff の開発依存を定める。ビルドは hatchling。</p>",
+      "ref": "apps/api/pyproject.toml",
+      "open_when": [
+        "依存を足す・版を確認するとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "apps/api/ruff.toml": {
+      "role": "ruff（lint）の規則",
+      "body_html": "<p>行長 100、対象は pyflakes・pycodestyle・isort・bugbear・pyupgrade。FastAPI の <code>Depends()</code> を既定引数に置く書き方は B008 として許容する。CI と pre-commit には組み込まれていない。</p>",
+      "ref": "apps/api/ruff.toml",
+      "open_when": [
+        "lint の規則を確認するとき"
+      ],
+      "guide": [
+        "s06-lint"
+      ]
+    },
+    "apps/api/uv.lock": {
+      "role": "api の依存の固定（uv）",
+      "body_html": "<p>uv が生成するロックファイル。CI は <code>uv sync --frozen</code> でこの版どおりに入れる。手で編集しない。</p>",
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "apps/api/app/main.py": {
+      "role": "アプリの組み立て",
+      "body_html": "<p><code>create_app</code> がエラーハンドラ・CORS・ルーターを登録する。health だけ内部トークン不要で、それ以外は <code>build_protected_router</code> で <code>/api/v1</code> 配下にまとめて <code>verify_internal_token</code> を掛ける。本番は Swagger を無効にする。</p>",
+      "ref": "apps/api/app/main.py::create_app",
+      "open_when": [
+        "ルーターの登録先や認証の掛かり方を確認するとき"
+      ],
+      "guide": [
+        "s02",
+        "s04-token",
+        "s04-cors"
+      ]
+    },
+    "apps/api/app/seed.py": {
+      "role": "初期データの投入コマンド",
+      "body_html": "<p><code>python -m app.seed</code> で実行する。商品が既にあれば何もしない。<code>--reset</code> は 12 表と contents を TRUNCATE してから入れ直し、確認プロンプトを出す（<code>--yes</code> で省略）。</p>",
+      "ref": "apps/api/app/seed.py::seed",
+      "open_when": [
+        "seed を流す・作り直すとき"
+      ],
+      "guide": [
+        "s05-seed"
+      ]
+    },
+    "apps/api/app/seed_data.py": {
+      "role": "初期データの定義",
+      "body_html": "<p>カテゴリ 3 区分の階層、商品 31 点（うち 30 番は非公開のテスト用）、色×サイズのバリエーション、在庫（乱数の種を固定）、system_settings、FAQ・静的ページの本文を持つ。DB に触れない定数と関数だけ。</p>",
+      "ref": "apps/api/app/seed_data.py::build_variants",
+      "open_when": [
+        "テストが前提にする商品・在庫を確認するとき"
+      ],
+      "guide": [
+        "s05-seed"
+      ]
+    },
+    "apps/api/app/core/config.py": {
+      "role": "環境変数の設定クラス",
+      "body_html": "<p><code>Settings</code> が APP_ENV・DATABASE_URL・INTERNAL_TOKEN・CORS_ALLOW_ORIGIN・PAYMENT_STUB_RESULT・DB プール値などを型付きで読む。値は書かない。</p>",
+      "ref": "apps/api/app/core/config.py::Settings",
+      "open_when": [
+        "環境変数の一覧と既定値を確認するとき"
+      ],
+      "guide": [
+        "s04-config",
+        "s07-env"
+      ]
+    },
+    "apps/api/app/core/db.py": {
+      "role": "DB エンジンとセッション",
+      "body_html": "<p>SQLAlchemy 非同期エンジンを作り、<code>get_session</code> が 1 リクエスト 1 セッションを貸し出す。プールは既定 20 本＋余裕 10 本で、環境変数で変えられる。</p>",
+      "ref": "apps/api/app/core/db.py::get_session",
+      "open_when": [
+        "接続数の設定を確認するとき"
+      ],
+      "guide": [
+        "s04-config"
+      ]
+    },
+    "apps/api/app/core/errors.py": {
+      "role": "エラー応答の形を決める場所",
+      "body_html": "<p>業務エラーは <code>AppError</code> の 1 系統。入力検証エラーは 400 <code>validation_error</code>、未捕捉の例外は 500 の固定文言にして、詳細はログにだけ出す。</p>",
+      "ref": "apps/api/app/core/errors.py::AppError",
+      "open_when": [
+        "エラーの code と HTTP ステータスの対応を確認するとき"
+      ],
+      "guide": [
+        "s04-errors"
+      ]
+    },
+    "apps/api/app/core/security.py": {
+      "role": "内部トークン検証と CORS",
+      "body_html": "<p><code>verify_internal_token</code> が X-Internal-Token を一定時間比較で検証する。期待値が未設定なら全拒否。CORS は許可オリジンを 1 つに絞る。</p>",
+      "ref": "apps/api/app/core/security.py::verify_internal_token",
+      "open_when": [
+        "BFF 以外から API に入れない仕組みを確認するとき"
+      ],
+      "guide": [
+        "s04-token",
+        "s04-cors"
+      ]
+    },
+    "apps/api/app/core/logging.py": {
+      "role": "ログの秘密マスク",
+      "body_html": "<p><code>SecretMaskFilter</code> が Stripe キー・接続文字列・Bearer トークン・内部トークンの値を <code>***</code> に置き換える。</p>",
+      "ref": "apps/api/app/core/logging.py::SecretMaskFilter",
+      "open_when": [
+        "ログに秘密が出ない仕組みを確認するとき"
+      ],
+      "guide": [
+        "s04-logging"
+      ]
+    },
+    "apps/api/app/core/rate_limit.py": {
+      "role": "ゲスト注文照会のレート制限",
+      "body_html": "<p>1 IP あたり 100 回/時を数えるスライディングウィンドウ。プロセス内メモリなので、複数インスタンスでは共有されない。</p>",
+      "ref": "apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter",
+      "open_when": [
+        "429 の出る条件を確認するとき"
+      ],
+      "guide": [
+        "s04-ratelimit"
+      ]
+    },
+    "apps/api/app/routers/orders.py": {
+      "role": "注文確定・注文照会の入口",
+      "body_html": "<p><code>create_order</code> が DS-API-022、<code>lookup_order</code> が DS-API-023。業務判断はなく、サービスの結果を受けて新規は 201、同じ冪等キーの再送は 200 に切り替える。</p>",
+      "ref": "apps/api/app/routers/orders.py::create_order",
+      "open_when": [
+        "注文確定の API の入口を読むとき（読む順の 2 番目）"
+      ],
+      "guide": [
+        "s02",
+        "s02-order-flow"
+      ]
+    },
+    "apps/api/app/routers/cart.py": {
+      "role": "カート API の入口",
+      "body_html": "<p>DS-API-010〜013 の取得・追加・数量変更・削除。カートの識別は <code>X-Cart-Token</code> ヘッダで行う。</p>",
+      "ref": "apps/api/app/routers/cart.py::add_item",
+      "open_when": [
+        "「カートに入れる」の API 側の入口を読むとき"
+      ],
+      "guide": [
+        "s01-lifecycle",
+        "s03-cart"
+      ]
+    },
+    "apps/api/app/services/orders.py": {
+      "role": "注文確定の手順の本体",
+      "body_html": "<p><code>_confirm</code> がトランザクションの境界で、注文 INSERT、カートの ordered 化、金額の再計算と照合、在庫引当、決済、確定の順に進む。デッドロックは 1 回だけ再試行する。コメントの番号 1〜6 が設計書の手順に対応する。</p>",
+      "ref": "apps/api/app/services/orders.py::_confirm",
+      "open_when": [
+        "注文確定で何が保証されるかを確認するとき（読む順の 3 番目）"
+      ],
+      "guide": [
+        "s02-order-flow",
+        "s03-order",
+        "s04-double-order"
+      ]
+    },
+    "apps/api/app/services/cart.py": {
+      "role": "カートのサービス",
+      "body_html": "<p>トークンが無い・未知なら新しいカートを発行し、ordered のカートは新しい active カートに差し替える。数量の上限（1 明細 10・合計 50）は加算後に検査して、超過なら rollback する。</p>",
+      "ref": "apps/api/app/services/cart.py::add_item",
+      "open_when": [
+        "カートの上限・在庫判定の順序を確認するとき"
+      ],
+      "guide": [
+        "s03-cart",
+        "s01-lifecycle"
+      ]
+    },
+    "apps/api/app/services/pricing.py": {
+      "role": "金額計算の規則",
+      "body_html": "<p>すべて int の円で計算する。内税は基点整数の整数演算、送料無料の判定は小計に対して行う。単体テスト UT-021 が境界値を確認する。</p>",
+      "ref": "apps/api/app/services/pricing.py::calc_totals",
+      "open_when": [
+        "税・送料の計算規則を確認するとき"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/api/app/services/order_state.py": {
+      "role": "注文状態の遷移表",
+      "body_html": "<p>許可する遷移を表にし、表にない遷移は <code>assert_transition</code> が例外にする。正本は要件定義書 5.5。</p>",
+      "ref": "apps/api/app/services/order_state.py::TRANSITIONS",
+      "open_when": [
+        "注文状態の遷移を確認するとき"
+      ],
+      "guide": [
+        "s05-status"
+      ]
+    },
+    "apps/api/app/repositories/orders.py": {
+      "role": "注文まわりの SQL",
+      "body_html": "<p><code>reserve_stock</code> は <code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock >= :q</code> の 1 文で、影響行数が 0 なら在庫不足。カートの active → ordered も条件付き UPDATE 1 文。</p>",
+      "ref": "apps/api/app/repositories/orders.py::reserve_stock",
+      "open_when": [
+        "二重引当をどこで防ぐかを確認するとき（読む順の 4 番目）"
+      ],
+      "guide": [
+        "s04-stock",
+        "s02"
+      ]
+    },
+    "apps/api/app/repositories/products.py": {
+      "role": "商品・カテゴリの読み出し SQL",
+      "body_html": "<p>公開商品の条件は <code>published_filter</code> の 1 か所に集め、一覧・詳細・関連商品・カート追加が必ず通る。在庫の集計は 1 回の GROUP BY で行う。</p>",
+      "ref": "apps/api/app/repositories/products.py::published_filter",
+      "open_when": [
+        "非公開商品が出ない仕組みを確認するとき"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "apps/api/app/models/base.py": {
+      "role": "全モデル共通の基底",
+      "body_html": "<p>id（BIGINT）・created_at・updated_at を全表に持たせ、制約名の規則（<code>NAMING_CONVENTION</code>）と MySQL のテーブルオプション（utf8mb4）を定める。</p>",
+      "ref": "apps/api/app/models/base.py::Base",
+      "open_when": [
+        "全表に共通する列を確認するとき"
+      ],
+      "guide": [
+        "s05-common"
+      ]
+    },
+    "apps/api/app/models/order.py": {
+      "role": "注文・明細・決済の表",
+      "body_html": "<p><code>orders</code>・<code>order_items</code>・<code>payments</code> と、注文状態 8 値の <code>OrderStatus</code>。冪等キーと注文番号は UNIQUE。<code>stripe_session_id</code> は P2 用に先に持つ。</p>",
+      "ref": "apps/api/app/models/order.py::Order",
+      "open_when": [
+        "注文の列・状態値を確認するとき"
+      ],
+      "guide": [
+        "s05-tables",
+        "s05-status"
+      ]
+    },
+    "apps/api/app/schemas/order.py": {
+      "role": "注文系の入出力の型",
+      "body_html": "<p>郵便番号・電話・冪等キーの形の検証（<code>OrderCreateIn</code>）と、内部 ID を出さない応答の型を持つ。</p>",
+      "ref": "apps/api/app/schemas/order.py::OrderCreateIn",
+      "open_when": [
+        "注文入力の桁数・形式を確認するとき"
+      ],
+      "guide": [
+        "s04-errors"
+      ]
+    },
+    "apps/api/app/adapters/payment.py": {
+      "role": "決済アダプタ（スタブ）",
+      "body_html": "<p>型 <code>PaymentAdapter</code> と、環境変数 <code>PAYMENT_STUB_RESULT</code> の ok／ng を返す <code>StubPaymentAdapter</code>。カード情報は扱わない。Stripe への差し替え口になる。</p>",
+      "ref": "apps/api/app/adapters/payment.py::StubPaymentAdapter",
+      "open_when": [
+        "決済 NG を再現するとき"
+      ],
+      "guide": [
+        "s08-stub"
+      ]
+    },
+    "apps/api/tests/conftest.py": {
+      "role": "テスト共通のフィクスチャ",
+      "body_html": "<p>フィクスチャ <code>app_env</code> が環境変数を明示的に与え（<code>.env</code> は使わない）、<code>make_app</code> が <code>create_app()</code> を作り、<code>client_factory</code> が httpx の ASGI クライアントを作る。トークンなどはテスト用のダミー値。</p>",
+      "ref": "apps/api/tests/conftest.py#L1-40",
+      "open_when": [
+        "テストの前提の環境変数を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/api/tests/integration/conftest.py": {
+      "role": "結合テストの安全装置",
+      "body_html": "<p><code>DATABASE_URL_TEST</code> が無ければ全件 skip、DB 名が <code>_test</code> で終わらなければ中止、dialect が mysql でなければ中止。スキーマは <code>alembic upgrade head</code> で作る。</p>",
+      "ref": "apps/api/tests/integration/conftest.py#L1-40",
+      "open_when": [
+        "IT が skip・中止される理由を調べるとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/api/tests/integration/live_server.py": {
+      "role": "同時実行テスト用の uvicorn 起動",
+      "body_html": "<p>空きポートで uvicorn を子プロセスとして起動し、health が 200 になるまで待って、ウォームアップの 1 リクエストを投げる。終了時はプロセスツリーごと止める。</p>",
+      "ref": "apps/api/tests/integration/live_server.py#L1-30",
+      "open_when": [
+        "同時実行 IT の環境を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/api/tests/integration/concurrency_helpers.py": {
+      "role": "同時性を作り確かめるヘルパー",
+      "body_html": "<p>2 本の POST を Barrier で揃えて送り、<code>/_test/metrics</code> の最大同時処理数が 2 以上の試行だけを有効にする。不成立は最大 3 回やり直し、3 回とも不成立なら赤にする。</p>",
+      "ref": "apps/api/tests/integration/concurrency_helpers.py#L1-30",
+      "open_when": [
+        "同時実行テストの偽陽性対策を確認するとき"
+      ],
+      "guide": [
+        "s06-tests",
+        "s04-test-hooks"
+      ]
+    },
+    "apps/api/tests/integration/order_helpers.py": {
+      "role": "注文系 IT の共通ヘルパー",
+      "body_html": "<p>ダミーの配送先（実在の個人情報ではない）と、カート作成・商品追加・prepare・在庫の読み書き・行数の数え上げなどの補助関数を持つ。in-process のクライアントと live_server の両方から使う。</p>",
+      "ref": "apps/api/tests/integration/order_helpers.py#L1-30"
+    },
+    "apps/api/tests/integration/test_it_014_concurrency.py": {
+      "role": "同時実行 IT-014-02・03",
+      "body_html": "<p>同じ冪等キーの 20 本同時、同じカートに別キーの 2 本同時を、起動済み uvicorn に送る。成功側は全応答コードと注文番号、失敗側は code まで確認する。</p>",
+      "ref": "apps/api/tests/integration/test_it_014_concurrency.py#L1-20",
+      "open_when": [
+        "二重注文の防御テストを読むとき"
+      ],
+      "guide": [
+        "s04-double-order"
+      ]
+    },
+    "apps/api/tests/integration/test_it_014_04_stock_race.py": {
+      "role": "在庫 1 の同時注文 IT-014-04",
+      "body_html": "<p>在庫 1 のバリエーションに別カートから 2 件同時に注文し、片方だけ成功することを 30 回の有効試行で確かめる。</p>",
+      "ref": "apps/api/tests/integration/test_it_014_04_stock_race.py#L1-20",
+      "open_when": [
+        "在庫引当の同時実行テストを読むとき"
+      ],
+      "guide": [
+        "s04-stock"
+      ]
+    },
+    "apps/api/tests/unit/test_ut_021_pricing.py": {
+      "role": "金額計算の単体テスト UT-021",
+      "body_html": "<p>内税・送料・送料無料の閾値の境界値と、int 以外の入力の拒否を DB なしで確認する。</p>",
+      "ref": "apps/api/tests/unit/test_ut_021_pricing.py#L1-20",
+      "open_when": [
+        "金額計算の境界値を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/web/.gitignore": {
+      "role": "web 側の除外設定",
+      "body_html": "<p>node_modules・<code>.next</code>・<code>.env*</code>・ビルド物に加え、create-next-app が自動生成する <code>AGENTS.md</code> と <code>CLAUDE.md</code> も除外する。</p>",
+      "ref": "apps/web/.gitignore"
+    },
+    "apps/web/README.md": {
+      "role": "web の起動・構成・共通部品の使い方",
+      "body_html": "<p>版の一覧、起動手順、テストの種類、ディレクトリ構成、カートと CSRF の流れ、注文手続きの流れ、デザイントークンと共通部品の使い方、秘密情報の扱い、BFF を確かめる curl 例をまとめる。</p>",
+      "ref": "apps/web/README.md#L1-40",
+      "open_when": [
+        "web を起動するとき",
+        "共通部品（Button・TextField など）の使い方を確認するとき"
+      ],
+      "guide": [
+        "s07-local",
+        "s10-web"
+      ]
+    },
+    "apps/web/eslint.config.mjs": {
+      "role": "ESLint の設定",
+      "body_html": "<p><code>eslint-config-next</code>（core-web-vitals と TypeScript）をそのまま使う。実行は <code>pnpm lint</code> で、CI と pre-commit には入っていない。</p>",
+      "ref": "apps/web/eslint.config.mjs",
+      "open_when": [
+        "lint の規則を確認するとき"
+      ],
+      "guide": [
+        "s06-lint"
+      ]
+    },
+    "apps/web/next.config.ts": {
+      "role": "Next.js の設定",
+      "body_html": "<p><code>output: \"standalone\"</code> だけを指定する。App Service で <code>node server.js</code> を起動するための出力形式。</p>",
+      "ref": "apps/web/next.config.ts::nextConfig",
+      "open_when": [
+        "ビルド出力の形式を確認するとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "apps/web/package.json": {
+      "role": "web の依存とスクリプト",
+      "body_html": "<p>next 16.3.5・react 19.2.8 と、Tailwind 4・Vitest・Testing Library などの開発依存。スクリプトは dev・build・start・lint・test・typecheck。<code>packageManager</code> で pnpm の版を固定する。</p>",
+      "ref": "apps/web/package.json",
+      "open_when": [
+        "スクリプト名や依存の版を確認するとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "apps/web/pnpm-lock.yaml": {
+      "role": "web の依存の固定（pnpm）",
+      "body_html": "<p>pnpm が生成するロックファイル（約 5,400 行）。CI は <code>--frozen-lockfile</code> でこの版どおりに入れる。手で編集しない。</p>",
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "apps/web/pnpm-workspace.yaml": {
+      "role": "pnpm のビルド許可設定",
+      "body_html": "<p><code>allowBuilds</code> で <code>sharp</code> と <code>unrs-resolver</code> のビルドスクリプトを許可しない設定を置く。ワークスペース（複数パッケージ）の定義ではない。</p>",
+      "ref": "apps/web/pnpm-workspace.yaml"
+    },
+    "apps/web/postcss.config.mjs": {
+      "role": "PostCSS の設定",
+      "body_html": "<p>Tailwind 4 の PostCSS プラグイン <code>@tailwindcss/postcss</code> を有効にするだけの設定。</p>",
+      "ref": "apps/web/postcss.config.mjs"
+    },
+    "apps/web/tsconfig.json": {
+      "role": "TypeScript の設定",
+      "body_html": "<p><code>strict</code> で型検査し、<code>@/*</code> をこのフォルダ直下に対応させる。import は <code>@/lib/...</code>・<code>@/components/...</code> の形で書ける。</p>",
+      "ref": "apps/web/tsconfig.json",
+      "open_when": [
+        "@/ の別名の指す先を確認するとき"
+      ]
+    },
+    "apps/web/vitest.config.mts": {
+      "role": "Vitest の設定",
+      "body_html": "<p>jsdom 環境で <code>tests/**/*.test.{ts,tsx}</code> を実行する。<code>@</code> の別名を張り、<code>server-only</code> を空のスタブ（<code>tests/stubs/server-only.ts</code>）に差し替えて <code>lib/server</code> を単体テストできるようにする。</p>",
+      "ref": "apps/web/vitest.config.mts",
+      "open_when": [
+        "テストの環境設定を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "apps/web/proxy.ts": {
+      "role": "サイト全体の Basic 認証",
+      "body_html": "<p>Next.js 16 の proxy（旧 middleware）。全ページと <code>/api/*</code> の手前で Basic 認証を確かめ、静的アセットは対象外にする。ID・パスワードの環境変数が両方未設定なら認証なしで通す。</p>",
+      "ref": "apps/web/proxy.ts::proxy",
+      "open_when": [
+        "レビュー用公開の入口認証を確認するとき"
+      ],
+      "guide": [
+        "s03-auth",
+        "s01-arch"
+      ]
+    },
+    "apps/web/scripts/gen-placeholders.mjs": {
+      "role": "商品画像プレースホルダーの生成",
+      "body_html": "<p>依存を足さずに <code>public/products/NNN/1.jpg</code> を作る。中身は 8×8 の単色 PNG で、拡張子だけ <code>.jpg</code>。件数の既定は 30 で、31 点そろえるには引数に 31 を渡す。</p>",
+      "ref": "apps/web/scripts/gen-placeholders.mjs#L1-20",
+      "open_when": [
+        "画像を作り直すとき"
+      ],
+      "guide": [
+        "s05-seed"
+      ]
+    },
+    "apps/web/tests/setup.ts": {
+      "role": "Vitest の共通セットアップ",
+      "body_html": "<p>jest-dom の拡張を読み込み、各テストの後に DOM を破棄する（<code>globals: false</code> のため自動 cleanup が効かない）。</p>",
+      "ref": "apps/web/tests/setup.ts"
+    },
+    "apps/web/tests/stubs/server-only.ts": {
+      "role": "server-only の空スタブ",
+      "body_html": "<p>Vitest だけで <code>server-only</code> の代わりに読まれる空モジュール。本番のビルドでは npm の <code>server-only</code> が使われる。</p>",
+      "ref": "apps/web/tests/stubs/server-only.ts",
+      "guide": [
+        "s12-server-only"
+      ]
+    },
+    "apps/web/tests/it-bff-01-02.orders-route.test.ts": {
+      "role": "注文系 BFF のテスト（IT-BFF-01・02）",
+      "body_html": "<p>fetch をモックして、CSRF 付きなら内部トークンなどのヘッダを付けて取り次ぎ 201、CSRF 無しは 403 で FastAPI に届かないこと、429 の <code>Retry-After</code> の透過を確認する。</p>",
+      "ref": "apps/web/tests/it-bff-01-02.orders-route.test.ts#L1-20",
+      "open_when": [
+        "BFF の CSRF・ヘッダ付与のテストを読むとき"
+      ],
+      "guide": [
+        "s06-tests",
+        "s04-csrf"
+      ]
+    },
+    "apps/web/tests/ut-web-05.env-validation.test.ts": {
+      "role": "環境変数の検証テスト（UT-WEB-05）",
+      "body_html": "<p>必須キーの欠落と、<code>NEXT_PUBLIC_</code> に秘密らしい名前の変数があれば拒否することを確認する。</p>",
+      "ref": "apps/web/tests/ut-web-05.env-validation.test.ts#L1-20",
+      "open_when": [
+        "秘密がブラウザに出ない検査を確認するとき"
+      ],
+      "guide": [
+        "s04-secrets"
+      ]
+    },
+    "apps/web/app/layout.tsx": {
+      "role": "全画面共通のレイアウト",
+      "body_html": "<p><code>RootLayout</code> がトースト・期間限定の帯・カート点数の <code>CartProvider</code>・ヘッダー・フッターを組み、カテゴリ階層をここで取得する。Cookie の有無で、カート取得を省くかを決める。</p>",
+      "ref": "apps/web/app/layout.tsx::RootLayout",
+      "open_when": [
+        "全画面共通の表示を直すとき"
+      ],
+      "guide": [
+        "s03-nav",
+        "s03-auth"
+      ]
+    },
+    "apps/web/app/globals.css": {
+      "role": "デザイントークンと共通スタイル",
+      "body_html": "<p>Tailwind 4 の <code>@theme</code> に色・角丸・影・文字サイズなどを定義し、既定の値は消してある。<code>bg-gray-900</code> のような Tailwind 標準のクラスは使えず、トークン由来のクラスだけが生成される。</p>",
+      "ref": "apps/web/app/globals.css#L1-30",
+      "open_when": [
+        "色や寸法のトークンを確認するとき"
+      ]
+    },
+    "apps/web/app/favicon.ico": {
+      "role": "ファビコン",
+      "body_html": "<p>ブラウザのタブに出るアイコン。Basic 認証の対象外パスに含まれる。</p>"
+    },
+    "apps/web/app/not-found.tsx": {
+      "role": "404 画面",
+      "body_html": "<p>存在しない・非公開・掲載期間外のいずれも同じ画面にする（区別を見せない）。</p>",
+      "ref": "apps/web/app/not-found.tsx::NotFound",
+      "guide": [
+        "s03-detail"
+      ]
+    },
+    "apps/web/app/page.tsx": {
+      "role": "ホーム画面（DS-SCR-001）",
+      "body_html": "<p>性別カテゴリ、新着 8 件、お知らせの上位 3 件を出す。データは <code>lib/server</code> から FastAPI を直接読む。</p>",
+      "ref": "apps/web/app/page.tsx::HomePage",
+      "open_when": [
+        "トップ画面の構成を確認するとき"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "apps/web/app/products/page.tsx": {
+      "role": "商品一覧画面（DS-SCR-002）",
+      "body_html": "<p>gender・category・page を URL から受けて FastAPI を呼び、24 件ずつ <code>ProductsGrid</code> に渡す。</p>",
+      "ref": "apps/web/app/products/page.tsx::ProductsPage",
+      "open_when": [
+        "一覧の絞り込みを確認するとき"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "apps/web/app/products/[id]/page.tsx": {
+      "role": "商品詳細画面（DS-SCR-003）",
+      "body_html": "<p>画像・価格・購入操作（<code>PurchasePanel</code>）・説明・関連商品を並べる。存在しない・非公開なら <code>notFound()</code>。</p>",
+      "ref": "apps/web/app/products/[id]/page.tsx::ProductDetailPage",
+      "open_when": [
+        "詳細画面の構成を確認するとき"
+      ],
+      "guide": [
+        "s03-detail"
+      ]
+    },
+    "apps/web/app/cart/page.tsx": {
+      "role": "カート画面（DS-SCR-004）",
+      "body_html": "<p>サーバーで初期表示のカートを取得し、<code>CartView</code> に渡す。<code>?oos=</code> の明細を強調する。</p>",
+      "ref": "apps/web/app/cart/page.tsx::CartPage",
+      "open_when": [
+        "カート画面の初期表示を確認するとき"
+      ],
+      "guide": [
+        "s03-cart"
+      ]
+    },
+    "apps/web/app/checkout/page.tsx": {
+      "role": "注文手続き画面（DS-SCR-005）",
+      "body_html": "<p>本体は <code>CheckoutForm</code>。このファイルは枠だけ。</p>",
+      "ref": "apps/web/app/checkout/page.tsx::CheckoutPage",
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/app/orders/complete/page.tsx": {
+      "role": "注文完了画面（DS-SCR-006 の完了）",
+      "body_html": "<p>本体は <code>OrderComplete</code>。URL の <code>?n=</code> に注文番号が入る。</p>",
+      "ref": "apps/web/app/orders/complete/page.tsx::OrderCompletePage",
+      "guide": [
+        "s03-complete"
+      ]
+    },
+    "apps/web/app/api/cart/route.ts": {
+      "role": "カート取得の BFF",
+      "body_html": "<p>GET が FastAPI のカート取得を取り次ぎ、<code>cart_token</code> と <code>csrf_token</code> の Cookie を発行・更新する。</p>",
+      "ref": "apps/web/app/api/cart/route.ts::GET",
+      "open_when": [
+        "Cookie の発行元を確認するとき"
+      ],
+      "guide": [
+        "s04-cookie",
+        "s03-cart"
+      ]
+    },
+    "apps/web/app/api/cart/items/route.ts": {
+      "role": "カート追加の BFF",
+      "body_html": "<p>POST が CSRF を確かめ、variant_id と quantity の形を見て <code>proxyCartRequest</code> に渡す。</p>",
+      "ref": "apps/web/app/api/cart/items/route.ts::POST",
+      "open_when": [
+        "BFF の型（CSRF → 形の確認 → 取り次ぎ）を読むとき"
+      ],
+      "guide": [
+        "s01-lifecycle"
+      ]
+    },
+    "apps/web/app/api/orders/route.ts": {
+      "role": "注文確定の BFF",
+      "body_html": "<p>POST が CSRF を確かめ、設計書 4.4 の項目と金額 3 つだけを拾って転送する。余計なキーは落とし、桁や形式の検査は FastAPI に任せる。</p>",
+      "ref": "apps/web/app/api/orders/route.ts::POST",
+      "open_when": [
+        "注文確定の画面側の入口を読むとき（読む順の 5 番目）"
+      ],
+      "guide": [
+        "s02",
+        "s02-order-flow"
+      ]
+    },
+    "apps/web/components/PurchasePanel.tsx": {
+      "role": "商品詳細の購入操作",
+      "body_html": "<p>色・サイズ・数量から variant を解決し、在庫切れなら追加ボタンを無効にする。追加成功でヘッダーのバッジとトーストを更新する。375px では下部の固定バーにもなる。</p>",
+      "ref": "apps/web/components/PurchasePanel.tsx::PurchasePanel",
+      "open_when": [
+        "「カートに入れる」の画面側の入口を読むとき"
+      ],
+      "guide": [
+        "s03-detail",
+        "s01-lifecycle"
+      ]
+    },
+    "apps/web/components/CartProvider.tsx": {
+      "role": "カート点数の共有状態",
+      "body_html": "<p>ヘッダーのバッジに点数を渡す。変更 API の応答を <code>applyCart</code> で反映する。Cookie が無い訪問者は取得を省く。</p>",
+      "ref": "apps/web/components/CartProvider.tsx::CartProvider",
+      "open_when": [
+        "バッジが更新される仕組みを確認するとき"
+      ],
+      "guide": [
+        "s03-cart"
+      ]
+    },
+    "apps/web/components/CartView.tsx": {
+      "role": "カート画面の本体",
+      "body_html": "<p>数量変更は即時に PATCH、削除は確認ダイアログの後に DELETE。応答のカートで全体を置き換える。</p>",
+      "ref": "apps/web/components/CartView.tsx::CartView",
+      "open_when": [
+        "カートの操作の挙動を確認するとき"
+      ],
+      "guide": [
+        "s03-cart"
+      ]
+    },
+    "apps/web/components/CheckoutForm.tsx": {
+      "role": "注文手続きフォーム本体",
+      "body_html": "<p>入力検査 → prepare → sessionStorage に保存 → 確認画面へ進む。ダミー初期値と、本物の個人情報を入れない注意書きを持つ。</p>",
+      "ref": "apps/web/components/CheckoutForm.tsx::CheckoutForm",
+      "open_when": [
+        "お届け先入力の検査と遷移を読むとき"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/components/OrderConfirm.tsx": {
+      "role": "注文確認画面の本体",
+      "body_html": "<p>確定ボタン → 確認ダイアログ → <code>POST /api/orders</code>。二重クリックでも送信は 1 回で、エラーごとの戻し先は <code>routeOrderError</code> の結果で決める。</p>",
+      "ref": "apps/web/components/OrderConfirm.tsx::OrderConfirm",
+      "open_when": [
+        "注文確定ボタンの挙動を読むとき（読む順の 6 番目）"
+      ],
+      "guide": [
+        "s02-order-flow",
+        "s03-order"
+      ]
+    },
+    "apps/web/components/OrderComplete.tsx": {
+      "role": "注文完了画面の本体",
+      "body_html": "<p>sessionStorage の注文を再掲し、無ければ注文番号とメールの照会フォームを出す。</p>",
+      "ref": "apps/web/components/OrderComplete.tsx::OrderComplete",
+      "guide": [
+        "s03-complete"
+      ]
+    },
+    "apps/web/components/Header.tsx": {
+      "role": "共通ヘッダー",
+      "body_html": "<p>メニュー・ロゴ・検索・お気に入り・カート（点数バッジ）・会員のアイコンを 1 行に並べる。カートへの接続は <code>HeaderWithCart.tsx</code>。</p>",
+      "ref": "apps/web/components/Header.tsx::Header",
+      "guide": [
+        "s03-nav"
+      ]
+    },
+    "apps/web/components/ConfirmDialog.tsx": {
+      "role": "確認ダイアログ",
+      "body_html": "<p>削除と注文確定で使う。フォーカスの循環、Escape での閉じ方、処理中の無効化を持つ。</p>",
+      "ref": "apps/web/components/ConfirmDialog.tsx::ConfirmDialog",
+      "guide": [
+        "s03-nav"
+      ]
+    },
+    "apps/web/components/Toast.tsx": {
+      "role": "トースト",
+      "body_html": "<p><code>useToast().show()</code> で成功・失敗を画面下部に数秒出す。<code>layout.tsx</code> が <code>ToastProvider</code> で包む。</p>",
+      "ref": "apps/web/components/Toast.tsx::ToastProvider"
+    },
+    "apps/web/lib/types.ts": {
+      "role": "FastAPI 応答の TypeScript 型",
+      "body_html": "<p>手で書いた型で、<code>apps/api/openapi.json</code> と突き合わせて保つ。自動生成でも自動検査でもない。</p>",
+      "ref": "apps/web/lib/types.ts::Cart",
+      "open_when": [
+        "API 応答の項目を画面側で確認するとき"
+      ],
+      "guide": [
+        "s04-types"
+      ]
+    },
+    "apps/web/lib/basic-auth.ts": {
+      "role": "Basic 認証の設定解釈と照合",
+      "body_html": "<p>純粋関数。両方未設定なら認証なし、片方だけなら例外にする。比較は SHA-256 にしてから時間一定で行う。</p>",
+      "ref": "apps/web/lib/basic-auth.ts::verifyBasicAuthHeader",
+      "open_when": [
+        "Basic 認証の照合規則を確認するとき"
+      ],
+      "guide": [
+        "s03-auth"
+      ]
+    },
+    "apps/web/lib/cookie.ts": {
+      "role": "Set-Cookie 文字列の組み立て",
+      "body_html": "<p><code>cart_token</code> は HttpOnly、<code>csrf_token</code> は JavaScript が読むため HttpOnly なし。Secure は production のときだけ付く。</p>",
+      "ref": "apps/web/lib/cookie.ts::buildSetCookie",
+      "open_when": [
+        "Cookie の属性を確認するとき"
+      ],
+      "guide": [
+        "s04-cookie"
+      ]
+    },
+    "apps/web/lib/csrf-validation.ts": {
+      "role": "CSRF の判定規則",
+      "body_html": "<p>Double Submit Cookie の判定。Cookie とヘッダの値が一致し、43 文字の base64url の形であること。</p>",
+      "ref": "apps/web/lib/csrf-validation.ts::isCsrfValid",
+      "open_when": [
+        "CSRF の合否条件を確認するとき"
+      ],
+      "guide": [
+        "s04-csrf"
+      ]
+    },
+    "apps/web/lib/checkout-validation.ts": {
+      "role": "注文手続き入力の検査と正規化",
+      "body_html": "<p>サーバーの Pydantic と同じ規則で郵便番号・電話などを検査する。サーバーの 400 <code>fields</code> を画面の項目に対応付ける処理も持つ。</p>",
+      "ref": "apps/web/lib/checkout-validation.ts::validateCheckoutForm",
+      "open_when": [
+        "入力チェックの規則を確認するとき"
+      ],
+      "guide": [
+        "s03-checkout"
+      ]
+    },
+    "apps/web/lib/order-errors.ts": {
+      "role": "注文エラーの戻し先の対応表",
+      "body_html": "<p>注文 API のエラー応答を、画面の戻し先（カート・注文手続き・その場に留まる等）に対応付ける <code>routeOrderError</code>。正本はこの表。</p>",
+      "ref": "apps/web/lib/order-errors.ts::routeOrderError",
+      "open_when": [
+        "エラー時にどの画面へ戻るかを確認するとき"
+      ],
+      "guide": [
+        "s04-errors",
+        "s02-order-flow"
+      ]
+    },
+    "apps/web/lib/client/cart-api.ts": {
+      "role": "ブラウザから /api/cart* を呼ぶクライアント",
+      "body_html": "<p>状態変更では Cookie の <code>csrf_token</code> を <code>X-CSRF-Token</code> に載せる。未発行なら先に <code>GET /api/cart</code> で発行させる。</p>",
+      "ref": "apps/web/lib/client/cart-api.ts::mutate",
+      "open_when": [
+        "ブラウザ側で CSRF ヘッダを付ける箇所を確認するとき"
+      ],
+      "guide": [
+        "s04-csrf",
+        "s01-lifecycle"
+      ]
+    },
+    "apps/web/lib/client/order-api.ts": {
+      "role": "ブラウザから注文系 BFF を呼ぶクライアント",
+      "body_html": "<p><code>prepareCheckout</code>・<code>createOrder</code>・<code>lookupOrder</code>。失敗は <code>OrderApiError</code> として投げる。</p>",
+      "ref": "apps/web/lib/client/order-api.ts::createOrder",
+      "guide": [
+        "s02-order-flow"
+      ]
+    },
+    "apps/web/lib/server/api.ts": {
+      "role": "FastAPI を呼ぶ fetch ラッパー",
+      "body_html": "<p><code>apiFetch</code> が X-Internal-Token を付け、エラー本文は許可したキーだけを通す。接続不可とタイムアウトは <code>UpstreamUnavailableError</code> にする。</p>",
+      "ref": "apps/web/lib/server/api.ts::apiFetch",
+      "open_when": [
+        "BFF から FastAPI への呼び出しを確認するとき"
+      ],
+      "guide": [
+        "s04-token",
+        "s04-errors"
+      ]
+    },
+    "apps/web/lib/server/cart-proxy.ts": {
+      "role": "カート系 BFF の共通取り次ぎ",
+      "body_html": "<p>Cookie の <code>cart_token</code> を <code>X-Cart-Token</code> に載せ替え、応答のトークンが Cookie と違えば <code>Set-Cookie</code> で更新する。</p>",
+      "ref": "apps/web/lib/server/cart-proxy.ts::proxyCartRequest",
+      "open_when": [
+        "カートトークンの載せ替えを確認するとき"
+      ],
+      "guide": [
+        "s04-cookie",
+        "s01-lifecycle"
+      ]
+    },
+    "apps/web/lib/server/order-proxy.ts": {
+      "role": "注文系 BFF の共通取り次ぎ",
+      "body_html": "<p><code>X-Forwarded-For</code> には信頼できる送信元 IP だけを載せ、利用者が送ってきた値は転送しない。429 の <code>Retry-After</code> を透過する。</p>",
+      "ref": "apps/web/lib/server/order-proxy.ts::proxyOrderRequest",
+      "open_when": [
+        "利用者 IP の扱いを確認するとき"
+      ],
+      "guide": [
+        "s04-client-ip"
+      ]
+    },
+    "apps/web/lib/server/csrf.ts": {
+      "role": "CSRF の発行と検証（サーバー側）",
+      "body_html": "<p>乱数の発行、リクエストの検証（<code>verifyCsrf</code>）、未発行のときの Cookie 発行を持つ。</p>",
+      "ref": "apps/web/lib/server/csrf.ts::verifyCsrf",
+      "open_when": [
+        "CSRF 検証の呼び出し箇所を確認するとき"
+      ],
+      "guide": [
+        "s04-csrf"
+      ]
+    },
+    "apps/web/lib/server/env.ts": {
+      "role": "環境変数のローダー",
+      "body_html": "<p><code>process.env</code> を検証して返す。<code>server-only</code> により、クライアントからの import はビルド失敗になる。</p>",
+      "ref": "apps/web/lib/server/env.ts::getEnv",
+      "open_when": [
+        "環境変数がどこで読まれるかを確認するとき"
+      ],
+      "guide": [
+        "s04-secrets",
+        "s07-env"
+      ]
+    },
+    "apps/web/lib/server/catalog.ts": {
+      "role": "Server Component 用のデータ取得",
+      "body_html": "<p>カテゴリ・商品・公開設定・Cookie のカートを FastAPI から直接読む。失敗は <code>loadOrNull</code> で null に丸め、画面が「読み込めませんでした」を出せるようにする。</p>",
+      "ref": "apps/web/lib/server/catalog.ts::loadOrNull",
+      "open_when": [
+        "画面が API を直接読む箇所を確認するとき"
+      ],
+      "guide": [
+        "s03-products"
+      ]
+    },
+    "docs/00_計画/ADR/README.md": {
+      "role": "ADR の一覧と書き方",
+      "body_html": "<p>ADR の目的、DS-DEC（設計仕様書の中の設計判断）との役割分担、一覧表、書式の型を持つ。設計レベルの判断は DS-DEC に書き、ここには複製しない。</p>",
+      "ref": "docs/00_計画/ADR/README.md#L1-30",
+      "open_when": [
+        "新しい判断を記録するとき"
+      ],
+      "guide": [
+        "s12-adr"
+      ]
+    },
+    "docs/00_計画/ADR/ADR-0001_P2の4分割.md": {
+      "role": "ADR-0001 P2 を 4 回に分ける判断",
+      "body_html": "<p>P2 を P2-a（検索・FAQ・お知らせ・講義 DB 接続）、P2-b（会員・履歴）、P2-c（管理画面・Stripe・メール）、P2-d（AI アシスタント・Azure デプロイ）に分けた。基準は依存関係、触るデータの塊、優先度と外部依存、締切。</p>",
+      "ref": "docs/00_計画/ADR/ADR-0001_P2の4分割.md#L1-25",
+      "open_when": [
+        "P2 の順序の理由を確認するとき"
+      ],
+      "guide": [
+        "s08-roadmap"
+      ]
+    },
+    "docs/00_計画/ADR/ADR-0002_講義MySQLへのスキーマ追加と資格情報の管理.md": {
+      "role": "ADR-0002 講義 MySQL への接続と資格情報の管理",
+      "body_html": "<p>講義の共用 MySQL に自分用スキーマとテスト用スキーマを作り、最小権限の専用ユーザーで接続する。資格情報は自分で <code>.env</code> に書き、チャットやエージェントへの指示には貼らない。接続は SSL 必須。</p>",
+      "ref": "docs/00_計画/ADR/ADR-0002_講義MySQLへのスキーマ追加と資格情報の管理.md#L1-25",
+      "open_when": [
+        "講義 DB の使い方の方針を確認するとき"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "docs/00_計画/ADR/ADR-0003_検索APIのレート制限の見送り.md": {
+      "role": "ADR-0003 検索 API のレート制限の見送り",
+      "body_html": "<p>検索 API は個人情報を含まない公開情報の読み取りであり、P2-a では未公開のため、レート制限を実装しない判断。Azure 公開時に再判断する条件と、置き場所の候補を書く。ADR-0004 で見送り維持に更新された。</p>",
+      "ref": "docs/00_計画/ADR/ADR-0003_検索APIのレート制限の見送り.md#L1-25",
+      "open_when": [
+        "検索 API に制限が無い理由を確認するとき"
+      ],
+      "guide": [
+        "s04-ratelimit",
+        "s09-b"
+      ]
+    },
+    "docs/00_計画/ADR/ADR-0004_レビュー用のAppService公開.md": {
+      "role": "ADR-0004 レビュー用の App Service 公開",
+      "body_html": "<p>講義レビュー期間だけ Azure App Service に公開する判断。サイト全体に Basic 認証を掛け、期間限定の帯を全ページに出し、デプロイは Azure CLI の手動から始める。検索 API の制限は今回も入れない。</p>",
+      "ref": "docs/00_計画/ADR/ADR-0004_レビュー用のAppService公開.md#L1-25",
+      "open_when": [
+        "公開環境の方針と停止手順を確認するとき"
+      ],
+      "guide": [
+        "s07-public",
+        "s03-auth"
+      ]
+    },
+    "docs/00_計画/P1実装プラン_20260917.md": {
+      "role": "P1 実装プラン（Wave 0〜3）",
+      "body_html": "<p>GUEC-IP-01。コーディングと単体テストを Wave 0（基盤）〜Wave 3（検収）に分け、事故防止のチェックリスト（4.5）と実装上の取り決め（5 章）を持つ。現行の版は v1.3。</p>",
+      "ref": "docs/00_計画/P1実装プラン_20260917.md#L1-30",
+      "open_when": [
+        "実装の進め方と取り決めの根拠を確認するとき"
+      ],
+      "guide": [
+        "s06-branch",
+        "s06-tests"
+      ]
+    },
+    "docs/00_計画/P2_事前レビュー観点_v1.md": {
+      "role": "P2 追補設計の事前レビュー観点",
+      "body_html": "<p>GUEC-RV-02。P1 の実装時に見つかった問題 8 件を、P2 の追補設計を書くときの机上チェック 8 問に変換した表。各章末に記入する。</p>",
+      "ref": "docs/00_計画/P2_事前レビュー観点_v1.md#L1-25",
+      "open_when": [
+        "設計レビューの観点を確認するとき"
+      ]
+    },
+    "docs/00_計画/実装フェーズ計画.md": {
+      "role": "実装フェーズ計画（P1〜P4）",
+      "body_html": "<p>GUEC-PP-01。機能 39 件を P1（ゲスト購買の最小構成）〜P4 に分け、P1 の範囲と割り切り、文書とテストの単位、スケジュール、未決の論点を書く。</p>",
+      "ref": "docs/00_計画/実装フェーズ計画.md#L1-30",
+      "open_when": [
+        "機能がどのフェーズに入るかを確認するとき"
+      ],
+      "guide": [
+        "s08-roadmap",
+        "s08-must"
+      ]
+    },
+    "docs/00_計画/実装前レビュー記録_20260917.md": {
+      "role": "実装前レビュー記録（UT 23 件 × 設計書）",
+      "body_html": "<p>GUEC-RV-01。コーディング前に単体テスト 23 件の期待結果が設計書から導けるかを突き合わせ、矛盾 3・レベル不一致 3・未定義 3 を判定して設計書を直した記録。</p>",
+      "ref": "docs/00_計画/実装前レビュー記録_20260917.md#L1-25",
+      "open_when": [
+        "設計書の修正理由を確認するとき"
+      ]
+    },
+    "docs/00_計画/引継ぎメモ_20260924.md": {
+      "role": "引継ぎメモ（P1 検収、2026-09-24〜25）",
+      "body_html": "<p>P1 検収の状態、main に入った PR、残作業、環境の再開手順、未決事項を書く。末尾に Mac での引き取り、講義 MySQL への接続、リポジトリ移動、Windows 側の追加分を追記してある。</p>",
+      "ref": "docs/00_計画/引継ぎメモ_20260924.md#L1-30",
+      "open_when": [
+        "今どこまで進んでいるかを確認するとき",
+        "別 PC で作業を再開するとき"
+      ],
+      "guide": [
+        "s06-branch",
+        "s07-local"
+      ]
+    },
+    "docs/01_要求仕様書/GU_ECsite_要求仕様書_noai_20260821.docx": {
+      "role": "要求仕様書 no_ai 版（2026-08-21）",
+      "body_html": "<p>ユーザーが雑多に書いた内容を整理した版（3 版方式の 1 つ目）。前提条件と機能要求のみで、API 仕様や DB 設計は含めない。本文は約 1,800 字で、約 260 KB の大半は画像と思う。</p>",
+      "open_when": [
+        "ユーザー起案の元の要求を確認するとき"
+      ],
+      "guide": [
+        "s12-reqid"
+      ]
+    },
+    "docs/01_要求仕様書/GU_ECsite_要求仕様書_ai_v2.1_20260821.docx": {
+      "role": "要求仕様書 ai 版 v2.1（2026-08-21）",
+      "body_html": "<p>no_ai を参照せず、前提条件とフォーマットだけを渡して Claude が単独で設計した版（GUEC-RS-AI-02）。統合前の比較用。</p>",
+      "open_when": [
+        "ai 版と no_ai 版の違いを確認するとき"
+      ]
+    },
+    "docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.3_20260826.docx": {
+      "role": "要求仕様書 with_ai 版 v2.3（2026-08-26）",
+      "body_html": "<p>no_ai と ai を突き合わせて統合した版（GUEC-RS-WA-02）。v2.4 の 1 つ前で、置き換え済み。</p>",
+      "open_when": [
+        "v2.4 との差分を調べるとき"
+      ]
+    },
+    "docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.4_20260906.docx": {
+      "role": "要求仕様書 with_ai 版 v2.4（2026-09-06）完成品",
+      "body_html": "<p>統合版の最新。Lv3 の新機能（AI アシスタント）を REQ-FR-905 として追加した。以降の工程は REQ-FR・REQ-NFR・REQ-CO の ID を参照する。</p>",
+      "open_when": [
+        "REQ-xxx の原文を確認するとき"
+      ],
+      "guide": [
+        "s12-reqid"
+      ]
+    },
+    "docs/02_要件定義書/GU_ECsite_要件定義書_noai_雛形_20260824.docx": {
+      "role": "要件定義書 no_ai 版・雛形（2026-08-24）",
+      "body_html": "<p>ユーザーが部分的に記入したまま確定した雛形（GUEC-RD-NA-01）。約 4,300 字と、3 版の中で最も短い。</p>",
+      "open_when": [
+        "ユーザー起案の元の要件を確認するとき"
+      ]
+    },
+    "docs/02_要件定義書/GU_ECsite_要件定義書_ai_v1_20260825.docx": {
+      "role": "要件定義書 ai 版 v1（2026-08-25）",
+      "body_html": "<p>Claude が単独で設計した版（GUEC-RD-AI-01）。申し送り A-01〜A-08 の決定を含む。</p>",
+      "open_when": [
+        "申し送りの決め方を確認するとき"
+      ]
+    },
+    "docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.2_20260826.docx": {
+      "role": "要件定義書 with_ai 版 v1.2（2026-08-26）",
+      "body_html": "<p>統合版（GUEC-RD-WA-01）の 1 つ前。v1.3 に置き換え済み。</p>",
+      "open_when": [
+        "v1.3 との差分を調べるとき"
+      ]
+    },
+    "docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.3_20260906.docx": {
+      "role": "要件定義書 with_ai 版 v1.3（2026-09-06）完成品",
+      "body_html": "<p>統合版の最新。Lv3 の新機能を AI アシスタント（F-029）に確定した。業務要件・ユーザーストーリー・カスタマージャーニー・注文状態（5.5）を含む。</p>",
+      "open_when": [
+        "機能 ID（F-xxx）や注文状態の原文を確認するとき"
+      ],
+      "guide": [
+        "s08-must",
+        "s05-status"
+      ]
+    },
+    "docs/03_設計仕様書/GU_ECsite_設計仕様書_noai_雛形_20260825.docx": {
+      "role": "設計仕様書 no_ai 版・雛形（2026-08-25）",
+      "body_html": "<p>項目だけを置いた記入用のたたき台（GUEC-SD-NA-01）。メモは雑多で構わない、と冒頭に書いてある。</p>",
+      "open_when": [
+        "元の雛形を確認するとき"
+      ]
+    },
+    "docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v2_20260907.docx": {
+      "role": "設計仕様書 P1 提出用 docx（draft-v2）",
+      "body_html": "<p>Markdown の draft-v2 から生成した提出用 docx。Mermaid の 8 図は PNG で埋め込む。正本の draft-v3 より古く、v3 での修正は入っていない。</p>",
+      "open_when": [
+        "提出物の版を確認するとき"
+      ]
+    },
+    "docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v1_20260907.docx": {
+      "role": "テスト設計書 P1 提出用 docx（draft-v1）",
+      "body_html": "<p>Markdown の draft-v1 から生成した提出用 docx。正本の draft-v2 より古い。</p>",
+      "open_when": [
+        "提出物の版を確認するとき"
+      ]
+    },
+    "docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md": {
+      "role": "設計仕様書 P1 本編 draft-v3（正本）",
+      "body_html": "<p>GUEC-SD-01。構成・技術スタック・UML・API・DB・画面・セキュリティ・インフラ・設計判断（DS-DEC）・トレーサビリティ表の 10 章。実装前レビューで矛盾 3・未定義 3 を直した版で、コードの docstring が指す設計 ID の出典。</p>",
+      "ref": "docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L1-30",
+      "open_when": [
+        "DS-API・DS-TBL・DS-DEC の原文を確認するとき",
+        "設計と実装の食い違いを調べるとき"
+      ],
+      "guide": [
+        "s12-dsdec",
+        "s12-dsid"
+      ]
+    },
+    "docs/03_設計仕様書/GU_ECsite_設計仕様書_P2追補a_draft-v1.md": {
+      "role": "設計仕様書 P2 追補 a（差分）",
+      "body_html": "<p>GUEC-SD-01-P2a。商品検索（DS-API-004・004a）、FAQ・静的ページ・お知らせ（DS-API-005・006、contents 表）、講義 MySQL への接続切り替えを、本編との差分で書く。</p>",
+      "ref": "docs/03_設計仕様書/GU_ECsite_設計仕様書_P2追補a_draft-v1.md#L1-30",
+      "open_when": [
+        "検索・コンテンツの設計を確認するとき"
+      ],
+      "guide": [
+        "s03-search",
+        "s03-contents"
+      ]
+    },
+    "docs/03_設計仕様書/GU_ECsite_設計仕様書_公開追補_draft-v1.md": {
+      "role": "設計仕様書 公開追補（差分）",
+      "body_html": "<p>GUEC-SD-01-PUB。ADR-0004 に対応する Basic 認証、期間限定の帯、App Service のデプロイ構成を、本編・P2 追補 a との差分で書く。</p>",
+      "ref": "docs/03_設計仕様書/GU_ECsite_設計仕様書_公開追補_draft-v1.md#L1-30",
+      "open_when": [
+        "公開環境の設計を確認するとき"
+      ],
+      "guide": [
+        "s03-auth",
+        "s07-public"
+      ]
+    },
+    "docs/03_設計仕様書/付録_GUサイト調査_20260918.md": {
+      "role": "付録: GU サイトのデザイン調査（2026-09-18）",
+      "body_html": "<p>GU 日本サイトの色・書体・余白・形・構造・振る舞いを実測した記録。閲覧のみで、購入や会員登録はしていない。ロゴ・写真・文言は複製しない。</p>",
+      "ref": "docs/03_設計仕様書/付録_GUサイト調査_20260918.md#L1-25",
+      "open_when": [
+        "デザイン基準の根拠を確認するとき"
+      ]
+    },
+    "docs/03_設計仕様書/付録_デザイン基準_v1.md": {
+      "role": "付録: GUapp デザイン基準 v1",
+      "body_html": "<p>調査結果を P1 の 6 画面に翻訳したトークン（色・書体・寸法）と部品仕様。<code>apps/web/app/globals.css</code> のトークンの根拠。</p>",
+      "ref": "docs/03_設計仕様書/付録_デザイン基準_v1.md#L1-25",
+      "open_when": [
+        "色・寸法・部品の仕様を確認するとき"
+      ],
+      "guide": [
+        "s03-nav"
+      ]
+    },
+    "docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md": {
+      "role": "テスト設計書 P1 本編 draft-v2（正本）",
+      "body_html": "<p>GUEC-TD-01。AT 8・ST 40・IT 31・UT 22 のテスト項目、テストデータ、実施計画、要求 → 機能 → 設計 → テスト ID の対応表（10 章）を持つ。</p>",
+      "ref": "docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md#L1-30",
+      "open_when": [
+        "テスト ID の期待結果を確認するとき",
+        "要求とテストの対応を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md": {
+      "role": "テスト設計書 P2 追補 a（差分）",
+      "body_html": "<p>GUEC-TD-01-P2a。検索・コンテンツ・講義 DB 接続に対するテスト項目（IT-004 系、UT-SEARCH、UT-CONTENT など）を差分で足す。</p>",
+      "ref": "docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md#L1-30",
+      "open_when": [
+        "検索・コンテンツのテスト項目を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md": {
+      "role": "テスト設計書 公開追補（差分）",
+      "body_html": "<p>GUEC-TD-01-PUB。Basic 認証（UT-WEB-09）、期間限定の帯（UT-WEB-10）、公開環境の ST-SEC 項目を差分で足す。</p>",
+      "ref": "docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md#L1-30",
+      "open_when": [
+        "Basic 認証・帯のテスト項目を確認するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "docs/05_検収/README再現確認_20260918.md": {
+      "role": "README 再現確認（2026-09-18）",
+      "body_html": "<p>別フォルダに新規 clone し、README の手順を上から実行した記録。失敗した手順は 0 件で、README に書かれていない知識を 5 か所補った。所要は実行 5 分 33 秒。</p>",
+      "ref": "docs/05_検収/README再現確認_20260918.md#L1-25",
+      "open_when": [
+        "README の穴と修正案を確認するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "docs/05_検収/ST-AT実施記録_正常系_20260918.md": {
+      "role": "ST・AT 実施記録（正常系）",
+      "body_html": "<p>2026-09-18 に AT 8 件と ST の正常系を実施した記録。AT-07・AT-08 は 09-24 に Mac で再実施している。スクリーンショットが取れず、DOM のテキストや sessionStorage の値で代替した、と冒頭にある。</p>",
+      "ref": "docs/05_検収/ST-AT実施記録_正常系_20260918.md#L1-25",
+      "open_when": [
+        "正常系の合否を確認するとき"
+      ],
+      "guide": [
+        "s06-numbers"
+      ]
+    },
+    "docs/05_検収/ST実施記録_異常境界_20260924.md": {
+      "role": "ST 実施記録（異常・境界・セキュリティ、Mac 分）",
+      "body_html": "<p>2026-09-24 に Mac で実施した異常系・境界値・セキュリティの記録。悲観的な視点の QA で、curl と画面の両方から確認した。</p>",
+      "ref": "docs/05_検収/ST実施記録_異常境界_20260924.md#L1-25",
+      "open_when": [
+        "異常系の合否を確認するとき"
+      ],
+      "guide": [
+        "s06-numbers"
+      ]
+    },
+    "docs/05_検収/ST実施記録_異常境界_20260924_windows.md": {
+      "role": "ST 実施記録（異常・境界・セキュリティ、Windows 分）",
+      "body_html": "<p>同じ日に Windows で実施した異常系の記録。共用の web を壊した環境事故の報告と、開発 DB を実施前の状態に戻した確認（SELECT）を含む。</p>",
+      "ref": "docs/05_検収/ST実施記録_異常境界_20260924_windows.md#L1-25",
+      "open_when": [
+        "Windows 側の実施結果を確認するとき"
+      ],
+      "guide": [
+        "s06-numbers"
+      ]
+    },
+    "docs/05_検収/公開環境_確認記録_20260925.md": {
+      "role": "公開環境（Azure App Service）確認記録",
+      "body_html": "<p>2026-09-25 に App Service へデプロイし、公開後の項目（ST-SEC-16〜25 ほか）を確認した記録。api・web とも 3 回失敗した調査と、web が 4 回目で起動した経緯、資格情報の扱いを書く。</p>",
+      "ref": "docs/05_検収/公開環境_確認記録_20260925.md#L1-25",
+      "open_when": [
+        "デプロイでつまずいた点を確認するとき",
+        "公開後の確認結果を見るとき"
+      ],
+      "guide": [
+        "s07-public",
+        "s07-deploy"
+      ]
+    },
+    "docs/05_解説/GU_ECsite_コード解説.html": {
+      "role": "完成したコード解説書（HTML）",
+      "body_html": "<p><code>code-guide/build.py</code> が組み立てた出力で、約 2 MB。本文中のコード参照が、ビルド時点のコミットのコードに解決されて埋め込まれている。再ビルドで上書きされる。</p>",
+      "open_when": [
+        "ブラウザで開いて読むとき"
+      ],
+      "guide": [
+        "s01"
+      ]
+    },
+    "docs/05_解説/GU_ECsite_設計・テスト設計_解説.html": {
+      "role": "設計仕様書とテスト設計書の読み方（HTML）",
+      "body_html": "<p>設計仕様書とテスト設計書の構成と読み方を説明する単独の HTML（約 36 KB）。<code>code-guide/build.py</code> の出力ではなく、コード解説書とは別に作られている。</p>",
+      "open_when": [
+        "設計書・テスト設計書を初めて読むとき"
+      ]
+    },
+    "docs/05_解説/code-guide/README.md": {
+      "role": "組み立て基盤の使い方",
+      "body_html": "<p>build.py のオプション（<code>--check</code>・<code>--commit</code>・<code>--include-sample</code> など）、data-ref の構文、本文の書き方の約束（章の構造・id の重複禁止）を書く。</p>",
+      "ref": "docs/05_解説/code-guide/README.md#L1-30",
+      "open_when": [
+        "解説書を再ビルドするとき",
+        "data-ref の書き方を確認するとき"
+      ]
+    },
+    "docs/05_解説/code-guide/build.py": {
+      "role": "解説書の組み立てスクリプト",
+      "body_html": "<p>標準ライブラリだけの Python。<code>content/*.html</code> を連結して <code>template.html</code> に差し込み、<code>git show</code> で読んだコードを参照に解決して 1 つの HTML にする。解決できない参照が 1 つでもあれば exit 1。</p>",
+      "ref": "docs/05_解説/code-guide/build.py::resolve_ref",
+      "open_when": [
+        "参照の解決規則を確認するとき"
+      ]
+    },
+    "docs/05_解説/code-guide/template.html": {
+      "role": "解説書の外枠",
+      "body_html": "<p>CSS・JavaScript・ヘッダー・目次・コード表示ドロワーを持つテンプレート。プレースホルダー（<code>{{CONTENT}}</code> など）に本文とコードが入る。</p>",
+      "open_when": [
+        "見た目やドロワーの動作を直すとき"
+      ]
+    },
+    "docs/05_解説/code-guide/content/00-sample.html": {
+      "role": "動作確認用のサンプル",
+      "body_html": "<p>ビルドの動作確認用。<code>--include-sample</code> を付けたときだけ取り込まれる。</p>",
+      "open_when": [
+        "ビルドの動作確認をするとき"
+      ]
+    },
+    "docs/05_解説/code-guide/content/01-overview.html": {
+      "role": "第 1 章 全体像",
+      "body_html": "<p>構成図、区間ごとの検証の表、フォルダ地図、「カートに入れる」の 1 リクエストの流れ。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s01"
+      ]
+    },
+    "docs/05_解説/code-guide/content/02-reading-order.html": {
+      "role": "第 2 章 レビューで読む順番",
+      "body_html": "<p>注文確定の縦の流れ 6 ファイルを読む順と、確定ボタンから完了画面までの 14 段。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s02"
+      ]
+    },
+    "docs/05_解説/code-guide/content/03-features.html": {
+      "role": "第 3 章 機能別の解説",
+      "body_html": "<p>商品一覧・詳細・カート・注文手続き・注文確定・注文照会・検索・コンテンツ・設定・health・Basic 認証・ナビの 12 節。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s03"
+      ]
+    },
+    "docs/05_解説/code-guide/content/04-crosscutting.html": {
+      "role": "第 4 章 横断的な仕組み",
+      "body_html": "<p>早見表に続いて、秘密の扱い、内部トークン、CORS、CSRF、Cookie、IP、二重注文、在庫、エラー、ログ、レート制限、設定、型、依存検査、テスト専用フックの 15 節。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s04"
+      ]
+    },
+    "docs/05_解説/code-guide/content/05-data-model.html": {
+      "role": "第 5 章 データモデル",
+      "body_html": "<p>13 表の一覧、つながり、制約、状態を持つ列、マイグレーション、seed。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s05"
+      ]
+    },
+    "docs/05_解説/code-guide/content/06-dev-process.html": {
+      "role": "第 6 章 開発の進め方",
+      "body_html": "<p>ブランチと PR、main の保護、CI、lint、テストの読み方、件数と自動・手動の分担。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s06"
+      ]
+    },
+    "docs/05_解説/code-guide/content/07-run-and-deploy.html": {
+      "role": "第 7 章 動かし方と公開環境",
+      "body_html": "<p>ローカルの起動、公開環境の構成、デプロイスクリプト、講義 DB への接続、環境変数の名前と役割。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s07"
+      ]
+    },
+    "docs/05_解説/code-guide/content/08-not-yet.html": {
+      "role": "第 8 章 まだ作っていないもの",
+      "body_html": "<p>Must 18 件の状況、今後の予定、スタブの所在、講義の後半テーマで未着手のもの。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s08"
+      ]
+    },
+    "docs/05_解説/code-guide/content/09-known-weaknesses.html": {
+      "role": "第 9 章 既知の弱点と対処予定",
+      "body_html": "<p>直すか口頭で返すかの線引きと、本物の不具合・設計で受け入れた弱点・構造とテストの弱点・開発の仕組みの弱点。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s09"
+      ]
+    },
+    "docs/05_解説/code-guide/content/10-file-index.html": {
+      "role": "第 10 章 ファイル別の索引",
+      "body_html": "<p>api の Python 50 本と web の 76 本の役割と主な関数・型を表にした索引。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s10"
+      ]
+    },
+    "docs/05_解説/code-guide/content/11-qa.html": {
+      "role": "第 11 章 想定 Q&A",
+      "body_html": "<p>レビューで聞かれそうな質問 12 問への回答と、この形にした理由 5 項目。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s11"
+      ]
+    },
+    "docs/05_解説/code-guide/content/12-glossary.html": {
+      "role": "第 12 章 用語集",
+      "body_html": "<p>34 語を、構成・セキュリティ・データ・運用とテスト・文書の 5 つの話題で並べる。各語は仕組みの説明とコードへの参照を持つ。</p>",
+      "open_when": [
+        "この章の本文を直すとき"
+      ],
+      "guide": [
+        "s12"
+      ]
+    },
+    "scripts/azure-db/README.md": {
+      "role": "講義 Azure MySQL 接続の手順書",
+      "body_html": "<p>CA 証明書の取得、疎通確認、マイグレーションと seed、Azure 接続での API 起動、ローカルへの戻し方を上から順に書く。資格情報を画面に出さない運用と、本物の個人情報を講義サーバーに入れない注意も載せる。</p>",
+      "ref": "scripts/azure-db/README.md#L1-30",
+      "open_when": [
+        "講義 DB に接続するとき"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-db/check_connection.py": {
+      "role": "講義 DB の疎通確認",
+      "body_html": "<p><code>SELECT 1</code> と SSL 暗号の確認だけを行う読み取り専用のスクリプト。例外を表示する前に接続文字列のパスワードを伏せる。</p>",
+      "ref": "scripts/azure-db/check_connection.py#L1-25",
+      "open_when": [
+        "接続できるかを確かめるとき"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-db/fetch-ca.sh": {
+      "role": "Azure MySQL 用の CA 証明書の取得",
+      "body_html": "<p>公式ページの案内に沿って 3 つの公開証明書を取得し、1 つの PEM に束ねて <code>~/.config/guapp/</code>（リポジトリの外）に置く。証明書は公開情報で、commit しない。</p>",
+      "ref": "scripts/azure-db/fetch-ca.sh#L1-25",
+      "open_when": [
+        "証明書エラーが出たとき（再実行）"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-db/with-azure-db.sh": {
+      "role": "講義 DB 接続のラッパー",
+      "body_html": "<p>資格情報のファイルから接続情報を組み立て、環境変数としてだけ子プロセスに渡してコマンドを実行する。ホストと DB 名は固定で、食い違えば中止する。コマンド引数には資格情報を載せない。</p>",
+      "ref": "scripts/azure-db/with-azure-db.sh#L1-30",
+      "open_when": [
+        "講義 DB でコマンドを実行するとき"
+      ],
+      "guide": [
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-deploy/README.md": {
+      "role": "Azure 公開の手順書",
+      "body_html": "<p>前提、実行順序（01→06）、動作確認、終了日の延長（環境変数の書き換えのみ）、停止・削除、費用の目安、トラブルシュートを書く。実行前に統括の承認を得る決まり。</p>",
+      "ref": "scripts/azure-deploy/README.md#L1-30",
+      "open_when": [
+        "公開環境を作る前に手順を読むとき"
+      ],
+      "guide": [
+        "s07-deploy",
+        "s07-public"
+      ]
+    },
+    "scripts/azure-deploy/config.sh": {
+      "role": "デプロイスクリプトの共通設定",
+      "body_html": "<p>他のスクリプトが <code>source</code> する。サブスクリプション・リソースグループ・リージョン・リソース名・接続先 DB の固定値と、Azure のコンテキスト確認関数を持つ。単体では何もしない。</p>",
+      "ref": "scripts/azure-deploy/config.sh#L1-12",
+      "open_when": [
+        "名前の規則や固定値を確認するとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/01-create.sh": {
+      "role": "01 プランと App Service の作成",
+      "body_html": "<p>B1 のプランと web・api の 2 アプリを作る。Always On・HTTPS Only・最小 TLS・起動コマンドを毎回上書きする（冪等）。</p>",
+      "ref": "scripts/azure-deploy/01-create.sh#L1-20",
+      "open_when": [
+        "最初のリソースを作るとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/02-settings.sh": {
+      "role": "02 アプリ設定（環境変数）の投入",
+      "body_html": "<p>秘密はその場でランダム生成して画面に出さず、Basic 認証の資格情報は git 管理外のファイルに書く。再実行するたびに値がローテーションされる。</p>",
+      "ref": "scripts/azure-deploy/02-settings.sh#L1-20",
+      "open_when": [
+        "環境変数を入れ直す・秘密を更新するとき"
+      ],
+      "guide": [
+        "s07-deploy",
+        "s07-env"
+      ]
+    },
+    "scripts/azure-deploy/03-db-firewall.sh": {
+      "role": "03 講義 DB のファイアウォール登録",
+      "body_html": "<p>api の送信 IP だけを専用の規則名で 1 つずつ追加する。「Azure サービスからのアクセスをすべて許可」は共用サーバー全体を変えるため使わない。</p>",
+      "ref": "scripts/azure-deploy/03-db-firewall.sh#L1-20",
+      "open_when": [
+        "DB に届かないとき"
+      ],
+      "guide": [
+        "s07-deploy",
+        "s07-azure-db"
+      ]
+    },
+    "scripts/azure-deploy/04-deploy-api.sh": {
+      "role": "04 api のデプロイ",
+      "body_html": "<p>CA 証明書をコピーし、<code>uv export</code> で <code>requirements.txt</code> を作り（commit しない）、不要物を除いた zip を <code>az webapp deploy</code> で配置する。</p>",
+      "ref": "scripts/azure-deploy/04-deploy-api.sh#L1-25",
+      "open_when": [
+        "api を再デプロイするとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/05-deploy-web.sh": {
+      "role": "05 web のデプロイ",
+      "body_html": "<p>standalone ビルド後、シンボリックリンクを実体化して一時フォルダにコピーし、zip にして配置する。冒頭のコメントに、3 回失敗した原因（zip のシンボリックリンク、pnpm の配置、iCloud の複製）が残っている。</p>",
+      "ref": "scripts/azure-deploy/05-deploy-web.sh#L1-30",
+      "open_when": [
+        "web のデプロイが失敗したとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/06-migrate-seed.sh": {
+      "role": "06 マイグレーションの適用",
+      "body_html": "<p>公開前に <code>alembic upgrade head</code> だけを流す。seed は <code>--seed</code> を明示したときだけ実行する。共用サーバーの既存データを壊さないため。</p>",
+      "ref": "scripts/azure-deploy/06-migrate-seed.sh#L1-20",
+      "open_when": [
+        "公開 DB にスキーマを反映するとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/90-stop.sh": {
+      "role": "90 App Service の停止",
+      "body_html": "<p>公開期間の終了後に web・api を停止する。削除はしない。再開は <code>az webapp start</code> かポータルで行う。</p>",
+      "ref": "scripts/azure-deploy/90-stop.sh#L1-12",
+      "open_when": [
+        "レビュー期間が終わったとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/azure-deploy/99-delete.sh": {
+      "role": "99 レビュー用リソースの削除",
+      "body_html": "<p>プランと 2 アプリ、DB ファイアウォールの自分の規則を削除する。講義 MySQL 本体・スキーマ・共用リソースグループは削除しない。確認プロンプトは省略できない。</p>",
+      "ref": "scripts/azure-deploy/99-delete.sh#L1-14",
+      "open_when": [
+        "公開環境を完全に片付けるとき"
+      ],
+      "guide": [
+        "s07-deploy"
+      ]
+    },
+    "scripts/hooks/forbid_dotenv.py": {
+      "role": ".env のステージを拒否するフック",
+      "body_html": "<p>ファイル名が <code>.env</code> または <code>.env.</code> で始まるものを拒否し、<code>.env.example</code> だけ許可する。pre-commit から呼ばれる。</p>",
+      "ref": "scripts/hooks/forbid_dotenv.py::main",
+      "open_when": [
+        ".env が commit できない理由を確認するとき"
+      ],
+      "guide": [
+        "s04-supply"
+      ]
+    },
+    "scripts/mutation-check/README.md": {
+      "role": "防御外し確認の手順書",
+      "body_html": "<p>3 つの防御（冪等キー UNIQUE・カートの条件付き UPDATE・在庫の <code>stock >= :q</code>）を外したとき、対応する同時実行テストが赤になるかを確かめる手順と判定表。実行中は <code>guapp_test</code> が一時的に変わる。</p>",
+      "ref": "scripts/mutation-check/README.md#L1-25",
+      "open_when": [
+        "テストが防御を見ていることを確かめるとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "scripts/mutation-check/cases.json": {
+      "role": "外す防御の定義",
+      "body_html": "<p>置換前後の文字列と、赤になるべきテストの一覧。置換元が対象ファイルにちょうど 1 回見つからなければ中止する。コードの位置が変わったらここを直す。</p>",
+      "ref": "scripts/mutation-check/cases.json#L1-25"
+    },
+    "scripts/mutation-check/mutate.py": {
+      "role": "文字列置換のヘルパー",
+      "body_html": "<p><code>cases.json</code> に従って防御を外す（<code>--mode apply</code>）か、置換元があるかだけ確認する（<code>--mode check</code>）。復元は <code>run.ps1</code> がバックアップから行う。</p>",
+      "ref": "scripts/mutation-check/mutate.py#L1-20"
+    },
+    "scripts/mutation-check/run.ps1": {
+      "role": "防御外し確認の実行スクリプト（Windows）",
+      "body_html": "<p>バックアップ → 防御を外す → 該当テスト → 判定 → 復元の順に進み、例外時も必ず復元してハッシュの一致を確認する。git 操作は読み取りの <code>diff --stat</code> のみ。</p>",
+      "ref": "scripts/mutation-check/run.ps1#L1-20",
+      "open_when": [
+        "防御外し確認を再実行するとき"
+      ],
+      "guide": [
+        "s06-tests"
+      ]
+    },
+    "scripts/mutation-check/result-20260918.md": {
+      "role": "防御外し確認の結果（2026-09-18 15:30）",
+      "body_html": "<p>3 ケースすべてで、防御を外すとテストが赤になり、判定は PASS。復元確認も行っている。</p>",
+      "ref": "scripts/mutation-check/result-20260918.md#L1-20"
+    },
+    "scripts/mutation-check/result-20260918-162633.md": {
+      "role": "防御外し確認の結果（2026-09-18 16:26、ケース 3 のみ）",
+      "body_html": "<p>在庫の <code>stock >= :q</code> だけを再実行した結果。31 件が赤になり、判定は PASS。</p>",
+      "ref": "scripts/mutation-check/result-20260918-162633.md#L1-17"
+    },
+    "scripts/mysql-docker/README.md": {
+      "role": "Mac 用 MySQL（Docker）の手順書",
+      "body_html": "<p>前提（Docker Desktop・ルートの <code>.env</code> に <code>MYSQL_PASSWORD</code>）、起動、<code>DATABASE_URL</code> の書き方、停止、データを消して作り直す方法を書く。</p>",
+      "ref": "scripts/mysql-docker/README.md#L1-30",
+      "open_when": [
+        "Mac で DB を用意するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/README.md": {
+      "role": "Windows 用 MySQL（zip 版）の手順書",
+      "body_html": "<p>前提、setup・status・stop・start の実行方法、作られる DB とユーザー、接続情報の保存先、リスク（root が空パスワード）を書く。</p>",
+      "ref": "scripts/mysql-local/README.md#L1-30",
+      "open_when": [
+        "Windows で DB を用意するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/common.ps1": {
+      "role": "MySQL 管理スクリプトの共通定義",
+      "body_html": "<p>版・ダウンロード URL・チェックサム・保存先・ポートの決め方と、起動・停止・状態確認の関数を持つ。他のスクリプトが読み込む。</p>",
+      "ref": "scripts/mysql-local/common.ps1#L1-20"
+    },
+    "scripts/mysql-local/setup.ps1": {
+      "role": "MySQL の初回セットアップ",
+      "body_html": "<p>zip の取得と MD5 検証、展開、<code>my.ini</code> の生成、データの初期化、起動、DB とユーザーの作成、接続情報の保存を 6 段で行う。済んだ手順はスキップする（冪等）。</p>",
+      "ref": "scripts/mysql-local/setup.ps1#L1-20",
+      "open_when": [
+        "MySQL を初めて用意するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/start.ps1": {
+      "role": "MySQL の起動",
+      "body_html": "<p>起動中なら何もしない。PC の再起動後に使う。</p>",
+      "ref": "scripts/mysql-local/start.ps1",
+      "open_when": [
+        "PC 再起動後に DB を起こすとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/status.ps1": {
+      "role": "MySQL の状態表示",
+      "body_html": "<p>設定ファイルの有無、ポート、プロセス、<code>SELECT VERSION()</code> を表示する。</p>",
+      "ref": "scripts/mysql-local/status.ps1#L1-20",
+      "open_when": [
+        "DB が動いているかを確認するとき"
+      ],
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/stop.ps1": {
+      "role": "MySQL の停止",
+      "body_html": "<p><code>mysqladmin shutdown</code> で止める。ポートが閉じていれば何もしない。</p>",
+      "ref": "scripts/mysql-local/stop.ps1",
+      "guide": [
+        "s07-local"
+      ]
+    },
+    "scripts/mysql-local/docker-init/01_create_test_db.sql": {
+      "role": "Docker 用の初期化 SQL",
+      "body_html": "<p>結合テスト用の <code>guapp_test</code> を作り、<code>guapp</code> ユーザーに権限を付ける。Docker の初回起動時だけ実行される。</p>",
+      "ref": "scripts/mysql-local/docker-init/01_create_test_db.sql"
+    },
+    "tools/docs/README.md": {
+      "role": "文書生成ツールの説明",
+      "body_html": "<p>4 本のスクリプトの役割と注意（パスは作者 PC の絶対パス、Mermaid の <code>;</code> の扱い、ページ高さ超過の画像、旧 docx の修復）を書く。</p>",
+      "ref": "tools/docs/README.md#L1-14",
+      "open_when": [
+        "docx を作り直すとき"
+      ]
+    },
+    "tools/docs/build_sd_docx.py": {
+      "role": "設計仕様書 md → docx",
+      "body_html": "<p>表・等幅ブロック・Mermaid の PNG を埋め込んだ docx を作る。入出力のパスは作者 PC の絶対パスで、先頭の定数を書き換えて使う。</p>",
+      "ref": "tools/docs/build_sd_docx.py#L1-20"
+    },
+    "tools/docs/build_td_docx.py": {
+      "role": "テスト設計書 md → docx",
+      "body_html": "<p><code>build_sd_docx.py</code> の派生。テスト設計書 draft-v1 を docx にする。</p>",
+      "ref": "tools/docs/build_td_docx.py#L1-20"
+    },
+    "tools/docs/fix_docx.py": {
+      "role": "既存 docx の修復",
+      "body_html": "<p>異常な表のインデント値の削除、表プロパティの要素順の並べ替え、空のページ番号フィールドの補完、表示モードの固定を XML を直接書き換えて行う。</p>",
+      "ref": "tools/docs/fix_docx.py#L1-20",
+      "open_when": [
+        "Word で開けない docx を直すとき"
+      ]
+    },
+    "tools/docs/render_mermaid.py": {
+      "role": "Mermaid 図の PNG 化",
+      "body_html": "<p>設計仕様書の Markdown から mermaid ブロックを抜き出し、Mermaid CLI で PNG にする。</p>",
+      "ref": "tools/docs/render_mermaid.py#L1-20"
+    }
+  },
+  "collapse": [
+    {
+      "path": "apps/web/public/products",
+      "label": "商品画像 31 枚（各フォルダに 1.jpg の 1 枚。中身は 8×8 の単色 PNG）"
+    },
+    {
+      "path": "apps/web/tests",
+      "label": "web のテスト 27 ファイル＋共通設定（ut-web-XX・it-bff-XX・st-sec-XX など、設計書の ID がファイル名に入る）"
+    },
+    {
+      "path": "apps/api/tests/unit",
+      "label": "api の単体テスト 16 ファイル（test_ut_*.py。DB 不要）"
+    }
+  ],
+  "tips_html": "<h3>IDE で探すときのコツ</h3>\n<ol>\n<li><strong>設計 ID で全文検索する。</strong><code>DS-API-022</code> で検索すると、<code>routers/orders.py</code>・<code>schemas/order.py</code>・<code>openapi.json</code>・設計仕様書がまとめて出る。設計判断の <code>DS-DEC-49</code>（Basic 認証）、手順の <code>DS-PRC-014-1</code>（注文確定）も同じ引き方ができる。</li>\n<li><strong>テスト ID で全文検索する。</strong><code>IT-014-03</code> は api のテストの docstring に書かれている。関数名は小文字と下線なので <code>it_014_03</code> でも探せる。web はファイル名に ID が入る（<code>ut-web-05.env-validation.test.ts</code>）。<code>csrf-validation.test.ts</code> のように ID が付かないファイルもある。</li>\n<li><strong>api は上から下へ追う。</strong>routers（URL）→ services（業務ルール）→ repositories（SQL）→ models（表）の順に読む。注文確定なら <code>routers/orders.py</code> の <code>create_order</code> から <code>services/orders.py</code> の <code>_confirm</code>、<code>repositories/orders.py</code> の <code>reserve_stock</code> へ降りる。</li>\n<li><strong>web はフォルダ名が URL になる。</strong><code>app/**/page.tsx</code> が画面、<code>app/api/**/route.ts</code> が BFF（ブラウザの JavaScript が呼ぶ経路）。画面の初回描画は BFF を通らず、<code>lib/server</code> から FastAPI を直接呼ぶ。<code>lib/server</code> はサーバー専用、<code>lib/client</code> はブラウザ専用、<code>lib</code> 直下は両方で使える。</li>\n<li><strong>docs は 00〜05 が工程順。</strong>計画 → 要求仕様書 → 要件定義書 → 設計仕様書 → テスト設計書 → 検収の順で、<code>05_解説</code> は工程の外にある。P2 追補 a と公開追補は本編との差分だけを書くので、本編と併せて読む。設計書・テスト設計書の 10 章に ID の対応表がある。</li>\n<li><strong>API の契約は <code>openapi.json</code>、web の型は手書きの写し。</strong>web の <code>lib/types.ts</code> は <code>openapi.json</code> と突き合わせて手で保っている。<code>openapi.json</code> は P1 時点の 11 パスで、<code>/contents</code> と <code>/search</code> は入っていない。実際の入出力は routers と schemas で確認する。</li>\n<li><strong>ファイル冒頭のコメントから設計書へ戻る。</strong>api は先頭の docstring に設計 ID（DS-API・DS-PRC・DS-TBL）、web は先頭のコメントに設計仕様書の章番号が書いてある。読んでいて意図が分からないときは、まず冒頭を見る。</li>\n<li><strong>秘匿値は git に無い。</strong><code>.env</code> 系は git 管理外で、環境変数の名前は <code>.env.example</code> と各 README の表で分かる。CI やテストのダミー値には行内に <code>pragma: allowlist secret</code> が付いており、<code>git grep -n \"allowlist secret\"</code> で一覧できる。</li>\n</ol>"
+}
