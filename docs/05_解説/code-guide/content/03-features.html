@@ -1,0 +1,669 @@
+<section id="s03" data-title="機能別の解説">
+<h2>3. 機能別の解説</h2>
+
+<p>各機能を「何をするか → 縦の流れの表 → 処理の説明 → テスト」の順で並べます。表の「BFF」列が「BFF なし」の行は、画面（Server Component）が <code>lib/server</code> の関数から FastAPI を直接呼ぶ経路です。ブラウザの JavaScript が呼ぶ経路だけが BFF の Route Handler を通ります。</p>
+
+<div class="note fact">
+<p>事実: <code>apps/web/tests</code> には、商品一覧のグリッド（ProductsGrid）、カート画面（CartView）、注文完了画面（OrderComplete）を直接対象にした自動テストのファイルがありません（ファイル名と本文の grep で確認）。これらの画面は、テスト設計書の AT・ST を手で確認した記録（<a class="ref" data-ref="docs/05_検収/ST-AT実施記録_正常系_20260918.md">ST-AT 実施記録（正常系）</a>、<a class="ref" data-ref="docs/05_検収/ST実施記録_異常境界_20260924.md">ST 実施記録（異常・境界）</a>）で確かめています。</p>
+</div>
+
+<!-- ============ 商品一覧・カテゴリ ============ -->
+<h3 id="s03-products">商品一覧とカテゴリ（トップ・/products・もっと見る）</h3>
+
+<p><span class="req">F-001</span><span class="req">DS-API-001</span><span class="req">DS-API-002</span>　性別（WOMEN・MEN・KIDS・TEEN）とカテゴリで公開商品を絞り、新着順に 24 件ずつ表示します。トップページにも同じ API から 8 件を出します。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>トップのおすすめ 8 件</td>
+<td><a class="ref" data-ref="apps/web/app/page.tsx::HomePage">HomePage</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/catalog.ts::getProducts">getProducts</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/catalog.py::list_products">list_products</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/catalog.py::list_products">list_products</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/products.py::list_published">list_published</a></td>
+<td><a class="ref" data-ref="apps/api/app/models/catalog.py::Product">products</a></td>
+</tr>
+<tr>
+<td>/products の初回表示</td>
+<td><a class="ref" data-ref="apps/web/app/products/page.tsx::ProductsPage">ProductsPage</a></td>
+<td>BFF なし：getProducts</td>
+<td>list_products</td>
+<td>list_products</td>
+<td>list_published</td>
+<td>products・<a class="ref" data-ref="apps/api/app/models/catalog.py::ProductCategory">product_categories</a>・<a class="ref" data-ref="apps/api/app/models/catalog.py::Category">categories</a></td>
+</tr>
+<tr>
+<td>「もっと見る」</td>
+<td><a class="ref" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid">ProductsGrid</a>（<a class="ref" data-ref="apps/web/lib/client/cart-api.ts::fetchProductsPage">fetchProductsPage</a>）</td>
+<td><a class="ref" data-ref="apps/web/app/api/products/route.ts::GET">GET</a></td>
+<td>list_products</td>
+<td>list_products</td>
+<td>list_published・<a class="ref" data-ref="apps/api/app/repositories/products.py::colors_by_product">colors_by_product</a></td>
+<td>products・<a class="ref" data-ref="apps/api/app/models/catalog.py::Variant">variants</a></td>
+</tr>
+<tr>
+<td>カテゴリ階層（ヘッダー・メニュー・タブ）</td>
+<td><a class="ref" data-ref="apps/web/app/layout.tsx::RootLayout">RootLayout</a>・<a class="ref" data-ref="apps/web/components/CategoryNav.tsx::CategoryNav">CategoryNav</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/catalog.ts::getCategories">getCategories</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/catalog.py::get_categories">get_categories</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/catalog.py::get_categories">get_categories</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/products.py::list_categories_with_counts">list_categories_with_counts</a></td>
+<td>categories・product_categories・products</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>公開の条件は <a class="ref" data-ref="apps/api/app/repositories/products.py::published_filter">published_filter</a> の 1 か所です。一覧、詳細、関連商品、カート追加、検索がすべてこの条件を通るので、非公開商品はどの経路にも出ません。並びは <code>created_at</code> 降順で、同時刻なら <code>id</code> 降順です。</p>
+
+<p>一覧の「売り切れ」は、その商品の全バリエーションの在庫合計が 0 以下のときに <code>sold_out=true</code> になります。合計は variants を GROUP BY で 1 回集計したもので、商品ごとに問い合わせる形（N+1）にしていません。色の一覧も <code>colors_by_product</code> がページ分をまとめて 1 クエリで取ります。<code>has_more</code> は <code>page * per_page &lt; total</code> です。カテゴリの商品数（<code>product_count</code>）も公開商品だけを数えます。</p>
+
+<p>ページ側は、URL の <code>gender</code>・<code>category</code> を英小文字・数字・<code>-</code>・<code>_</code> の 64 文字以内に限り、<code>page</code> は 3 桁以内の数字だけを受けます。外れた値は捨てて既定値に戻します。「もっと見る」は ProductsGrid が次のページを BFF から取り、すでに表示している <code>id</code> を除いて末尾に足します。BFF は <code>page</code> を 1〜999、<code>per_page</code> を 1〜24 に丸めます（FastAPI 側の上限は 48）。トップの「もっと見る」は <code>/products</code> へのリンクで、その場での追加取得はしません。FastAPI が止まっているときは <code>loadOrNull</code> が null を返し、そのブロックだけ「読み込めませんでした」を出します。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F001-01</span><span class="tid">ST-F001-02</span><span class="tid">ST-F001-03</span><span class="tid">IT-001-01</span><span class="tid">IT-002-01</span><span class="tid">IT-002-02</span><span class="tid">AT-07</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py">test_it_001_003_catalog.py</a> と <a class="ref" data-ref="apps/web/tests/at-07.all-menu.test.tsx">at-07.all-menu.test.tsx</a> です。</p>
+
+<!-- ============ 商品詳細 ============ -->
+<h3 id="s03-detail">商品詳細と購入パネル（色・サイズ選択、在庫表示）</h3>
+
+<p><span class="req">F-005</span><span class="req">F-007</span><span class="req">DS-API-003</span>　商品の画像・価格・説明・関連商品を見せ、色とサイズを選んで在庫の有無を確かめ、カートに入れます。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>商品詳細の表示</td>
+<td><a class="ref" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage">ProductDetailPage</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/catalog.ts::getProduct">getProduct</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/catalog.py::get_product">get_product</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/catalog.py::get_product_detail">get_product_detail</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/products.py::get_published">get_published</a>・<a class="ref" data-ref="apps/api/app/repositories/products.py::list_variants">list_variants</a>・<a class="ref" data-ref="apps/api/app/repositories/products.py::list_related">list_related</a></td>
+<td>products・variants・<a class="ref" data-ref="apps/api/app/models/catalog.py::ProductImage">product_images</a></td>
+</tr>
+<tr>
+<td>色・サイズ・数量の選択、在庫表示</td>
+<td><a class="ref" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel">PurchasePanel</a>・<a class="ref" data-ref="apps/web/components/PurchasePanel.tsx::resolveVariant">resolveVariant</a></td>
+<td>—（表示済みの variants から画面で判定）</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>カートに入れる</td>
+<td><a class="ref" data-ref="apps/web/components/PurchasePanel.tsx#L60-79">onAdd</a></td>
+<td colspan="5">カートの節（<a href="#s03-cart">カート</a>）の「追加」の行と同じ経路</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>ページは <code>id</code> が数字 1〜18 桁でなければ API を呼ばずに <code>notFound()</code> にします。API が 404 を返したときも <code>notFound()</code> です。非公開商品と存在しない商品は同じ 404 で、区別できません。接続できないときは「商品情報を読み込めませんでした」を出します。関連商品は同じカテゴリの公開商品から自分を除き、新着順で 4 件です。</p>
+
+<p>商品詳細の API が返す在庫は有無だけで、残数は含みません。<code>VariantOut.in_stock</code> は <code>stock &gt; 0</code> です。画面の表示は 3 通りで、色とサイズが未選択なら「色とサイズを選択してください」、選んだ組み合わせが無い・在庫なしなら「在庫切れ」、在庫があれば「在庫あり」です。「在庫切れ」のときはボタンが無効になり、ラベルも「在庫切れ」に変わります。色またはサイズが 1 種類しかない商品は、最初から選択済みにします。</p>
+
+<p>数量は 1〜10 のセレクトです（上限は <code>MAX_QUANTITY_PER_ITEM</code>）。375px 幅では下部に固定バーが出て、選択内容・小計・追加ボタンを常に見せます。追加に失敗したときの文言は <code>cartErrorMessage</code> が決めます（例：在庫なしは「在庫切れのため追加できません」）。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F005-01</span><span class="tid">ST-F005-02</span><span class="tid">ST-F005-03</span><span class="tid">ST-F007-01</span><span class="tid">IT-003-01</span><span class="tid">IT-003-02</span><span class="tid">UT-WEB-07</span><span class="tid">UT-WEB-08</span><span class="tid">AT-03</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py">test_it_001_003_catalog.py</a> と <a class="ref" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx">ut-web-08.purchase-panel.test.tsx</a> です。</p>
+
+<!-- ============ カート ============ -->
+<h3 id="s03-cart">カート（追加・数量変更・削除・送料無料の案内・匿名カートトークン）</h3>
+
+<p><span class="req">F-009</span><span class="req">F-007</span><span class="req">DS-API-010</span><span class="req">DS-API-011</span><span class="req">DS-API-012</span><span class="req">DS-API-013</span>　ログインなしで商品をためておき、数量を変え、消し、合計と送料を確かめてレジへ進みます。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>/cart の初回表示</td>
+<td><a class="ref" data-ref="apps/web/app/cart/page.tsx::CartPage">CartPage</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/catalog.ts::getCartFromCookie">getCartFromCookie</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/cart.py::get_cart">get_cart</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/cart.py::get_cart">get_cart</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/carts.py::fetch_lines">fetch_lines</a></td>
+<td><a class="ref" data-ref="apps/api/app/models/cart.py::Cart">carts</a>・<a class="ref" data-ref="apps/api/app/models/cart.py::CartItem">cart_items</a></td>
+</tr>
+<tr>
+<td>バッジの更新・再取得</td>
+<td><a class="ref" data-ref="apps/web/components/CartProvider.tsx::CartProvider">CartProvider</a></td>
+<td><a class="ref" data-ref="apps/web/app/api/cart/route.ts::GET">GET</a></td>
+<td>get_cart</td>
+<td>get_cart</td>
+<td>fetch_lines</td>
+<td>carts・cart_items</td>
+</tr>
+<tr>
+<td>追加</td>
+<td><a class="ref" data-ref="apps/web/components/PurchasePanel.tsx#L60-79">PurchasePanel の onAdd</a></td>
+<td><a class="ref" data-ref="apps/web/app/api/cart/items/route.ts::POST">POST</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/cart.py::add_item">add_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/cart.py::add_item">add_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/carts.py::upsert_item_add">upsert_item_add</a></td>
+<td>cart_items</td>
+</tr>
+<tr>
+<td>数量変更</td>
+<td><a class="ref" data-ref="apps/web/components/CartView.tsx#L71-82">CartView の onQuantityChange</a></td>
+<td><a class="ref" data-ref="apps/web/app/api/cart/items/[id]/route.ts::PATCH">PATCH</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/cart.py::update_item">update_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/cart.py::update_item">update_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/carts.py::set_item_quantity">set_item_quantity</a></td>
+<td>cart_items</td>
+</tr>
+<tr>
+<td>削除</td>
+<td><a class="ref" data-ref="apps/web/components/CartView.tsx#L84-98">CartView の onConfirmDelete</a></td>
+<td><a class="ref" data-ref="apps/web/app/api/cart/items/[id]/route.ts::DELETE">DELETE</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/cart.py::remove_item">remove_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/cart.py::remove_item">remove_item</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/carts.py::delete_item">delete_item</a></td>
+<td>cart_items</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>匿名カートトークン</strong>　カートの持ち主は Cookie の <code>cart_token</code> で決まります。トークンを発行するのは FastAPI で、<a class="ref" data-ref="apps/api/app/services/cart_rules.py::new_cart_token">new_cart_token</a> が 32 バイトの乱数を base64url にした 43 文字を作ります。BFF は Cookie の値を <code>X-Cart-Token</code> ヘッダに載せ替えて渡し、応答のトークンが Cookie と違うときだけ <code>Set-Cookie</code> で更新します（<a class="ref" data-ref="apps/web/lib/cookie.ts::buildCartTokenCookie">buildCartTokenCookie</a>：HttpOnly・SameSite=Lax・90 日）。ヘッダの値は <a class="ref" data-ref="apps/api/app/services/cart_rules.py::normalize_token">normalize_token</a> が形（英数・<code>-</code>・<code>_</code> の 64 文字以内）を確かめ、合わなければ「未知」として新しいカートを作ります。</p>
+
+<p>サービス側の <a class="ref" data-ref="apps/api/app/services/cart.py::resolve_cart">resolve_cart</a> は、トークンのカートが <code>active</code> ならそのまま使い、<code>ordered</code> や <code>merged</code> なら旧カートからトークンを外して同じトークンで新しい <code>active</code> カートを作ります。注文後に「買い物を続ける」から別の商品を入れても、注文済みカートに混ざらないのはこのためです。同時に 2 つの GET が来て UNIQUE 違反になったときは、ロック読み（<code>FOR UPDATE</code>）で先に作られた方を取り直します。</p>
+
+<p><strong>追加の判定順</strong>　<code>add_item</code> は次の順で判定し、途中で外れると <code>rollback</code> します。①公開中の商品のバリエーションが無ければ 404 not_found、②在庫が 0 以下なら 409 out_of_stock（<code>items</code> に variant_id）、③加算（<code>INSERT … ON DUPLICATE KEY UPDATE</code> の 1 文）、④加算後の数量で上限を見て、1 明細が 10 点を超えるか、カート合計が 50 点を超えると 422 limit_exceeded（<code>field=quantity</code>、<code>limit</code> は 10 か 50）。数量が在庫より多くても追加はできます。在庫の確定は注文時の引当で行うためです。数量変更（<code>update_item</code>）は、自分のカートに無い明細なら 404 で、他人の item_id を指定しても触れません。変更時は在庫の検査をしません。</p>
+
+<p><strong>在庫状態と送料の案内</strong>　カート応答の各明細には <code>stock_status</code> が付きます。非公開または在庫 0 なら <code>out_of_stock</code>、在庫が数量より少なければ <code>insufficient</code>、それ以外は <code>ok</code> です（<a class="ref" data-ref="apps/api/app/services/cart_rules.py::stock_status">stock_status</a>）。空でなく、全明細が <code>ok</code> のときだけ <code>can_checkout=true</code> になり、そうでなければ CartView が警告を出して「レジへ進む」を無効にします。送料は <a class="ref" data-ref="apps/api/app/services/pricing.py::calc_shipping_fee">calc_shipping_fee</a> が小計（値引き前の明細合計）で判定し、閾値（既定 4,990 円）以上なら 0 円、未満なら設定の送料（既定 550 円）です。CartView は閾値を「（4,990 円以上で無料）」と添え、送料 0 のときは「無料」と表示します。閾値と送料は <code>system_settings</code> の値で、画面には API 応答の <code>free_shipping_threshold</code> を使います。</p>
+
+<p><strong>CSRF</strong>　追加・変更・削除は状態を変えるので、クライアント（<a class="ref" data-ref="apps/web/lib/client/cart-api.ts::ensureCsrfToken">ensureCsrfToken</a>）が Cookie <code>csrf_token</code> を読み、<code>X-CSRF-Token</code> ヘッダに載せます。Cookie が無ければ先に <code>GET /api/cart</code> を呼び、BFF に発行させます（<a class="ref" data-ref="apps/web/lib/server/csrf.ts::issueCsrfCookieIfMissing">issueCsrfCookieIfMissing</a>）。BFF 側は <code>verifyCsrf</code> が Cookie とヘッダを比べ、外れれば 403 forbidden で FastAPI へ届かせません。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F009-01</span>〜<span class="tid">ST-F009-05</span>、<span class="tid">IT-010-01</span><span class="tid">IT-010-02</span>、<span class="tid">IT-011-01</span>〜<span class="tid">IT-011-04</span>、<span class="tid">IT-012-01</span>、<span class="tid">UT-011-01</span>、<span class="tid">UT-WEB-01</span>、<span class="tid">AT-04</span><span class="tid">AT-06</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py">test_it_010_013_cart.py</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_011_cart_rules.py">test_ut_011_cart_rules.py</a>、<a class="ref" data-ref="apps/web/tests/bff.cart-route.test.ts">bff.cart-route.test.ts</a>、<a class="ref" data-ref="apps/web/tests/ut-web-01.cart-provider.test.tsx">ut-web-01.cart-provider.test.tsx</a> です。</p>
+
+<!-- ============ 注文手続き ============ -->
+<h3 id="s03-checkout">注文手続き（入力 → 確認：prepare、sessionStorage での受け渡し）</h3>
+
+<p><span class="req">F-013</span><span class="req">F-025</span><span class="req">DS-API-021</span>　ゲストとしてお届け先とメールを入力し、確認画面で明細・金額・冪等キーを受け取ります。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>「確認画面へ」（入力検査 → prepare）</td>
+<td><a class="ref" data-ref="apps/web/components/CheckoutForm.tsx#L132-176">CheckoutForm の onSubmit</a>（<a class="ref" data-ref="apps/web/lib/client/order-api.ts::prepareCheckout">prepareCheckout</a>）</td>
+<td><a class="ref" data-ref="apps/web/app/api/checkout/prepare/route.ts::POST">POST</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/checkout.py::prepare">prepare</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/checkout.py::prepare">prepare</a></td>
+<td>carts_repo の <a class="ref" data-ref="apps/api/app/repositories/carts.py::fetch_lines">fetch_lines</a></td>
+<td>carts・cart_items・variants・products・<a class="ref" data-ref="apps/api/app/models/system.py::SystemSetting">system_settings</a>（読み取りのみ）</td>
+</tr>
+<tr>
+<td>確認画面の復元</td>
+<td><a class="ref" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm">OrderConfirm</a>（<a class="ref" data-ref="apps/web/lib/client/use-session-item.ts::useSessionItem">useSessionItem</a>）</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>ブラウザの sessionStorage（キー <code>guapp.checkout</code>）</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>入力と検査</strong>　フォーム本体は <a class="ref" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner">CheckoutFormInner</a> です（<code>CheckoutForm</code> は、保存済みの入力を復元して <code>CheckoutFormInner</code> に渡すだけの外側の部品）。項目は氏名・郵便番号・都道府県・市区町村・番地・建物（任意）・電話・メールです。「確認画面へ」を押すと、まず画面側の <a class="ref" data-ref="apps/web/lib/checkout-validation.ts::validateCheckoutForm">validateCheckoutForm</a> が必須と形式を見て、外れた項目の入力欄に赤字を出して先頭の欄へフォーカスを移します。通ったときだけ <code>prepare</code> を呼びます。ハイフンや空白は <code>digitsOnly</code> が落とし、郵便番号は 7 桁、電話は 10〜11 桁の数字にします。都道府県から建物までは <code>joinShipAddress</code> が全角スペースでつなぎ、住所 1 項目（200 文字以内）にして送ります。サーバー側の <a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn">OrderCreateIn</a> も同じ規則で検査し直し、画面の検査を素通りした値は 400 validation_error（<code>fields</code> に項目名と reason）になります。この <code>fields</code> は <code>mapServerFieldErrors</code> が入力欄の赤字に対応付けます。</p>
+
+<p><strong>prepare が返すもの</strong>　サービスの <code>prepare</code> は、カートを特定し（<code>resolve_existing_cart</code>。無い・未知なら 404）、状態を確かめます。<code>active</code> でなければ 409 already_ordered（注文番号付き）、明細が空なら 409 empty_cart、<code>stock_status</code> が <code>ok</code> でない明細があれば 409 out_of_stock（<code>items</code> に variant_id）です。通ると、明細・小計・送料・合計・内税・税率・送料無料の閾値と、冪等キーを返します。冪等キーは <code>new_idempotency_key</code> が作る 43 文字の乱数で、<code>prepare</code> の時点では DB に保存しません。最初に保存されるのは注文確定の INSERT です。エラー時の戻し先は <a class="ref" data-ref="apps/web/lib/order-errors.ts::routeOrderError">routeOrderError</a> が決めます（在庫切れはカートへ、注文済みは完了画面へ、など）。</p>
+
+<p><strong>sessionStorage での受け渡し</strong>　<code>prepare</code> の応答とフォーム値は <a class="ref" data-ref="apps/web/lib/checkout-session.ts::saveCheckoutSession">saveCheckoutSession</a> で <code>sessionStorage</code> の <code>guapp.checkout</code> に書き、確認画面（<code>/checkout/confirm</code>）へ遷移します。配送先とメールは、タブを閉じれば消える sessionStorage だけに置き、localStorage やサーバーには置きません。確認画面は保存内容から表示を復元し、<code>prepare</code> が無ければ <code>/checkout</code> へ戻します。金額変更（price_changed）や決済失敗のときは <code>prepare</code> だけを捨ててフォーム値を残し、確認画面を開き直すときに新しい冪等キーで <code>prepare</code> をやり直します。</p>
+
+<p><strong>デモ用ダミー初期値</strong>　保存された入力が無いときだけ、<a class="ref" data-ref="apps/web/lib/demo-defaults.ts::DEMO_CHECKOUT_FORM">DEMO_CHECKOUT_FORM</a> の架空の値（氏名「デモ 太郎」、メールは <code>example.com</code> のドメインなど）を初期値にします。確認画面から戻ってきたときは、利用者が入力した値を優先します。「講義演習用のデモサイトです」という注意書きは、お届け先の見出しの直下に環境を問わず常に出します。講義用のサーバーに実在の個人情報が入ることを防ぐ目的です（設計仕様書 P2 追補a 9.1 の DS-DEC-47）。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F013-01</span><span class="tid">ST-F013-02</span><span class="tid">IT-021-01</span><span class="tid">IT-021-02</span><span class="tid">UT-VAL-01</span><span class="tid">UT-VAL-02</span><span class="tid">AT-01</span>。主なファイルは <a class="ref" data-ref="apps/web/tests/checkout-validation.test.ts">checkout-validation.test.ts</a>、<a class="ref" data-ref="apps/web/tests/checkout-form.demo-defaults.test.tsx">checkout-form.demo-defaults.test.tsx</a>、<a class="ref" data-ref="apps/api/tests/integration/test_it_021_checkout.py">test_it_021_checkout.py</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_val_order_input.py">test_ut_val_order_input.py</a> です。</p>
+
+<!-- ============ 注文確定 ============ -->
+<h3 id="s03-order">注文確定（要点。全体の流れは 2 章）</h3>
+
+<p><span class="req">F-014</span><span class="req">F-025</span><span class="req">DS-API-022</span><span class="req">DS-PRC-014-1</span>　確認画面の「注文を確定する」で、注文の作成・在庫の引当・決済・メールまでを 1 回で行います。14 段の流れは <a href="#s02-order-flow">2 章のフロー図</a> にあります。ここでは表と要点だけを再掲します。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L64-127">OrderConfirm の submit</a></td>
+<td><a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST">POST</a>・<a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">proxyOrderRequest</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/orders.py::create_order">create_order</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/orders.py::create_order">create_order</a>・<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered">mark_cart_ordered</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_order_items">insert_order_items</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_payment">insert_payment</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_audit_log">insert_audit_log</a></td>
+<td><a class="ref" data-ref="apps/api/app/models/order.py::Order">orders</a>・carts・variants・<a class="ref" data-ref="apps/api/app/models/order.py::OrderItem">order_items</a>・<a class="ref" data-ref="apps/api/app/models/order.py::Payment">payments</a>・<a class="ref" data-ref="apps/api/app/models/system.py::AuditLog">audit_logs</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>冪等キーと二重送信</strong>　冪等キーは 43 文字の base64url で、<code>orders.idempotency_key</code> が UNIQUE です。同じキーの再送は INSERT が UNIQUE 違反になり、既存注文を 200 で返します。ただし既存注文が別のカートのものなら 404（他人の注文を見せない）、決済失敗の注文なら 409 payment_failed です。画面側の二重クリックは、<code>submit</code> の <code>inflight</code> フラグが送信を 1 回に絞ります。ただしこれは使い勝手のための対策で、防御の本体は冪等キーの UNIQUE です。</p>
+
+<p><strong>金額と在庫</strong>　画面に表示した金額（<code>display</code>）は、サーバーが確定時の単価と設定で計算し直した値と照合されます。1 円でも違えば 409 price_changed で、応答の <code>amounts</code> に再計算後の金額が入ります。在庫の引当は <code>reserve_stock</code> の条件付き UPDATE 1 文で、複数の明細は variant_id の昇順に処理してデッドロックを避けます。0 行の明細があれば全体を rollback し、409 out_of_stock の <code>items</code> にその variant_id を並べます。</p>
+
+<p><strong>決済とメール</strong>　決済アダプタは環境変数 <code>PAYMENT_STUB_RESULT</code>（<code>ok</code> か <code>ng</code>、未設定は <code>ok</code>）の値を返すスタブです。<code>ng</code> の場合は注文を <code>payment_failed</code> のまま残し、在庫とカートは別のトランザクションで戻して 409 payment_failed を返します。メールは <code>apps/api/.mail-outbox/</code> にテキストを書くだけで、失敗しても 201 は変わりません（<code>audit_logs</code> に <code>mail.failed</code>）。受け取り方法が <code>delivery</code> 以外、支払い方法が <code>card</code> 以外のときは 422 unsupported_value です。入力の形は正しいので 400 にはしません。</p>
+
+<p><strong>注文番号</strong>　<a class="ref" data-ref="apps/api/app/services/order_number.py::generate_order_number">generate_order_number</a> が <code>GU-YYMMDD-XXXXXXXX</code> を作ります。日付は JST、後ろの 8 文字は英大文字と数字から I・O・0・1 を除いた 32 文字です。UNIQUE 違反のときは 1 回だけ作り直し、2 回続けて衝突すると 500 にします。</p>
+
+<p><strong>テスト</strong>　<span class="tid">IT-014-01</span>〜<span class="tid">IT-014-09</span>、<span class="tid">ST-F014-01</span>〜<span class="tid">ST-F014-06</span>、<span class="tid">UT-014-01</span>〜<span class="tid">UT-014-05</span>、<span class="tid">IT-BFF-01</span><span class="tid">IT-BFF-02</span>、<span class="tid">UT-WEB-02</span><span class="tid">UT-WEB-03</span>、<span class="tid">AT-05</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py">test_it_014_orders.py</a>、<a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py">test_it_014_concurrency.py</a>（同時実行）、<a class="ref" data-ref="apps/api/tests/integration/test_it_014_04_stock_race.py">test_it_014_04_stock_race.py</a>（在庫 1 の競合）、<a class="ref" data-ref="apps/api/tests/unit/test_ut_014_reserve_stock.py">test_ut_014_reserve_stock.py</a>、<a class="ref" data-ref="apps/web/tests/it-bff-01-02.orders-route.test.ts">it-bff-01-02.orders-route.test.ts</a>、<a class="ref" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx">ut-web-02-03.order-confirm.test.tsx</a> です。</p>
+
+<!-- ============ 完了と照会 ============ -->
+<h3 id="s03-complete">注文完了と注文照会（番号＋メール、レート制限）</h3>
+
+<p><span class="req">F-025</span><span class="req">F-017</span><span class="req">DS-API-023</span>　注文直後は完了画面に注文内容を再掲し、後から見たいときは注文番号とメールアドレスで照会します。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>完了画面の再掲</td>
+<td><a class="ref" data-ref="apps/web/app/orders/complete/page.tsx::OrderCompletePage">OrderCompletePage</a>・<a class="ref" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete">OrderComplete</a></td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>sessionStorage（キー <code>guapp.lastOrder</code>）</td>
+</tr>
+<tr>
+<td>番号＋メールで照会</td>
+<td><a class="ref" data-ref="apps/web/components/OrderComplete.tsx#L127-148">LookupForm の onSubmit</a>（<a class="ref" data-ref="apps/web/lib/client/order-api.ts::lookupOrder">lookupOrder</a>）</td>
+<td><a class="ref" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST">POST</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/orders.py::lookup_order">lookup_order</a>（<a class="ref" data-ref="apps/api/app/core/rate_limit.py::lookup_rate_limit">lookup_rate_limit</a>）</td>
+<td><a class="ref" data-ref="apps/api/app/services/orders.py::lookup_order">lookup_order</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/orders.py::get_by_number_and_email">get_by_number_and_email</a>・<a class="ref" data-ref="apps/api/app/repositories/orders.py::list_items">list_items</a></td>
+<td>orders・order_items</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>完了画面</strong>　URL の <code>?n=</code> は <code>isOrderNumber</code> で形を確かめ、外れれば null として扱います。OrderComplete は sessionStorage の <code>guapp.lastOrder</code> に注文があり、その番号が URL の番号と一致するときだけ再掲します。別の番号で開かれたとき（2 タブなど）は保存済みの注文を使わず、照会フォームに回します。完了画面に来た時点で、注文手続きの持ち回り（<code>guapp.checkout</code>）は消します。表示する注文日時は UTC を JST に変換したものです。状態が <code>payment_failed</code> の注文を開くと、見出しが「この注文は決済に失敗しています」に変わります。</p>
+
+<p><strong>照会の判定</strong>　照会フォームは、番号を大文字にして形を確かめ、メールの形を確かめます。どちらかが外れても、メッセージは「注文番号かメールアドレスが違います」に統一し、番号の存在をにおわせません。BFF も CSRF を確かめたあと、番号の形が違えば FastAPI を呼ばずに 404 を返します。FastAPI は <code>get_by_number_and_email</code> で番号とメールの両方が一致する注文だけを返し、番号の不存在とメール不一致は区別せず 404 not_found です。メールアドレスはリクエスト本文で送り、URL には載せません。</p>
+
+<p><strong>レート制限</strong>　照会は <a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a> で 1 IP あたり 1 時間に 100 回までです。101 回目は 429 rate_limited と <code>Retry-After</code> ヘッダを返し、BFF はこのヘッダを画面へ通します。制限器はプロセス内のメモリで数えるので、複数のプロセスに分けると回数が共有されません（コードの説明にも同じ注記があります）。数える IP は FastAPI が <code>X-Forwarded-For</code> の先頭を使います。BFF は利用者が付けた <code>X-Forwarded-For</code> を転送せず、<a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">resolveClientIp</a> が信頼できる送信元（App Service の <code>X-Client-IP</code>、または <code>TRUSTED_PROXY_HOPS</code> で右から数えた位置）だけを選んで渡します。ヘッダを偽って制限を逃れたり、他人を 429 にしたりできないようにするためです。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F025-01</span><span class="tid">ST-F025-02</span><span class="tid">ST-F025-03</span><span class="tid">IT-023-01</span><span class="tid">IT-023-02</span><span class="tid">ST-SEC-08</span><span class="tid">AT-06</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_023_lookup.py">test_it_023_lookup.py</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_adapters_and_rate_limit.py">test_ut_adapters_and_rate_limit.py</a>、<a class="ref" data-ref="apps/web/tests/st-sec-xff.client-ip.test.ts">st-sec-xff.client-ip.test.ts</a>、<a class="ref" data-ref="apps/web/tests/order-errors.test.ts">order-errors.test.ts</a> です。</p>
+
+<!-- ============ 検索 ============ -->
+<h3 id="s03-search">商品検索とサジェスト</h3>
+
+<p><span class="req">F-003</span><span class="req">DS-API-004</span><span class="req">DS-API-004a</span>　ヘッダーの検索欄から商品を探します。入力中は候補を最大 5 件出し、Enter か候補の選択で検索結果ページへ移ります。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入力中のサジェスト</td>
+<td><a class="ref" data-ref="apps/web/components/SearchBox.tsx::SearchBox">SearchBox</a>（<a class="ref" data-ref="apps/web/lib/client/search-api.ts::fetchSuggestions">fetchSuggestions</a>）</td>
+<td><a class="ref" data-ref="apps/web/app/api/search/suggest/route.ts::GET">GET</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/search.py::suggest">suggest</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/search.py::suggest_products">suggest_products</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/search.py::suggest_names">suggest_names</a></td>
+<td>products</td>
+</tr>
+<tr>
+<td>検索結果の初回表示</td>
+<td><a class="ref" data-ref="apps/web/app/search/page.tsx::SearchPage">SearchPage</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/search.ts::getSearch">getSearch</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/search.py::search">search</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/search.py::search_products">search_products</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/search.py::search_published">search_published</a></td>
+<td>products・categories・product_categories</td>
+</tr>
+<tr>
+<td>「もっと見る」</td>
+<td><a class="ref" data-ref="apps/web/components/SearchResults.tsx::SearchResults">SearchResults</a>（<a class="ref" data-ref="apps/web/lib/client/search-api.ts::fetchSearchPage">fetchSearchPage</a>）</td>
+<td><a class="ref" data-ref="apps/web/app/api/search/route.ts::GET">GET</a></td>
+<td>search</td>
+<td>search_products</td>
+<td>search_published</td>
+<td>products・categories・product_categories</td>
+</tr>
+<tr>
+<td>0 件のときの代替導線</td>
+<td>SearchResults（total が 0 のブロック）</td>
+<td>—</td>
+<td>search</td>
+<td><a class="ref" data-ref="apps/api/app/services/search.py::build_similar_keywords">build_similar_keywords</a>・<a class="ref" data-ref="apps/api/app/services/search.py::build_recommended_categories">build_recommended_categories</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/search.py::count_matches">count_matches</a>・list_categories_with_counts</td>
+<td>products・categories</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>入力の扱い</strong>　検索語は <a class="ref" data-ref="apps/api/app/services/search.py::normalize_search_term">normalize_search_term</a> が前後の空白を落とし、NFKC 正規化と空白の整理をしたうえで、空でないか、100 文字以内かを見ます。外れると 400 validation_error（<code>fields</code> は <code>q</code>）です。ルーターの <code>Query</code> にも 1〜100 文字の指定があり、空文字や 101 文字以上はそこで先に 400 になります。SearchPage は URL の <code>q</code> を 100 文字で切り、空白だけなら API を呼ばずに「検索語を入力してください。」を出します。SearchBox は入力から 300ms 待ってサジェストを呼み、Enter か候補の選択で <code>/search?q=…</code> へ移ります（商品詳細へは飛びません）。</p>
+
+<p><strong>一致の判定</strong>　<a class="ref" data-ref="apps/api/app/repositories/search.py::build_match_condition">build_match_condition</a> が、商品名・説明・カテゴリ名のいずれかへの部分一致（OR）を作ります。カテゴリ名は <code>product_categories</code> を経由するサブクエリです。<code>%</code> と <code>_</code> は <code>autoescape=True</code> で文字として扱います。全角と半角、ひらがなとカタカナ、清濁音の違いは、DB の照合順序（<code>utf8mb4_0900_ai_ci</code>）が同じ文字として扱います。コード側の正規化は、空白の整理、長さの判定、言い換え辞書の引き当てを揃えるためのものです（DS-DEC-34）。濁点を欠いた「ハンツ」で「パンツ」が見つかることがあり、これは設計上受け入れた制限です（ST-F003-07）。並びは一覧と同じ新着順です。</p>
+
+<p><strong>0 件のとき</strong>　0 件のときだけ 2 つを添えます。1 つは類似キーワードで、<code>SEARCH_SYNONYMS</code> の辞書（例：「デニム」→「ジーンズ」）から候補を引き、実際に 1 件以上ヒットする語だけを最大 5 件残します。もう 1 つはおすすめカテゴリで、子カテゴリを商品数の降順（同数は <code>sort_order</code>、<code>id</code> の順）に並べ、0 件のカテゴリを除いた上位 3 件です。サジェストは商品名の前方一致を優先し、5 件に満たなければ部分一致で補い、同じ商品は重ねません。</p>
+
+<div class="note fact">
+<p>事実: 検索 API にレート制限はありません。ADR-0003 で見送り、公開時も ADR-0004 の判断で実装していません（Basic 認証を知らない人は <code>/api/*</code> に届かない前提。公開追補 7.1）。</p>
+</div>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F003-01</span>〜<span class="tid">ST-F003-07</span>、<span class="tid">IT-004-01</span>〜<span class="tid">IT-004-08</span>、<span class="tid">IT-004a-01</span><span class="tid">IT-004a-02</span>、<span class="tid">UT-SEARCH-01</span>〜<span class="tid">UT-SEARCH-07</span>、<span class="tid">AT-09</span><span class="tid">AT-10</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_004_004a_search.py">test_it_004_004a_search.py</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_search_rules.py">test_ut_search_rules.py</a>、<a class="ref" data-ref="apps/web/tests/search-box.test.tsx">search-box.test.tsx</a>、<a class="ref" data-ref="apps/web/tests/search-results.test.tsx">search-results.test.tsx</a>、<a class="ref" data-ref="apps/web/tests/it-bff-004.search-route.test.ts">it-bff-004.search-route.test.ts</a> です。</p>
+
+<!-- ============ contents ============ -->
+<h3 id="s03-contents">FAQ・お知らせ・静的ページ（contents）</h3>
+
+<p><span class="req">F-028</span><span class="req">F-030</span><span class="req">DS-API-005</span><span class="req">DS-API-006</span>　トップと <code>/contents</code> にお知らせと特集を出し、FAQ・利用規約・プライバシー・特商法・企業情報を <code>/contents/{slug}</code> で見せます。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>トップのお知らせ 3 件</td>
+<td>HomePage</td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/contents.ts::getContents">getContents</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/content.py::list_contents">list_contents</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/content.py::list_contents">list_contents</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/contents.py::list_by_kind">list_by_kind</a></td>
+<td><a class="ref" data-ref="apps/api/app/models/content.py::Content">contents</a></td>
+</tr>
+<tr>
+<td>お知らせ・特集の一覧</td>
+<td><a class="ref" data-ref="apps/web/app/contents/page.tsx::ContentsPage">ContentsPage</a></td>
+<td>BFF なし：getContents</td>
+<td>list_contents</td>
+<td>list_contents</td>
+<td>list_by_kind</td>
+<td>contents</td>
+</tr>
+<tr>
+<td>FAQ・静的ページ</td>
+<td><a class="ref" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage">ContentDetailPage</a></td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/contents.ts::getContent">getContent</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/content.py::get_content">get_content</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/content.py::get_content_detail">get_content_detail</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/contents.py::get_by_slug">get_by_slug</a></td>
+<td>contents</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>一覧</strong>　<code>kind</code> は <code>feature</code> か <code>news</code> のどちらかで、<code>limit</code> は既定 5・最大 20 です。並びは <code>news</code> が <code>publish_from</code> の降順、<code>feature</code> が <code>sort_order</code> の昇順です。トップは <code>news</code> を 3 件、<code>/contents</code> は 20 件まで取ります。<code>/contents?kind=news</code> ならお知らせだけを出し、指定なしは特集とお知らせの両方です。特集はバナーのプレースホルダーとタイトルだけ、お知らせは JST の日付とタイトルだけで、どちらも個別ページへのリンクはありません（<code>feature</code>・<code>news</code> は個別 URL を持たない設計です）。</p>
+
+<p><strong>詳細</strong>　<code>slug</code> は <code>faq</code>・<code>terms</code>・<code>privacy</code>・<code>tokushoho</code>・<code>company</code> の 5 種です。フッターの 5 リンクと、メニューの FAQ・INFO がここへつながります。存在しない slug、<code>kind</code> が <code>faq</code>・<code>static</code> 以外、掲載期間外のどれも、区別せず 404 not_found です。API の <code>slug</code> は <code>^[a-z0-9-]{1,100}$</code> のパターンで、外れると 400 validation_error になります。本文はプレーンテキストで、<code>dangerouslySetInnerHTML</code> を使わず React の標準のエスケープだけで描画し、改行は <code>whitespace-pre-line</code> で保ちます（DS-DEC-38）。特商法（<code>tokushoho</code>）だけは、各行を全角コロン「：」で項目名と内容に分けて定義リストにします。</p>
+
+<div class="note fact">
+<p>事実（コードの読み取りによる。実行はしていない）: <code>ContentDetailPage</code> は slug の形を事前に確かめません。パターン外の slug（大文字を含むなど）は FastAPI が 400 を返し、ページは 404 の画面にせず「ページを読み込めませんでした」の表示になります。<code>notFound()</code> を呼ぶのは API が 404 を返したときだけだからです。商品詳細ページは <code>id</code> の形を先に確かめて <code>notFound()</code> にしており、扱いが揃っていません。</p>
+</div>
+
+<p><strong>掲載期間</strong>　<a class="ref" data-ref="apps/api/app/services/content.py::is_within_publish_window">is_within_publish_window</a> は <code>publish_from &lt;= now</code> かつ（<code>publish_to</code> が空、または <code>now &lt;= publish_to</code>）で判定し、境界の等号を含みます。時刻はすべて UTC で比べ、JST への変換は表示するときだけです（DS-DEC-40）。実装は一覧と詳細で違います。一覧は <code>repositories/contents.py</code> の SQL 条件で絞り、詳細は行を取ってからサービスの関数で判定します。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-F028-01</span>〜<span class="tid">ST-F028-03</span>、<span class="tid">ST-F030-01</span><span class="tid">ST-F030-02</span>、<span class="tid">IT-005-01</span>〜<span class="tid">IT-005-03</span>、<span class="tid">IT-006-01</span>〜<span class="tid">IT-006-04</span>、<span class="tid">UT-CONTENT-01</span>〜<span class="tid">UT-CONTENT-03</span>、<span class="tid">AT-11</span><span class="tid">AT-12</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_005_006_contents.py">test_it_005_006_contents.py</a> と <a class="ref" data-ref="apps/api/tests/unit/test_ut_content_rules.py">test_ut_content_rules.py</a> です。</p>
+
+<!-- ============ 公開設定 ============ -->
+<h3 id="s03-settings">公開設定（税率・送料など system_settings）</h3>
+
+<p><span class="req">F-032</span><span class="req">F-016</span><span class="req">DS-API-020</span>　税率・送料・送料無料の閾値を DB の <code>system_settings</code> から読み、金額の計算と画面表示に使います。コードを変えずに値を変えられます。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>閾値の表示（カート画面）</td>
+<td>CartPage</td>
+<td>BFF なし：<a class="ref" data-ref="apps/web/lib/server/catalog.ts::getPublicSettings">getPublicSettings</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/settings.py::public_settings">public_settings</a></td>
+<td><a class="ref" data-ref="apps/api/app/services/settings.py::get_public_settings">get_public_settings</a></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/settings.py::fetch_values">fetch_values</a></td>
+<td>system_settings</td>
+</tr>
+<tr>
+<td>金額計算（カート・prepare・注文確定）</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td><a class="ref" data-ref="apps/api/app/services/pricing.py::calc_totals">calc_totals</a>（設定は get_public_settings 経由）</td>
+<td>fetch_values</td>
+<td>system_settings</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>公開する設定は <code>tax_rate</code>（文字列 <code>"0.10"</code>）、<code>shipping_fee</code>（550）、<code>free_shipping_threshold</code>（4,990）の 3 つだけです。<code>payment_timeout_minutes</code> などの内部設定は応答に含めません（<a class="ref" data-ref="apps/api/app/services/settings.py::get_public_settings">get_public_settings</a> が 3 キーだけを読む）。キーが欠けている、型が違う、税率を数値として読めないときは、設定の投入漏れとみなして 500 internal_error にし、詳細はログにだけ残します。</p>
+
+<p>金額は整数の円で扱います。<code>calc_totals</code> は小計・送料・合計・内税を返し、内税は <code>合計 × 税率(%) ÷ (100 + 税率(%))</code> を円未満切り捨ての整数演算で求めます（4,530 円なら 411 円）。引数に <code>int</code> 以外（<code>bool</code> を含む）が来ると <code>TypeError</code>、明細が 0 件なら 409 empty_cart です。送料は小計が閾値「以上」で 0 円になるので、4,989 円は 550 円、4,990 円は 0 円です。値を変えるとカート・確認画面・注文確定のすべてに反映されます。設定を変える管理画面はまだありません（設計上は P2 以降）。</p>
+
+<p><strong>テスト</strong>　<span class="tid">IT-020-01</span>、<span class="tid">UT-021-01</span>〜<span class="tid">UT-021-05</span>、<span class="tid">ST-F032-01</span><span class="tid">ST-F032-02</span>、<span class="tid">AT-08</span>。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_020_settings.py">test_it_020_settings.py</a> と <a class="ref" data-ref="apps/api/tests/unit/test_ut_021_pricing.py">test_ut_021_pricing.py</a> です。</p>
+
+<!-- ============ health ============ -->
+<h3 id="s03-health">ヘルスチェック</h3>
+
+<p><span class="req">DS-API-061</span>　FastAPI が起動していて DB に届くかを確かめます。運用の死活監視向けで、画面はありません。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">BFF</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">DB</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>—</td>
+<td><a class="ref" data-ref="apps/web/app/api/health/route.ts::GET">GET</a></td>
+<td><a class="ref" data-ref="apps/api/app/routers/health.py::health">health</a></td>
+<td>—</td>
+<td>—</td>
+<td><a class="ref" data-ref="apps/api/app/core/db.py::get_engine">get_engine</a> で <code>SELECT 1</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>FastAPI の <code>/api/v1/health</code> は、内部トークンの検証を掛けたルーター群の外に登録してあり（<a class="ref" data-ref="apps/api/app/main.py::create_app">create_app</a>）、トークンなしで呼べます。DB に接続できると 200 で <code>{"status":"ok","db":"ok"}</code>、接続できない・URL が不正なときは 503 <code>db_unavailable</code> です。詳細はログだけに出します。BFF の <code>/api/health</code> は FastAPI を内部トークン付きで呼び、届かなければ 503 <code>upstream_unavailable</code> を返します。この BFF ルートは Basic 認証の対象です。</p>
+
+<div class="note fact">
+<p>事実: <code>core/security.py</code> の <code>INTERNAL_TOKEN_EXEMPT_PATHS</code>（health のパスを 1 つ持つ定数）は、コード内のどこからも参照されていません（grep で確認）。health が対象外になるのは、ルーターの登録位置によります。この定数は効いていません。</p>
+</div>
+
+<p><strong>テスト</strong>　<span class="tid">IT-061-01</span>、<span class="tid">ST-SEC-16</span>〜<span class="tid">ST-SEC-18</span>（BFF の <code>/api/health</code> を使う）。主なファイルは <a class="ref" data-ref="apps/api/tests/integration/test_it_060_061_cors.py">test_it_060_061_cors.py</a> です。</p>
+
+<!-- ============ Basic 認証・帯 ============ -->
+<h3 id="s03-auth">Basic 認証と公開期間の帯（proxy.ts、basic-auth.ts、DemoPeriodBanner）</h3>
+
+<p><span class="req">DS-DEC-48</span><span class="req">DS-DEC-49</span><span class="req">DS-DEC-50</span>　レビュー用に公開するサイト全体を Basic 認証で守り、全ページの上部に「期間限定で公開している」という帯を出します。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>対象</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">入口（proxy）</span></th>
+<th><span class="layer" data-layer="service">純粋関数</span></th>
+<th>環境変数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Basic 認証</td>
+<td>—</td>
+<td><a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy</a></td>
+<td><a class="ref" data-ref="apps/web/lib/basic-auth.ts::parseBasicAuthConfig">parseBasicAuthConfig</a>・<a class="ref" data-ref="apps/web/lib/basic-auth.ts::verifyBasicAuthHeader">verifyBasicAuthHeader</a></td>
+<td><code>BASIC_AUTH_USER</code>・<code>BASIC_AUTH_PASSWORD</code></td>
+</tr>
+<tr>
+<td>公開期間の帯</td>
+<td><a class="ref" data-ref="apps/web/components/DemoPeriodBanner.tsx::DemoPeriodBanner">DemoPeriodBanner</a>（<a class="ref" data-ref="apps/web/app/layout.tsx::RootLayout">RootLayout</a> が値を渡す）</td>
+<td>—</td>
+<td><a class="ref" data-ref="apps/web/lib/demo-banner.ts::parseDemoPublicUntil">parseDemoPublicUntil</a></td>
+<td><code>DEMO_PUBLIC_UNTIL</code></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>Basic 認証</strong>　<code>proxy.ts</code> の <code>matcher</code> は、<code>_next/static</code>・<code>_next/image</code>・<code>favicon.ico</code>・<code>sitemap.xml</code>・<code>robots.txt</code> を除く全リクエストです。BFF の <code>/api/*</code> も含みます。環境変数はモジュールの読み込み時に <code>parseBasicAuthConfig</code> で 1 回だけ評価し、結果は 3 通りです。両方未設定なら認証なし（ローカル開発を妨げない）、両方設定なら認証あり、片方だけなら <code>BasicAuthConfigError</code> を投げます。設定漏れのまま無防備に公開する事故を、全リクエストが失敗する形で気づけるようにするためです。認証ありのとき、<code>Authorization</code> ヘッダが正しければ通し、そうでなければ本文なしの 401 と <code>WWW-Authenticate: Basic realm="GUapp demo"</code> を返します。</p>
+
+<p>ヘッダの検証（<code>verifyBasicAuthHeader</code>）は例外を投げません。<code>Basic</code> の書式でない、base64 が壊れている、コロンがない、といった場合はすべて「認証失敗」の false です。ID とパスワードは、それぞれ SHA-256 で固定長にしてから <code>timingSafeEqual</code> で比べます。入力の長さの違いで比較が早く終わらないようにするためで、両方を比べ終えてから結果を合わせます。この認証は Next.js の入口だけを守ります。FastAPI は別に、内部トークンで BFF 以外からの呼び出しを拒否します。</p>
+
+<p><strong>公開期間の帯</strong>　<code>RootLayout</code> が実行時の <code>process.env.DEMO_PUBLIC_UNTIL</code>（<code>YYYY-MM-DD</code>）を読み、<code>parseDemoPublicUntil</code> で検証して <code>YYYY/MM/DD</code> の文字列にします。未設定または空は帯なし（警告も出しません）。形式が違う日付や、実在しない日付（<code>2026-13-01</code> など）は、帯なしにして警告を出します。例外は投げず、環境変数 1 件の誤りでサイト全体が落ちないようにしています。<code>NEXT_PUBLIC_</code> を付けていないので、ビルドし直さずに値を変えて終了日を延ばせます。DemoPeriodBanner は Server Component で、文字列が null のときは何も描画しません。帯は <code>role="status"</code> で、文言そのものに「期間限定」「デモ」と書いています（色だけで意味を伝えない）。</p>
+
+<p><strong>テスト</strong>　<span class="tid">ST-SEC-16</span>〜<span class="tid">ST-SEC-18</span>、<span class="tid">ST-SEC-16a</span><span class="tid">ST-SEC-16b</span><span class="tid">ST-SEC-16c</span>、<span class="tid">ST-SEC-19</span><span class="tid">ST-SEC-20</span><span class="tid">ST-SEC-20a</span><span class="tid">ST-SEC-20b</span>、<span class="tid">UT-WEB-09</span><span class="tid">UT-WEB-10</span>。主なファイルは <a class="ref" data-ref="apps/web/tests/ut-web-09.basic-auth.test.ts">ut-web-09.basic-auth.test.ts</a>、<a class="ref" data-ref="apps/web/tests/ut-web-09.proxy-basic-auth.test.ts">ut-web-09.proxy-basic-auth.test.ts</a>、<a class="ref" data-ref="apps/web/tests/ut-web-10.demo-banner.test.ts">ut-web-10.demo-banner.test.ts</a>、<a class="ref" data-ref="apps/web/tests/ut-web-10.demo-period-banner.test.tsx">ut-web-10.demo-period-banner.test.tsx</a> です。</p>
+
+<!-- ============ 共通ヘッダー ============ -->
+<h3 id="s03-nav">共通ヘッダー・オールメニュー・パンくず</h3>
+
+<p><span class="req">F-004</span><span class="req">F-036</span>　全ページ共通のヘッダー・メニュー・フッターと、商品一覧から先のパンくずです。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>部品</th>
+<th><span class="layer" data-layer="screen">画面</span></th>
+<th><span class="layer" data-layer="bff">データの取得</span></th>
+<th><span class="layer" data-layer="api">ルーター</span></th>
+<th><span class="layer" data-layer="service">サービス</span></th>
+<th><span class="layer" data-layer="repo">リポジトリ</span></th>
+<th><span class="layer" data-layer="db">テーブル</span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ヘッダー（メニュー・検索・カートのバッジ）</td>
+<td><a class="ref" data-ref="apps/web/components/Header.tsx::Header">Header</a>・<a class="ref" data-ref="apps/web/components/HeaderWithCart.tsx::HeaderWithCart">HeaderWithCart</a></td>
+<td>点数は <a class="ref" data-ref="apps/web/components/CartProvider.tsx::CartProvider">CartProvider</a>（GET /api/cart）</td>
+<td>get_cart</td>
+<td>get_cart</td>
+<td>fetch_lines</td>
+<td>carts・cart_items</td>
+</tr>
+<tr>
+<td>オールメニュー</td>
+<td><a class="ref" data-ref="apps/web/components/AllMenu.tsx::AllMenu">AllMenu</a></td>
+<td>BFF なし：RootLayout が getCategories</td>
+<td>get_categories</td>
+<td>get_categories</td>
+<td>list_categories_with_counts</td>
+<td>categories</td>
+</tr>
+<tr>
+<td>パンくず・フッター</td>
+<td><a class="ref" data-ref="apps/web/components/Breadcrumb.tsx::Breadcrumb">Breadcrumb</a>・<a class="ref" data-ref="apps/web/components/Footer.tsx::Footer">Footer</a></td>
+<td>—（呼び出し元のページが項目を渡す）</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p><a class="ref" data-ref="apps/web/app/layout.tsx::RootLayout">RootLayout</a> は Cookie に <code>cart_token</code> があるかを見て <code>CartProvider</code> に渡し、無い訪問者にはカートを作りません（バッジは 0 のまま）。カテゴリ階層もここで取得して <code>AllMenu</code> に渡し、失敗したときは null を渡して、メニュー側が「カテゴリを読み込めませんでした」を出します。ヘッダーは高さ 64px で、左に「≡ メニュー」、中央に GU のロゴと（sm 以上では）検索欄、右に検索・お気に入り・カート・会員のアイコンです。お気に入りと会員のリンクの遷移先はまだありません（<code>href="#"</code>）。カートのバッジは 0 なら出さず、100 以上は「99+」にします。</p>
+
+<p>「≡ メニュー」を押すと AllMenu がダイアログで開きます。性別 3 区分（WOMEN・MEN・KIDS・TEEN）の下に、その性別の子カテゴリと商品数を並べ、各行は <code>/products?gender=…&amp;category=…</code> へのリンクです。末尾に「お知らせ」「FAQ」「INFO」があります。Escape・背景のクリック・リンクの選択で閉じ、開いている間は Tab がパネル内を循環し、背面のスクロールを止めます。閉じるとフォーカスを「≡」に戻します（Header が行う）。375px 幅では検索欄の代わりに検索アイコンが出て、押すと <code>SearchPanel</code> が開きます。閉じたときに検索アイコンへフォーカスを戻す規則は AllMenu と同じです。</p>
+
+<p>Breadcrumb は <code>{label, href?}</code> の配列を受け取る表示専用の部品です。最後の項目は現在地として <code>aria-current="page"</code> を付け、リンクにしません。商品一覧・商品詳細・注文手続き・注文確認・検索結果・お知らせ・FAQ などで使い、トップ・カート・注文完了では使いません。Footer の 5 リンクは、企業情報・利用規約・プライバシー・特商法・FAQ で、それぞれ <code>/contents/{slug}</code> を指します。注文確定・削除の確認ダイアログ（<code>ConfirmDialog</code>）、処理中のボタン（<code>Button</code> の <code>busy</code>）、トースト（<code>Toast</code>）は F-036 の共通部品で、カートと注文の各画面が使います。</p>
+
+<p><strong>テスト</strong>　<span class="tid">AT-07</span><span class="tid">ST-F004-01</span><span class="tid">UT-WEB-01</span><span class="tid">ST-NFR-01</span>。主なファイルは <a class="ref" data-ref="apps/web/tests/at-07.all-menu.test.tsx">at-07.all-menu.test.tsx</a>、<a class="ref" data-ref="apps/web/tests/ut-web-01.header.test.tsx">ut-web-01.header.test.tsx</a>、<a class="ref" data-ref="apps/web/tests/ui.design-parts.test.tsx">ui.design-parts.test.tsx</a>（Breadcrumb を含む）です。</p>
+</section>

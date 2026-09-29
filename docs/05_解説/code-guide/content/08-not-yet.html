@@ -1,0 +1,93 @@
+<section id="s08" data-title="まだ作っていないもの">
+<h2>8. まだ作っていないもの</h2>
+
+<p>Must 18 件のうち、完了が 8 件、一部だけできているのが 5 件、未着手が 5 件である。数字は 2026-09-25 時点の自己申告で、要件 ID は<a class="ref" data-ref="docs/00_計画/実装フェーズ計画.md#L53-93" data-note="機能 ID と REQ の対応表">実装フェーズ計画 4 章の対応表</a>から取った。コードとの照合は 2026-09-29 に行った。残りは 10/31 までの 3 回に分けて作る。</p>
+
+<div class="note opinion"><p><strong>意見:</strong> レビューでは、この数字を聞かれる前に自分から言うほうがよいと思う。「作っていない」ことを先に出すと、続く質問が「どこまで」から「どうやって作るか」に移り、第 9 章の弱点や第 11 章の Q&amp;A に話を進めやすくなるため。</p></div>
+
+<h3 id="s08-must">8.1 Must 18 件の状況</h3>
+
+<p>数え方は機能 ID 単位である。F-013（注文手続き）と F-014（注文確定処理）は別々に数えている。一部の 5 件は、REQ の一部が P1 の範囲外として残っているものを指す。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>機能</th><th>要件 ID</th><th>状況</th><th>できていること</th><th>残り（入る回）</th></tr></thead>
+<tbody>
+<tr><td><span class="req">F-001</span> 商品カタログ表示</td><td>REQ-FR-101, 102, 108</td><td><span class="status done">完了</span></td><td>ホーム・商品一覧・性別とカテゴリの階層（<a class="ref" data-ref="apps/api/app/routers/catalog.py::list_products">list_products</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-003</span> 商品検索</td><td>REQ-FR-105, 106, 107</td><td><span class="status done">完了</span></td><td>検索、入力中のサジェスト、0 件のときの代替導線（P2-a。<a class="ref" data-ref="apps/api/app/routers/search.py::search">search</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-004</span> 共通ナビゲーション</td><td>REQ-FR-109, 1201</td><td><span class="status done">完了</span></td><td>共通ヘッダー・フッター・オールメニュー（<a class="ref" data-ref="apps/web/components/Header.tsx::Header">Header</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-009</span> カート管理</td><td>REQ-FR-401, 402, 403, 407, 1202</td><td><span class="status done">完了</span></td><td>DB とトークン Cookie で持つ匿名カート、数量の上限、在庫状態の表示（<a class="ref" data-ref="apps/api/app/services/cart.py::add_item">add_item</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-025</span> ゲスト購入</td><td>REQ-FR-804</td><td><span class="status done">完了</span></td><td>会員登録なしの購入と、注文番号とメールによる注文照会（<a class="ref" data-ref="apps/api/app/services/orders.py::lookup_order">lookup_order</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-028</span> FAQ・静的ページ</td><td>REQ-FR-903</td><td><span class="status done">完了</span></td><td>FAQ・利用規約・プライバシー・特商法・企業情報の 5 ページ（<a class="ref" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage">ContentDetailPage</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-030</span> コンテンツ・お知らせ</td><td>REQ-FR-1001, 1002</td><td><span class="status done">完了</span></td><td>特集とお知らせの一覧、ホームへの表示（<a class="ref" data-ref="apps/web/app/contents/page.tsx::ContentsPage">ContentsPage</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-036</span> 画面共通の状態表示</td><td>REQ-FR-1204, 1205</td><td><span class="status done">完了</span></td><td>処理中表示・トースト・確認ダイアログ（<a class="ref" data-ref="apps/web/components/ConfirmDialog.tsx::ConfirmDialog">ConfirmDialog</a>）</td><td>—</td></tr>
+<tr><td><span class="req">F-005</span> 商品詳細表示</td><td>REQ-FR-201, 202, 206, 207, 208, 1203</td><td><span class="status todo">一部</span></td><td>画像・価格・色とサイズの選択・関連商品・購入操作（<a class="ref" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel">PurchasePanel</a>）</td><td>サイズ感の集計（208）。P2-b</td></tr>
+<tr><td><span class="req">F-007</span> 在庫切れ表示・再入荷通知</td><td>REQ-FR-204, 205</td><td><span class="status todo">一部</span></td><td>在庫切れの明示と購入不可（204。<a class="ref" data-ref="apps/api/app/services/cart_rules.py::stock_status">stock_status</a>）</td><td>再入荷通知の申込（205）。P2-b</td></tr>
+<tr><td><span class="req">F-013</span> 注文手続き</td><td>REQ-FR-501, 502, 503</td><td><span class="status todo">一部</span></td><td>お届け先の入力と最終確認画面（503）。受け取りは配送のみ、支払いはカードのみ（<a class="ref" data-ref="apps/api/app/services/orders.py::_check_supported">_check_supported</a>）</td><td>店舗受け取りの選択（501）。P2-b。支払い方法の追加（502）は時期が文書に無い（下の注記）</td></tr>
+<tr><td><span class="req">F-014</span> 注文確定処理</td><td>REQ-FR-504, 505, 508</td><td><span class="status todo">一部</span></td><td>注文番号の発行と注文の保存（505）、在庫引当、二重注文の防止（<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a>）。決済とメールはスタブ</td><td>Stripe テストモードとメールの実送信（P2-c）、受け取りコードの発行（508。P2-b）</td></tr>
+<tr><td><span class="req">F-032</span> 管理：設定</td><td>REQ-FR-1102</td><td><span class="status todo">一部</span></td><td>税率・送料のデータ（<code>system_settings</code> と seed）と表示用の取得（<a class="ref" data-ref="apps/api/app/routers/settings.py::public_settings">public_settings</a>）</td><td>管理画面から変更する画面（P2-c）</td></tr>
+<tr><td><span class="req">F-024</span> 会員登録・認証</td><td>REQ-FR-801, 802, 803, 807</td><td><span class="status todo">未着手</span></td><td>—</td><td>登録・ログイン・メール確認・再設定。<code>members</code> 表と <code>sessions</code> 表もまだ無い。P2-b</td></tr>
+<tr><td><span class="req">F-017</span> 注文履歴・状況確認</td><td>REQ-FR-601, 602, 508</td><td><span class="status todo">未着手</span></td><td>—（ゲスト向けの照会は F-025 側にある）</td><td>会員の注文履歴。F-024 に依存する。P2-b</td></tr>
+<tr><td><span class="req">F-031</span> 管理：商品・在庫</td><td>REQ-FR-1101</td><td><span class="status todo">未着手</span></td><td>—（商品と在庫は seed で入れている）</td><td>商品・在庫・価格・公開状態を変える管理画面。P2-c</td></tr>
+<tr><td><span class="req">F-033</span> 管理：注文</td><td>REQ-FR-1103</td><td><span class="status todo">未着手</span></td><td>—（状態遷移の表は <a class="ref" data-ref="apps/api/app/services/order_state.py::TRANSITIONS">TRANSITIONS</a> にある）</td><td>注文の検索と状況更新。P2-c</td></tr>
+<tr><td><span class="req">F-035</span> 管理認証・分離</td><td>REQ-FR-1105</td><td><span class="status todo">未着手</span></td><td>—</td><td>管理ログインと、会員とは別のセッション種別。P2-c</td></tr>
+</tbody></table></div>
+
+<div class="note warn"><p><strong>計画書と要件のずれ:</strong> REQ-FR-502 は「支払い方法を複数種類から選択できること」を求めているが、実装はカードだけを受け付ける（それ以外は 422 <code>unsupported_value</code>）。実装フェーズ計画は F-013 のうち 501 だけを P2 送りと書いていて、502 の完了時期が文書のどこにも見当たらない。F-013 を「一部」に数えたのはこのためである。</p></div>
+
+<h3 id="s08-roadmap">8.2 今後の予定（ADR-0001）</h3>
+
+<p>P2 の残りは、ADR-0001 で 4 回に分けた。分けた理由は、P2 の量が P1 のおよそ 3 倍で、詳細設計がまだ無く、講義の進捗報告が 9/30 にあることの 3 点である。各回の頭で「追補設計とテスト項目 → 実装 → 検収 → PR」を小さく回す。配置は、依存関係、触るデータの塊、優先度と外部依存、直近の締切の 4 つの基準で決めた。詳細は<a class="ref" data-ref="docs/00_計画/ADR/ADR-0001_P2の4分割.md#L19-24">ADR-0001 の決定の表</a>にある。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>回</th><th>目安</th><th>内容</th><th>置いた理由（基準）</th></tr></thead>
+<tbody>
+<tr><td>P2-a</td><td>9/30</td><td>商品検索（F-003）、FAQ・静的ページ（F-028）、お知らせ（F-030）、講義の MySQL への接続切り替え</td><td>締切。依存が無く小さく、基本設計が既にある。実装は済み（PR #22・#23・#24）</td></tr>
+<tr><td>P2-b</td><td>10/10</td><td>会員登録・認証（F-024）、注文履歴（F-017）、店舗受け取り（F-013・F-014 の REQ-FR-501・508）、再入荷通知の申込（REQ-FR-205）、サイズ感の集計（REQ-FR-208）</td><td>依存（認証 → 履歴）と、会員・注文・レビュー系の表をまとめて触ること</td></tr>
+<tr><td>P2-c</td><td>10/20</td><td>管理画面（F-031・F-033・F-032 の画面）、管理認証（F-035）、Stripe テストモード、メールの実送信</td><td>P2-b の会員セッションを再利用することと、注文の状態遷移を触る変更をまとめること</td></tr>
+<tr><td>P2-d</td><td>10/31</td><td>AI アシスタント（F-029）、Azure への本デプロイ、P2 の検収</td><td>Must を先に済ませ、外部サービスの品質に左右される F-029 を最後に置く</td></tr>
+</tbody></table></div>
+
+<div class="note fact"><p><strong>事実:</strong> P2 の量が想定を超えたときに、どの機能から削るかの順番は未決である。ADR-0001 は「別の ADR で決める」としている。また、レビュー用の Azure 公開は ADR-0004 で先行しており、期間は 2026-10-09 まで、入口は HTTP Basic 認証で守っている。本デプロイの P2-d とは別である。</p></div>
+
+<h3 id="s08-stub">8.3 スタブの所在と、Stripe に替えるときの設計</h3>
+
+<p>決済とメールは、P1 では本物に接続せず、アダプタの後ろにスタブを置いている。アダプタは Protocol（型だけの取り決め）で、注文確定のサービスは中身を知らずに呼ぶ。テストでは <code>Depends</code> の差し替えで決済 NG を注入できる。</p>
+
+<p>決済は <a class="ref" data-ref="apps/api/app/adapters/payment.py::PaymentAdapter">PaymentAdapter</a> と <a class="ref" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter">StubPaymentAdapter</a> である。環境変数 <code>PAYMENT_STUB_RESULT</code> が <code>ok</code> か <code>ng</code> ならその値を、未設定なら <code>ok</code> を返す。メールは <a class="ref" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter">OutboxMailAdapter</a> で、送信せずに <code>apps/api/.mail-outbox/&lt;注文番号&gt;.txt</code> へ本文を書き出す。本文は <a class="ref" data-ref="apps/api/app/adapters/mail.py::render_order_confirmation">render_order_confirmation</a> が作り、宛先・氏名・住所・電話をそのまま含む。このディレクトリは gitignore 済みだが、平文であることは第 9 章の B5 に挙げてある。</p>
+
+<p>Stripe に替えるときの流れは、設計仕様書の <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L208-241" data-note="P2 の Stripe 案 B">3.3.2（DS-PRC-014-2）</a>に書いてある。P1 との違いは、決済の結果が同期では返らず、Webhook で後から届く点だけである。</p>
+
+<ol>
+<li>注文の作成と在庫の引当までは P1 と同じ。注文は <code>pending_payment</code> のまま残す。</li>
+<li>決済アダプタが Checkout Session（metadata に注文番号、期限 30 分）を作り、その URL を返す。ブラウザは Stripe の決済ページへ移る。</li>
+<li>支払いが済むと、Stripe が BFF の <code>/api/webhooks/stripe</code> に生ボディと署名を送る。BFF は生ボディを変えずに FastAPI の <code>/api/v1/internal/stripe-events</code> へ転送する。</li>
+<li>FastAPI が署名を検証し、<code>stripe_events</code> に <code>event_id</code>（UNIQUE）を INSERT する。重複なら 200 を返して何もしない。新規なら注文を <code>accepted</code> に更新し、<code>payments</code> に記録する。</li>
+<li>Webhook が届かない場合の保険として、完了画面が <code>GET /api/v1/checkout/sessions/{id}</code> で Session の状態を照会し、支払い済みなら受付済にする。</li>
+</ol>
+
+<p>モデルには、この流れの準備が一部だけ入っている。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>項目</th><th>状態</th><th>場所</th></tr></thead>
+<tbody>
+<tr><td><code>orders.stripe_session_id</code>（UNIQUE・NULL 可）と <code>expires_at</code></td><td><span class="status done">あり</span></td><td><a class="ref" data-ref="apps/api/app/models/order.py#L87-88">models/order.py L87-88</a></td></tr>
+<tr><td>注文状態 <code>pending_payment</code> と、決済元 <code>stripe</code></td><td><span class="status done">あり</span></td><td><a class="ref" data-ref="apps/api/app/models/order.py::OrderStatus">OrderStatus</a>、<a class="ref" data-ref="apps/api/app/models/order.py::PaymentProvider">PaymentProvider</a></td></tr>
+<tr><td><code>stripe_events</code> 表（<code>event_id</code> の UNIQUE。DS-TBL-17）</td><td><span class="status todo">無い</span></td><td>models にも migration にも未作成</td></tr>
+<tr><td>決済アダプタの形</td><td><span class="status todo">要変更</span></td><td><code>authorize</code> は同期で ok／ng を返す形。上の流れは「Session を作る」と「結果を確定する」の 2 段になる</td></tr>
+<tr><td>決済待ちの期限切れ処理（30 分、5 分ごとの実行。DS-DEC-26・28）</td><td><span class="status todo">無い</span></td><td>設計のみ。P2 で実装する</td></tr>
+</tbody></table></div>
+
+<div class="note opinion"><p><strong>意見:</strong> 「差し替え口はあるのか」と聞かれたら、アダプタの境界と、列・状態の準備が済んでいることまでを答える。Webhook の受け口と <code>stripe_events</code> 表は未実装なので、「差し替えだけで済む」とは言わないほうがよいと思う。実装フェーズ計画 3 章は、スタブと Stripe テストモードの実装が同じアダプタ IF を満たすので差し替えで済む、と書いている。だが上の表のとおり、Webhook 方式では <code>authorize</code> の形が変わる。</p></div>
+
+<h3 id="s08-week">8.4 講義の後半テーマで未着手のもの</h3>
+
+<p>講義の日程は README の進捗表による。3 つとも、リポジトリの <code>scripts/</code> と <code>apps/</code> を grep して、該当する設定が無いことを確かめた。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>回</th><th>テーマ</th><th>現状</th></tr></thead>
+<tbody>
+<tr><td>Week8（10/7）</td><td>セキュリティチェック（セキュリティヘッダーなど）</td><td>CSP・X-Frame-Options などのヘッダーは未設定で、設計仕様書にも記載が無い（第 9 章 B4）</td></tr>
+<tr><td>Week9（10/14）</td><td>ログ・アラート（Azure と Web アプリの両方）</td><td>アプリ側は秘密のマスク付きログ（<a class="ref" data-ref="apps/api/app/core/logging.py::setup_logging">setup_logging</a>）まで。Application Insights とアラートの設定は無い</td></tr>
+<tr><td>Week10（10/21）</td><td>閉域化（VNet・Private Link）</td><td>未着手。api の App Service は公開 URL のままで、防御は内部トークンだけ（第 11 章 Q2）</td></tr>
+</tbody></table></div>
+</section>
