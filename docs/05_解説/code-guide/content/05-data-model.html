@@ -1,0 +1,167 @@
+<section id="s05" data-title="データモデル">
+<h2>5. データモデル</h2>
+
+<p>お店の帳簿に例えると、商品台帳（何をいくらで売るか）、買い物かごの控え（お客さんが今何を入れているか）、注文伝票の綴り（いつ誰にいくらで売ったか）が別々のノートになっています。注文伝票には、売った時点の商品名と単価をその場で書き写します。あとで台帳の値段を書き換えても、過去の伝票が変わっては困るからです。</p>
+
+<p>正確には、MySQL 8.4 に 13 の表があり、各表を SQLAlchemy 2.0 のモデルクラス（<code>apps/api/app/models/</code>）で定義し、Alembic のマイグレーション 2 本（12 表＋1 表）で作ります。この章では、表の一覧、表どうしのつながり、状態を持つ列の値、マイグレーション、初期データ（seed）の順に説明します。</p>
+
+<h3 id="s05-common">全表に共通の作り</h3>
+
+<p>13 表はどれも同じ土台を使っています。主キーは <code>id BIGINT AUTO_INCREMENT</code>（<a class="ref" data-ref="apps/api/app/models/base.py::IdMixin" data-note="SQLite（単体テスト用）は INTEGER PRIMARY KEY しか自動採番しないため、方言だけ Integer にしている">IdMixin</a>）、<code>created_at</code> と <code>updated_at</code> は UTC の DATETIME で、DB の <code>now()</code> が自動で入ります（<a class="ref" data-ref="apps/api/app/models/base.py::TimestampMixin">TimestampMixin</a>）。MySQL の DATETIME はタイムゾーンを持たないため、コード中は「UTC の naive 日時」として扱い、応答に出すときに UTC を付けます（<a class="ref" data-ref="apps/api/app/services/orders.py::build_order_response">build_order_response</a> の <code>ordered_at</code>）。画面では JST に変換して表示します。</p>
+
+<p>テーブルオプションは <a class="ref" data-ref="apps/api/app/models/base.py::MYSQL_TABLE_ARGS">MYSQL_TABLE_ARGS</a> で、文字コードが <code>utf8mb4</code>、照合順序が <code>utf8mb4_0900_ai_ci</code>、エンジンが InnoDB です。制約や索引の名前は <a class="ref" data-ref="apps/api/app/models/base.py::NAMING_CONVENTION">NAMING_CONVENTION</a> で規則化してあり、<code>uq_orders_order_number</code>、<code>fk_orders_cart_id_carts</code> のように「種類_表名_列名」で決まります。名前が決まっていると、マイグレーションの自動生成と衝突せず、エラー文から違反した制約を特定できます。</p>
+
+<p>金額は整数の円で持ちます（<code>products.price_incl_tax</code> は税込）。税率だけは <code>"0.10"</code> という文字列で、<code>system_settings</code> と <code>orders.tax_rate_at_order</code> の両方が同じ表現です。API の中で <code>Decimal</code> に変えて計算します（<a class="ref" data-ref="apps/api/app/services/pricing.py::tax_rate_basis_points">tax_rate_basis_points</a>）。</p>
+
+<h3 id="s05-tables">テーブル一覧</h3>
+
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>テーブル</th><th>役割</th><th>主な列</th><th>モデルクラス</th><th>使う機能</th></tr></thead>
+<tbody>
+<tr><td><code>categories</code></td><td>カテゴリ。性別（親）と種類（子）の 2 階層</td><td>name、slug（一意）、parent_id、gender、sort_order</td><td><a class="ref" data-ref="apps/api/app/models/catalog.py::Category">Category</a></td><td>カテゴリ一覧、一覧の絞り込み、検索のおすすめカテゴリ</td></tr>
+<tr><td><code>products</code></td><td>商品</td><td>name、description、material、price_incl_tax、published、sort_order</td><td><a class="ref" data-ref="apps/api/app/models/catalog.py::Product">Product</a></td><td>商品一覧・詳細、検索</td></tr>
+<tr><td><code>product_categories</code></td><td>商品とカテゴリの多対多</td><td>product_id、category_id</td><td><a class="ref" data-ref="apps/api/app/models/catalog.py::ProductCategory">ProductCategory</a></td><td>一覧の絞り込み、検索</td></tr>
+<tr><td><code>product_images</code></td><td>商品画像。パスだけを持つ</td><td>product_id、path、sort_order</td><td><a class="ref" data-ref="apps/api/app/models/catalog.py::ProductImage">ProductImage</a></td><td>一覧・詳細・カートの画像</td></tr>
+<tr><td><code>variants</code></td><td>色とサイズごとの在庫の最小単位</td><td>product_id、color、size、sku（一意）、stock</td><td><a class="ref" data-ref="apps/api/app/models/catalog.py::Variant">Variant</a></td><td>在庫表示、カート追加、在庫の引き当て</td></tr>
+<tr><td><code>carts</code></td><td>カート。匿名トークンで識別する</td><td>anonymous_token（一意、NULL 可）、status、member_id</td><td><a class="ref" data-ref="apps/api/app/models/cart.py::Cart">Cart</a></td><td>カート操作、二重注文の防止</td></tr>
+<tr><td><code>cart_items</code></td><td>カートの明細</td><td>cart_id、variant_id、quantity</td><td><a class="ref" data-ref="apps/api/app/models/cart.py::CartItem">CartItem</a></td><td>カート操作、金額計算</td></tr>
+<tr><td><code>orders</code></td><td>注文。配送先と金額を注文時の値で持つ</td><td>order_number（一意）、idempotency_key（一意）、guest_email、status、subtotal、shipping_fee、total、tax_rate_at_order、ship_*、cart_id</td><td><a class="ref" data-ref="apps/api/app/models/order.py::Order">Order</a></td><td>注文確定、注文照会</td></tr>
+<tr><td><code>order_items</code></td><td>注文の明細。注文時の商品名と単価を写して持つ</td><td>order_id、variant_id、product_name_at_order、unit_price_at_order、quantity</td><td><a class="ref" data-ref="apps/api/app/models/order.py::OrderItem">OrderItem</a></td><td>注文確定、注文照会、確認メール</td></tr>
+<tr><td><code>payments</code></td><td>決済の結果。カード情報は持たない</td><td>order_id、provider、amount、result、refunded_amount</td><td><a class="ref" data-ref="apps/api/app/models/order.py::Payment">Payment</a></td><td>注文確定（決済スタブの結果を記録）</td></tr>
+<tr><td><code>system_settings</code></td><td>税率・送料などの設定値（キーと JSON の値）</td><td>key（一意）、value、description</td><td><a class="ref" data-ref="apps/api/app/models/system.py::SystemSetting">SystemSetting</a></td><td>金額計算、公開設定の API</td></tr>
+<tr><td><code>audit_logs</code></td><td>監査ログ（誰が・何を）</td><td>actor_type、action、target_type、target_id、detail、at</td><td><a class="ref" data-ref="apps/api/app/models/system.py::AuditLog">AuditLog</a></td><td>注文確定・決済失敗・メール送信失敗の記録</td></tr>
+<tr><td><code>contents</code></td><td>FAQ・静的ページ・お知らせ・特集を 1 表で持つ</td><td>kind、slug（一意）、title、body、publish_from、publish_to</td><td><a class="ref" data-ref="apps/api/app/models/content.py::Content">Content</a></td><td>お知らせ・特集の一覧、FAQ・規約ページ</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>先の 12 表が P1（購買の一本道）、<code>contents</code> が P2-a で加えた 13 表目です。名前の集合は <a class="ref" data-ref="apps/api/app/models/__init__.py#L56-78">P1_TABLES・P2A_TABLES・ALL_TABLES</a> にあり、テストと seed が参照します。</p>
+
+<div class="note fact">
+<p>列だけ先に作られていて、P1 のコードが値を書かないものがあります。<code>carts.member_id</code>・<code>orders.member_id</code>（会員機能は P2 以降）、<code>orders.store_id</code>・<code>pickup_code</code>・<code>tracking_number</code>・<code>stripe_session_id</code>・<code>expires_at</code>、<code>order_items.coupon_id</code>、<code>payments.provider_ref</code> です。<code>carts.status</code> の <code>merged</code> も、値の定義だけがあり、設定する処理はありません。また <code>system_settings</code> の <code>payment_timeout_minutes</code> は seed で入りますが、読み出すのは他の 3 キーだけです（<a class="ref" data-ref="apps/api/app/services/settings.py::get_public_settings">get_public_settings</a>）。</p>
+</div>
+
+<h3 id="s05-relations">表どうしのつながり</h3>
+
+<p>商品側は <code>products</code> を中心に、画像・バリエーション・カテゴリ割当が子として付きます。購買側は <code>carts</code> と <code>orders</code> が別々の系統で、両者は <code>orders.cart_id</code> でつながります。決済に失敗した注文は残したままカートを active に戻すので、1 つのカートに複数の注文が付くことがあります。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>子の列</th><th>親</th><th>親が消えたとき</th><th>意図</th></tr></thead>
+<tbody>
+<tr><td><code>categories.parent_id</code></td><td><code>categories.id</code></td><td>拒否（RESTRICT）</td><td>子カテゴリがある親は消せない</td></tr>
+<tr><td><code>product_categories.product_id</code></td><td><code>products.id</code></td><td>一緒に削除（CASCADE）</td><td>割当は商品の付属物</td></tr>
+<tr><td><code>product_categories.category_id</code></td><td><code>categories.id</code></td><td>拒否</td><td>商品が割り当てられたカテゴリは消せない</td></tr>
+<tr><td><code>product_images.product_id</code></td><td><code>products.id</code></td><td>一緒に削除</td><td>画像は商品の付属物</td></tr>
+<tr><td><code>variants.product_id</code></td><td><code>products.id</code></td><td>一緒に削除</td><td>バリエーションは商品の付属物</td></tr>
+<tr><td><code>cart_items.cart_id</code></td><td><code>carts.id</code></td><td>一緒に削除</td><td>明細はカートの付属物</td></tr>
+<tr><td><code>cart_items.variant_id</code></td><td><code>variants.id</code></td><td>拒否</td><td>カートに入っているバリエーションは消せない</td></tr>
+<tr><td><code>orders.cart_id</code></td><td><code>carts.id</code></td><td>拒否</td><td>注文が付いたカートは消せない</td></tr>
+<tr><td><code>order_items.order_id</code></td><td><code>orders.id</code></td><td>一緒に削除</td><td>明細は注文の付属物</td></tr>
+<tr><td><code>order_items.variant_id</code></td><td><code>variants.id</code></td><td>拒否</td><td>注文実績のあるバリエーションは消せない</td></tr>
+<tr><td><code>payments.order_id</code></td><td><code>orders.id</code></td><td>拒否</td><td>決済の記録が残る注文は消せない</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>注文の明細が商品名と単価を自分で持つ（<code>product_name_at_order</code>・<code>unit_price_at_order</code>）ため、<code>order_items.variant_id</code> は「どのバリエーションだったか」の記録にすぎません。商品側の価格を後で変えても注文の金額は動かない、という性質は <span class="tid">IT-014-08</span>（確定後の価格変更が注文に影響しない）で確かめています。</p>
+
+<h3 id="s05-constraints">一意制約・CHECK・索引</h3>
+
+<p>二重登録や不正な値を、アプリのコードだけに頼らず DB が最後に止める作りです。とくに次の 6 つは、他の章で説明した防御の土台になっています。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>制約</th><th>対象</th><th>支えている仕組み</th></tr></thead>
+<tbody>
+<tr><td>一意</td><td><code>orders.idempotency_key</code></td><td>同じキーでの二重注文の検出（第 4 章の層 2）</td></tr>
+<tr><td>一意</td><td><code>orders.order_number</code></td><td>注文番号の重複防止。衝突したら 1 回だけ再生成（層 4）</td></tr>
+<tr><td>一意</td><td><code>carts.anonymous_token</code></td><td>同じトークンで active カートが 2 つできるのを防ぐ。注文済みカートはトークンを NULL にして枠を空ける（<a class="ref" data-ref="apps/api/app/repositories/carts.py::detach_token">detach_token</a>）</td></tr>
+<tr><td>一意（複合）</td><td><code>cart_items (cart_id, variant_id)</code></td><td>同じバリエーションの再追加を「数量の加算」にする</td></tr>
+<tr><td>CHECK</td><td><code>variants.stock &gt;= 0</code></td><td>売り越しの最終防御（第 4 章の在庫の確保）</td></tr>
+<tr><td>CHECK</td><td><code>cart_items.quantity &gt; 0</code>、<code>products.price_incl_tax &gt;= 0</code></td><td>数量と価格の下限</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>その他の一意制約は <code>categories.slug</code>、<code>variants.sku</code>、<code>contents.slug</code>、<code>system_settings.key</code>、<code>orders.stripe_session_id</code>、<code>product_categories (product_id, category_id)</code> です。索引は、外部キーの列、<code>products.published</code>、<code>orders.status</code>、<code>audit_logs.at</code>（90 日で消す処理を P2 で作る予定）に付いています。<code>contents</code> だけ、一覧の絞り込みに使う <code>(kind, publish_from)</code> の複合索引を持ちます（<a class="ref" data-ref="apps/api/app/models/content.py::Content">Content</a>）。</p>
+
+<p><code>contents</code> には「公開かどうか」の列がなく、<code>publish_from</code> と <code>publish_to</code>（どちらも UTC の naive 日時）だけで公開期間を表します。判定は <a class="ref" data-ref="apps/api/app/services/content.py::is_within_publish_window">is_within_publish_window</a> にあり、期間外のコンテンツの詳細を開くと、存在しないときと同じ 404 になります。</p>
+
+<h3 id="s05-status">状態を持つ列：注文とカート</h3>
+
+<p>状態の列は、DB の ENUM 型ではなく文字列列に値を保存し（<code>native_enum=False</code>、長さ 20）、Python 側の <code>StrEnum</code> で値を制限します。この選択の理由はコードに書かれていません。値を増やすときに DB の型を変えずに済む利点があると思います（推測）。</p>
+
+<p><code>orders.status</code> は 8 値（<a class="ref" data-ref="apps/api/app/models/order.py::OrderStatus">OrderStatus</a>）で、許される遷移は <a class="ref" data-ref="apps/api/app/services/order_state.py::TRANSITIONS" data-note="遷移表。要件定義書 5.5 が正本">TRANSITIONS</a> に集めてあります。<a class="ref" data-ref="apps/api/app/services/order_state.py::assert_transition">assert_transition</a> が表に無い遷移を 409 <code>invalid_transition</code> にします。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>今の状態</th><th>進める先</th><th>意味</th></tr></thead>
+<tbody>
+<tr><td><code>pending_payment</code></td><td><code>accepted</code>、<code>payment_failed</code></td><td>決済待ち。決済の結果で分かれる</td></tr>
+<tr><td><code>accepted</code></td><td><code>preparing</code>、<code>cancelled</code></td><td>受付済み</td></tr>
+<tr><td><code>preparing</code></td><td><code>shipped</code></td><td>出荷準備中</td></tr>
+<tr><td><code>shipped</code></td><td><code>delivered</code>、<code>pickup_expired</code></td><td>出荷済み</td></tr>
+<tr><td><code>delivered</code>・<code>pickup_expired</code>・<code>cancelled</code>・<code>payment_failed</code></td><td>なし</td><td>終端。返品受付は P2 以降</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note fact">
+<p>P1 のコードで実際に状態を進めているのは、注文確定の中の 2 か所だけです（<code>pending_payment</code> から <code>accepted</code>、または <code>payment_failed</code>。<a class="ref" data-ref="apps/api/app/services/orders.py#L215-216">L215-216</a>・<a class="ref" data-ref="apps/api/app/services/orders.py#L249-250">L249-250</a>）。<code>preparing</code> 以降へ進める処理（管理画面や配送連携）は P1 にありません。遷移表と <code>assert_transition</code> は用意されていて、単体テスト <span class="tid">UT-014-05</span> が全 8 状態を網羅して検証しています。</p>
+</div>
+
+<p><code>carts.status</code> は <code>active</code>（買い物中）、<code>ordered</code>（注文済み）、<code>merged</code>（会員統合。P1 では未使用）の 3 値です。実際に動く遷移は 2 つあり、注文確定の途中で <a class="ref" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered">mark_cart_ordered</a> が <code>active → ordered</code> にし、決済が NG だったときだけ <a class="ref" data-ref="apps/api/app/repositories/orders.py::restore_cart_active">restore_cart_active</a> が <code>ordered → active</code> に戻します。注文済みのカートのトークンで再びカートを開くと、旧カートからトークンを外して新しい active カートを作ります（<a class="ref" data-ref="apps/api/app/services/cart.py::resolve_cart">resolve_cart</a>）。これが、注文後の「買い物を続ける」で新しい空のカートに追加できる理由です。</p>
+
+<h3 id="s05-migration">マイグレーション：2 本で 13 表を作る</h3>
+
+<p>マイグレーションは Alembic で管理します。<a class="ref" data-ref="apps/api/alembic/env.py::run_async_migrations" data-note="接続 URL は環境変数 DATABASE_URL（-x url=... で上書き可）。alembic.ini には書かない">env.py</a> は非同期エンジンで動き、接続先は設定の <code>DATABASE_URL</code> から取ります。<code>alembic.ini</code> に URL を書かないのは、秘匿値をファイルに置かないためです。<code>compare_type=True</code> で列の型の差分も検出します。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>ファイル</th><th>何をするか</th><th>戻し方</th></tr></thead>
+<tbody>
+<tr><td><a class="ref" data-ref="apps/api/alembic/versions/0001_p1_initial.py::upgrade">0001_p1_initial.py</a></td><td>P1 の 12 表と、UNIQUE・CHECK・索引・外部キーをまとめて作る。リビジョン ID は <code>6659ce6c5164</code>（先頭のリビジョン）</td><td><a class="ref" data-ref="apps/api/alembic/versions/0001_p1_initial.py::downgrade" data-note="外部キーの依存の逆順で表だけを drop する。drop_index は MySQL の error 1553 を避けるため手で消してある">downgrade</a> が依存の逆順で全表を drop（<code>alembic downgrade base</code>）</td></tr>
+<tr><td><a class="ref" data-ref="apps/api/alembic/versions/371a338f4624_p2a_contents.py::upgrade">371a338f4624_p2a_contents.py</a></td><td><code>contents</code> 表と <code>(kind, publish_from)</code> の複合索引を作る。<code>down_revision</code> は <code>6659ce6c5164</code></td><td><code>alembic downgrade -1</code>（<code>DROP TABLE contents</code> のみ）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>2 本は <code>down_revision</code> でつながっており、ファイル名の <code>0001_</code> はリビジョン ID ではありません。<code>0001_p1_initial.py</code> の <code>downgrade</code> は、autogenerate が出す <code>drop_index</code> を手で取り除いてあります。MySQL は外部キーが使っている索引を単独では消せず（error 1553）、<code>drop_table</code> が索引も一緒に落とすためです。</p>
+
+<p>CI の api-test は、テスト前に空の MySQL に対して <code>alembic upgrade head</code> を実行します。テスト設計書の同時実行テストの条件には「<code>create_all</code> は使わない」があり、マイグレーションに一意制約が欠けていればテストで検知できるようにしています。手元の実行手順は第 7 章にあります。</p>
+
+<h3 id="s05-seed">seed：初期データを入れる</h3>
+
+<p>初期データの投入は Alembic とは別で、<a class="ref" data-ref="apps/api/app/seed.py::seed" data-note="reset=False なら products に 1 行でもあれば何もしない。True なら TRUNCATE してから投入">seed.py</a> が担当します（<code>uv run python -m app.seed</code>）。スキーマは先に <code>alembic upgrade head</code> で作っておく前提で、seed は DDL を発行しません。</p>
+
+<p>実行の安全策は 3 つです。1 つ目に、既定では <code>products</code> に 1 行でもあれば何もしません（データ保護側に倒す）。2 つ目に、投入し直す <code>--reset</code> は対象の DB 名を出して確認を求め、<code>--yes</code> で省略できます（<a class="ref" data-ref="apps/api/app/seed.py::_amain">_amain</a>）。3 つ目に、SQL に表名を埋め込む箇所は許可リスト方式です。<a class="ref" data-ref="apps/api/app/seed.py::TRUNCATE_ORDER">TRUNCATE_ORDER</a> は子から親の順に並べ、<code>assert</code> で P1 の 12 表と一致することをモジュールの読み込み時に確かめます。<a class="ref" data-ref="apps/api/app/seed.py::count_rows">count_rows</a> は <code>ALL_TABLES</code> に無い名前を <code>ValueError</code> で拒否します。TRUNCATE は <a class="ref" data-ref="apps/api/app/seed.py::truncate_all_tables">truncate_all_tables</a> が <code>FOREIGN_KEY_CHECKS=0</code> で囲って実行し、<code>finally</code> で必ず 1 に戻します。</p>
+
+<p>投入する中身は <a class="ref" data-ref="apps/api/app/seed_data.py">seed_data.py</a> に、DB に依存しない定数として置かれています。<a class="ref" data-ref="apps/api/app/seed.py::_insert_all">_insert_all</a> が、カテゴリ（親から子）、商品と画像とカテゴリ割当、バリエーション、設定、コンテンツの順に入れます。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>テーブル</th><th>件数</th><th>内訳・定義箇所</th></tr></thead>
+<tbody>
+<tr><td><code>categories</code></td><td>16</td><td>親 3（レディース、メンズ、キッズ・ティーン）と子 13（<a class="ref" data-ref="apps/api/app/seed_data.py::build_categories">build_categories</a>）</td></tr>
+<tr><td><code>products</code></td><td>31</td><td>公開 30、非公開 1。レディース 10・メンズ 11・キッズ・ティーン 10（<a class="ref" data-ref="apps/api/app/seed_data.py::PRODUCTS">PRODUCTS</a>）</td></tr>
+<tr><td><code>variants</code></td><td>186</td><td>31 商品 × 2 色 × 3 サイズ。在庫は 5〜30 の乱数（<a class="ref" data-ref="apps/api/app/seed_data.py::build_variants">build_variants</a>）</td></tr>
+<tr><td><code>product_images</code></td><td>31</td><td>商品ごとに 1 枚（<code>products/001/1.jpg</code> の形）</td></tr>
+<tr><td><code>product_categories</code></td><td>31</td><td>商品ごとに子カテゴリ 1 つ</td></tr>
+<tr><td><code>system_settings</code></td><td>4</td><td>tax_rate（"0.10"）、shipping_fee（550）、free_shipping_threshold（4990）、payment_timeout_minutes（30）（<a class="ref" data-ref="apps/api/app/seed_data.py::SYSTEM_SETTINGS">SYSTEM_SETTINGS</a>）</td></tr>
+<tr><td><code>contents</code></td><td>8</td><td>FAQ 1、静的ページ 4（利用規約・プライバシー・特定商取引法・企業情報）、お知らせ 2、特集 1（<a class="ref" data-ref="apps/api/app/seed_data.py::CONTENTS">CONTENTS</a>）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>在庫の乱数は種を固定しているため、何度 seed しても同じ値になります（<code>STOCK_RANDOM_SEED</code>）。固定在庫の商品はテストの目印です。バリエーション <code>GU-029-BK-M</code> の在庫は 0（V-STOCK0）、<code>GU-027-NV-M</code> は 1（V-STOCK1。同時注文の競合用）、商品 28（P-ALL0）は 6 バリエーションすべて 0、商品 30（P-UNPUB）は非公開です。乱数は毎回消費してから固定値で上書きするので、固定在庫を足しても他の SKU の在庫は変わりません。商品 31（4,990 円のライトジャケット）は、送料無料の境界（4,990 円で送料 0、4,980 円で 550 円）を単品で作るために後から足しました。</p>
+
+<p>コンテンツの掲載期間は、固定日付ではなく seed の実行時刻からの日数で決めます。たとえばお知らせ <code>news-002</code> は実行の 7 日前から 30 日後まで、特集 <code>feature-001</code> は 1 日前から無期限です。固定日付だと、演習を続けるうちに掲載期間外になって画面に出なくなる事故が起きるためです（<a class="ref" data-ref="apps/api/app/seed.py#L156-174">_insert_all の contents 部分</a>）。裏返すと、時間がたつと <code>news-002</code> のように期限つきのものは自然に非表示になります。</p>
+
+<div class="note fact">
+<p>seed には個人情報を入れていません。特定商取引法と企業情報のページは、架空の事業者名「サンプルアパレル株式会社」、架空の住所・電話番号（03-0000-0000）で書かれ、本文にも「講義演習用のデモ」と明記してあります。会員と注文の seed は P1 にはありません。</p>
+</div>
+
+<p>検証は、<code>tests/unit/test_ut_seed_data.py</code>（SKU の形式、31 商品と必須価格、固定在庫、在庫の再現性、カテゴリ、設定 4 キー。DB 不要）、<code>tests/integration/test_it_schema_and_seed.py</code>（<code>upgrade head</code> で表ができること、<code>alembic check</code> でモデルと DB に差分がないこと、seed の件数・固定在庫・2 回目が何もしないこと。MySQL が必要）、<code>test_ut_models_export_13_tables</code>（13 表の export）です。</p>
+</section>

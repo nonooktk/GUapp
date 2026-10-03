@@ -1,0 +1,71 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUapp コードの読み方</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+{{PARTIAL:tokens.css}}
+
+{{PARTIAL:guide-base.css}}
+
+{{PARTIAL:drawer.css}}
+
+{{PARTIAL:guide-diagrams.css}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">GUapp ／ コードレビュー用 解説書</div>
+  <h1>GUapp コードの読み方</h1>
+  <p class="lead">コードレビュー中に、機能ごとに「どこで・何をしているか」を引くための解説書。</p>
+  <div class="meta">
+    <span>対象コミット <a href="https://github.com/nonooktk/GUapp/commit/{{COMMIT_FULL}}" target="_blank" rel="noopener noreferrer"><code>{{COMMIT}}</code></a></span>
+    <span>作成 {{BUILD_DATE}}</span>
+    <span>リポジトリ <a href="https://github.com/nonooktk/GUapp" target="_blank" rel="noopener noreferrer">nonooktk/GUapp</a></span>
+    <span>ファイルの場所は <a href="{{MAP_URL}}">リポジトリ地図</a></span>
+  </div>
+  <p class="howto"><span class="ref-demo">青い等幅の名前</span>をクリックするとコードが開きます。フロー図は「流れを再生」で処理の順番を追えます。</p>
+  <details class="toc-inline">
+    <summary>目次</summary>
+    {{TOC}}
+  </details>
+</header>
+
+<div class="layout">
+  <aside class="toc-side" aria-label="目次">
+    <div class="eyebrow">目次</div>
+    {{TOC}}
+  </aside>
+  <main class="content" id="content">
+{{CONTENT}}
+    <footer>GUapp コード解説書 ／ 対象コミット {{COMMIT}} ／ 作成 {{BUILD_DATE}}。コードは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
+  </main>
+</div>
+</div>
+
+<script type="application/json" id="snippets-data">{{SNIPPETS_JSON}}</script>
+{{SNIPPETS_CODE}}
+<script id="hljs-script" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" async></script>
+<script>
+(function () {
+  'use strict';
+
+{{PARTIAL:drawer.js}}
+
+{{PARTIAL:guide-widgets.js}}
+
+  /* ---------------------------------------------------------------
+     起動
+  --------------------------------------------------------------- */
+  function init() {
+    buildDrawer();
+    initRefs();
+    initRefEvents();
+    initTip();
+    initFlows();
+    initFilters();
+    initToc();
+    initHljs();
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+})();
+</script>

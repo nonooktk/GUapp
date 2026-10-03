@@ -1,0 +1,556 @@
+<section id="r06" data-title="購入ボタンで注文を確定する">
+<h2>6. 購入ボタンで注文を確定する</h2>
+
+<p class="asked">「購入ボタンを押したときの処理を説明してください」「注文を確定する処理を説明してください」「二重注文はどう防いでいますか」「在庫の取り合いはどう防いでいますか」「決済に失敗したらどうなりますか」</p>
+
+<div class="script">
+<p class="script-title">30 秒版</p>
+<p>確認画面の確定ボタンを押すと確認ダイアログが開き、そこで確定すると POST /api/orders を送ります。BFF が CSRF を確かめて FastAPI の /api/v1/orders に取り次ぎ、FastAPI が 1 つのトランザクションの中で、注文の登録、金額の再計算、在庫の引当、決済スタブの呼び出し、確定までを行います。成功すると 201 で注文番号を返し、画面は完了画面に移ります。二重注文は冪等キーで、在庫の取り合いは条件付き UPDATE で防いでいます。</p>
+</div>
+
+<div class="note warn"><p>未実装・スタブ: 決済は <code>StubPaymentAdapter</code> が環境変数の値を返すだけで、カード情報は扱いません（P2-c で Stripe に置き換える予定）。確認メールは送らず、<code>apps/api/.mail-outbox/</code> にテキストを書き出すだけです。会員・店舗受け取りは選べません。<span class="tstat notimpl">未実装</span></p></div>
+
+<h3 id="r06-to-backend">② 画面からバックエンドへ</h3>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>区間</th><th>メソッドとパス</th><th>主なヘッダー</th><th>本文</th></tr></thead>
+<tbody>
+<tr><td>ブラウザ → BFF</td><td>POST <code>/api/orders</code></td><td><code>X-CSRF-Token</code>（Cookie <code>csrf_token</code> と一致していること）。Cookie <code>cart_token</code> は自動で付く</td><td>下の JSON（冪等キー・お届け先・メール・受け取り方法・支払い方法・表示中の金額 3 つ）</td></tr>
+<tr><td>BFF → FastAPI</td><td>POST <code>/api/v1/orders</code></td><td><code>X-Internal-Token</code>、<code>X-Cart-Token</code>、<code>X-Forwarded-For</code></td><td>同じ JSON（BFF が決まった項目だけ拾い直したもの）</td></tr>
+</tbody>
+</table>
+</div>
+
+<pre class="code" data-lang="json">{
+  "idempotency_key": "prepare が返した 43 文字",
+  "ship_name": "デモ 太郎",
+  "ship_postal_code": "0000000",
+  "ship_address": "東京都　千代田区　デモ町1-2-3　サンプルビル101",
+  "ship_phone": "09000000000",
+  "guest_email": "demo@example.com",
+  "receive_method": "delivery",
+  "payment_method": "card",
+  "display": { "subtotal": 3980, "shipping_fee": 550, "total": 4530 }
+}</pre>
+
+<ol class="route" data-title="順路：購入ボタンから FastAPI への呼び出しまで">
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="onClick={() =&gt; setDialogOpen(true)}" data-layer="screen">
+    <p class="stop-see">「注文を確定する」ボタン。押すと <code>setDialogOpen(true)</code> で確認ダイアログを開くだけで、まだ送信はしない。<code>busy</code> の間は「処理中…」の表示になり、押せない。</p>
+    <p class="stop-say">確定ボタンを押すと、まず確認ダイアログが開きます。ここではまだ何も送信しません。</p>
+    <p class="stop-next">次へ: ファイル下部の <code>ConfirmDialog</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/ConfirmDialog.tsx::ConfirmDialog" data-focus="onClick={onConfirm}" data-layer="screen">
+    <p class="stop-see">ダイアログの「確定する」ボタンが <code>onConfirm</code> を呼ぶ。<code>busy</code> 中はキャンセルも押せず、Escape でも閉じられない。<code>onConfirm</code> に渡されているのは <code>OrderConfirm</code> の <code>submit</code>。</p>
+    <p class="stop-say">ダイアログの「確定する」を押すと、確認画面の submit が動きます。処理中はキャンセルも押せません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderConfirm.tsx</code> に戻り、<kbd>⌘⇧F</kbd> で <code>inflight.current</code> を検索して <code>submit</code> の先頭へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-focus="if (!session || !prepare || inflight.current) return;" data-layer="screen">
+    <p class="stop-see"><code>submit</code> の最初の 1 行。<code>inflight</code> は <code>useRef</code> の同期フラグで、state の更新を待たずに 2 回目の送信を止める。続けて <code>setBusy(true)</code>。</p>
+    <p class="stop-say">二重クリックは、送信中を示す同期フラグで止めています。ただ、これは使い勝手のための対策です。二重注文を防ぐ本体は、サーバー側の冪等キーです。</p>
+    <p class="stop-next">次へ: 同じ関数の本文の組み立てへ。<code>toShippingBody</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-focus="display: { subtotal: prepare.subtotal" data-layer="screen">
+    <p class="stop-see">送信本文。<code>idempotency_key</code> は prepare の値、お届け先は <code>toShippingBody</code>、受け取り方法と支払い方法は <code>"delivery"</code>・<code>"card"</code> の固定値、<code>display</code> は確認画面に表示した金額 3 つ。</p>
+    <p class="stop-say">本文に入れるのは、冪等キー、お届け先、受け取り方法、支払い方法、それに確認画面に出した金額 3 つです。この金額は、サーバーが再計算した値と照合するために送ります。</p>
+    <p class="stop-next">次へ: <code>toShippingBody</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/checkout-validation.ts::toShippingBody" data-focus="ship_postal_code: digitsOnly(v.postal)," data-layer="screen">
+    <p class="stop-see">フォーム値から送信値を作る。氏名とメールは <code>trim</code>、郵便番号と電話は数字だけ、住所は都道府県・市区町村・番地・建物を全角スペースでつないだ 1 項目。</p>
+    <p class="stop-say">郵便番号と電話番号はハイフンを取って数字だけにし、住所は 1 つの文字列にまとめて送ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderConfirm.tsx</code> に戻り、<code>createOrder(body)</code> の <code>createOrder</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::createOrder" data-focus="/api/orders" data-layer="screen">
+    <p class="stop-see">POST <code>/api/orders</code>。戻り値は <code>{ status, data }</code>で、201（新規）と 200（同じ冪等キーの再送）のどちらも注文応答。</p>
+    <p class="stop-say">ブラウザが呼ぶのは、同じサイトの /api/orders だけです。201 でも 200 でも、返ってくるのは注文の内容です。</p>
+    <p class="stop-next">次へ: <code>post</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="[CSRF_HEADER]: csrf" data-layer="screen">
+    <p class="stop-see"><code>ensureCsrfToken()</code> で Cookie の <code>csrf_token</code> を読み、<code>X-CSRF-Token</code> に載せる。本文は JSON。</p>
+    <p class="stop-say">CSRF トークンをヘッダーに載せて送ります。検証するのは BFF です。</p>
+    <p class="stop-next">次へ: URL は文字列なので <kbd>⌘P</kbd> で <code>app/api/orders/route</code> と入力して開く（<code>[orderNumber]</code> の入ったフォルダではなく、<code>orders</code> 直下の <code>route.ts</code>）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff" data-link="HTTP POST /api/orders（CSRF トークン付き）">
+    <p class="stop-see">最初に CSRF を検証。Cookie とヘッダーが一致しなければ 403 <code>{"code":"forbidden"}</code> で終わり、FastAPI は呼ばない（IT-BFF-02）。</p>
+    <p class="stop-say">BFF は最初に CSRF を検証します。通らなければ 403 で止め、FastAPI には送りません。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進む</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="const v = body[key];" data-layer="bff">
+    <p class="stop-see"><code>STRING_FIELDS</code> の 8 項目が文字列かを確かめ、<code>display</code> は 3 つの金額が整数かを確かめる。外れたら FastAPI を呼ばずに 400 <code>validation_error</code>。本文のそれ以外のキー（<code>cart_id</code> など）は転送しない。</p>
+    <p class="stop-say">BFF は決まった 8 項目と金額 3 つだけを拾い直し、余計なキーは捨てます。桁や形式の検査は FastAPI の Pydantic に任せています。</p>
+    <p class="stop-next">次へ: 同じ関数の最後の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="{ json: payload }" data-layer="bff">
+    <p class="stop-see"><code>proxyOrderRequest(request, "/orders", { json: payload })</code>。FastAPI 側のパスは <code>/orders</code>。</p>
+    <p class="stop-say">拾い直した本文を、取り次ぎ用の関数に渡します。</p>
+    <p class="stop-next">次へ: <code>proxyOrderRequest</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="timeoutMs: 15000" data-layer="bff">
+    <p class="stop-see">Cookie <code>cart_token</code> → <code>X-Cart-Token</code>、<code>X-Forwarded-For</code> は BFF が決めた IP（利用者の値は使わない）。待ち時間はカート系の 5 秒より長い 15 秒（在庫の引当と決済スタブを含むため）。個人情報はログに出さない。</p>
+    <p class="stop-say">カートのトークンをヘッダーに移して、最大 15 秒待ちます。在庫の引当まで含む処理なので、ほかの API より長めにしています。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="X-Internal-Token" data-layer="bff">
+    <p class="stop-see">URL は <code>API_BASE_URL</code> ＋ <code>/api/v1</code> ＋ <code>/orders</code> で、POST <code>/api/v1/orders</code>。ここで <code>X-Internal-Token</code> を付ける。</p>
+    <p class="stop-say">内部トークンを付けて、FastAPI の POST /api/v1/orders に送ります。</p>
+    <p class="stop-next">次へ（③）: パスは文字列なので <kbd>F12</kbd> では飛べません。<kbd>⌘⇧F</kbd> で <code>verify_internal_token</code> を検索し、<code>main.py</code> の結果を開く</p>
+  </li>
+</ol>
+
+<h3 id="r06-backend">③ バックエンドの処理</h3>
+
+<p>処理は 1 つのトランザクションの中で、手順 0〜7 の順に進みます。番号は <code>_confirm</code> のコメントと、設計仕様書 4.4 の DS-PRC-014-1 の手順に合わせています。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>手順</th><th>やること</th><th>失敗したとき</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>カートを特定し、受け取り方法・支払い方法の対応を確かめる</td><td>404 <code>not_found</code>、422 <code>unsupported_value</code>、カートが active でなければ 200 か 409</td></tr>
+<tr><td>1</td><td><code>orders</code> に <code>pending_payment</code> で INSERT（冪等キーは UNIQUE）</td><td>UNIQUE 違反なら既存注文を返す（200、他人のカートなら 404、決済失敗なら 409）</td></tr>
+<tr><td>2</td><td><code>carts</code> を active → ordered に条件付き UPDATE</td><td>0 行なら rollback して 409 <code>already_ordered</code></td></tr>
+<tr><td>3</td><td>金額を再計算して表示金額と照合（引当より前）</td><td>409 <code>price_changed</code>、非公開商品は 409 <code>out_of_stock</code></td></tr>
+<tr><td>4</td><td><code>variant_id</code> の昇順に、在庫を条件付き UPDATE で引き当てる</td><td>0 行の明細があれば全体を rollback して 409 <code>out_of_stock</code></td></tr>
+<tr><td>5</td><td>決済アダプタ（スタブ）の <code>authorize</code></td><td>ng なら手順 6 の失敗側へ</td></tr>
+<tr><td>6</td><td>ok なら <code>accepted</code>・<code>order_items</code>・<code>payments</code>・<code>audit_logs</code> を commit。ng なら <code>payment_failed</code> を commit してから別トランザクションで在庫とカートを戻す</td><td>ng は 409 <code>payment_failed</code></td></tr>
+<tr><td>7</td><td>確認メール（ファイル出力）。失敗しても注文は成立</td><td>201 のまま。<code>audit_logs</code> に <code>mail.failed</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<ol class="route" data-title="順路：FastAPI の POST /api/v1/orders から注文の確定まで">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="Depends(verify_internal_token)" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下のルーター全部に <code>verify_internal_token</code> を付けている。続く行で <code>checkout.router</code>・<code>orders.router</code> を登録している。</p>
+    <p class="stop-say">FastAPI は /api/v1 配下のすべてのルーターに、内部トークンの検証を付けています。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="raise AppError(401" data-layer="api">
+    <p class="stop-see">無い・不一致・期待値の未設定は 401 <code>unauthorized</code>。<code>hmac.compare_digest</code> で比べる。</p>
+    <p class="stop-say">内部トークンが違えば 401 です。BFF 以外からのリクエストは、ここで止まります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/orders.py::create_order" data-focus="http_status, order = await orders_service.create_order(" data-layer="api">
+    <p class="stop-see">POST <code>/api/v1/orders</code>（<code>prefix="/orders"</code> ＋ <code>""</code>）。引数 <code>body: OrderCreateIn</code> は、関数が動く前に FastAPI が検証する。ここでやるのは、サービスを呼んで、返ってきた 200 か 201 をそのまま応答にすることだけ。</p>
+    <p class="stop-say">ルーターは薄く作ってあり、サービスを呼んで、返ってきたステータスコードで応答するだけです。業務の判断はサービスにあります。</p>
+    <p class="stop-next">次へ: 先に入力の検査を見る。<code>OrderCreateIn</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::OrderCreateIn" data-focus="idempotency_key: str = Field(pattern=IDEMPOTENCY_KEY_RE)" data-layer="api">
+    <p class="stop-see">入力の形だけを検証する Pydantic モデル。冪等キーは 43 文字の base64url、氏名 1〜50 文字（空白だけは不可）、郵便番号 7 桁・電話 10〜11 桁（ハイフンと空白は先に除去）、住所 1〜200 文字、メールは <code>EmailStr</code>。受け取り方法と支払い方法は文字列のまま通す（対応している値かどうかはサービスで確かめる）。外れると 400 <code>validation_error</code>。</p>
+    <p class="stop-say">入力の形は Pydantic で検査します。桁数や文字数が違えば、サービスに入る前に 400 で返ります。受け取り方法と支払い方法は、形に問題がなければ通し、対応している値かどうかはサービスで判断します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>create_order</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::create_order" data-focus="return await _create_order_with_deadlock_retry(session, token, body, payment=payment, mail=mail)" data-layer="service" data-link="関数の呼び出し">
+    <p class="stop-see">注文確定のサービスの先頭。テストモードのときだけ同時処理数を数えるフックを挟み、本体は <code>_create_order_with_deadlock_retry</code>。戻り値は (HTTP ステータス, 注文応答)。</p>
+    <p class="stop-say">サービスの入り口になる関数です。本体の処理を、デッドロック時の再試行つきで呼びます。</p>
+    <p class="stop-next">次へ: <code>_create_order_with_deadlock_retry</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order_with_deadlock_retry" data-focus="if attempt == 0 and _is_retryable_lock_error(exc):" data-layer="service">
+    <p class="stop-see">MySQL のデッドロック（1213）かロック待ち超過（1205）のときだけ、rollback して手順 0 から 1 回だけやり直す。同じカートへの同時確定で、手順 1 の INSERT と手順 2 の UPDATE が互いに待つために起きる。やり直すと、相手の commit 後の状態を見て 409 か 200 に着地する。</p>
+    <p class="stop-say">同じカートを同時に確定すると、MySQL がデッドロックで片方を失敗させることがあります。その場合に限って 1 回やり直し、相手の結果を見たうえで 409 か 200 になります。</p>
+    <p class="stop-next">次へ: <code>_create_order</code> にカーソルを置いて <kbd>F12</kbd>（呼び出しは、この関数の <code>return await _create_order(</code>）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order" data-focus="cart = await resolve_existing_cart(session, token)" data-layer="service">
+    <p class="stop-see">手順 0。カートを特定（無い・未知は 404）→ <code>_check_supported</code>（受け取り方法が <code>delivery</code> 以外、支払い方法が <code>card</code> 以外なら 422 <code>unsupported_value</code>）→ カートが active でない場合は、同じ冪等キーの注文があれば 200、無ければ 409 <code>already_ordered</code>。</p>
+    <p class="stop-say">最初にカートを特定します。対応していない受け取り方法や支払い方法は 422 です。注文済みのカートでも、同じ冪等キーの再送なら、既存の注文を 200 で返します。</p>
+    <p class="stop-next">次へ: 下の <code>_confirm(session, cart_id, body, payment)</code> の <code>_confirm</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_confirm" data-focus="order = await orders_repo.insert_pending_order(session, pending)" data-layer="service">
+    <p class="stop-see">手順 1。確認画面の金額（<code>body.display</code>）、お届け先、冪等キー、その時点の税率を詰めて、<code>pending_payment</code> の注文を INSERT する。</p>
+    <p class="stop-say">手順 1 では、状態を決済待ちにして orders に INSERT します。冪等キーはこのテーブルの中で一意です。</p>
+    <p class="stop-next">次へ: <code>insert_pending_order</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_pending_order" data-focus="raise DuplicateIdempotencyKey() from exc" data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see">INSERT は <code>begin_nested</code>（SAVEPOINT）の中。UNIQUE 違反が冪等キーの列なら <code>DuplicateIdempotencyKey</code>、注文番号の列なら番号を作り直して 1 回だけやり直し、2 回続けて衝突したら 500。注文番号は <code>generate_order_number</code>（<code>GU-YYMMDD-</code> ＋ 英大文字と数字 8 文字、日付は JST）。</p>
+    <p class="stop-say">冪等キーが重複したら、専用の例外に変えて投げます。注文番号が衝突したときは、作り直すのは 1 回だけです。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/order.py</code> を開く（UNIQUE の定義）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)" data-layer="db" data-link="SQL の INSERT（orders）">
+    <p class="stop-see"><code>orders.idempotency_key</code> が UNIQUE。同じキーの 2 本目の INSERT は、DB が必ず断る。これが二重注文を防ぐ本体で、<code>order_number</code> も UNIQUE。</p>
+    <p class="stop-say">二重注文を防ぐ本体は、この UNIQUE 制約です。アプリ側の確認をすり抜けても、DB が 2 件目を断ります。</p>
+    <p class="stop-next">次へ: <code>services/orders.py</code> の <code>_create_order</code> に戻り、<kbd>⌘⇧F</kbd> で <code>except DuplicateIdempotencyKey:</code> を検索して該当の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order" data-focus="except DuplicateIdempotencyKey:" data-layer="service" data-link="UNIQUE 違反の例外が戻る（DuplicateIdempotencyKey）">
+    <p class="stop-see">UNIQUE 違反のあと、rollback して既存の注文を SELECT する。見つからなければ（相手が rollback した）409 <code>already_ordered</code>（注文番号は null）、見つかれば <code>_existing_order_result</code> へ。</p>
+    <p class="stop-say">冪等キーが重複したら、いったん rollback して既存の注文を探します。見つかれば、その注文を返します。</p>
+    <p class="stop-next">次へ: <code>_existing_order_result</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_existing_order_result" data-focus="if existing.cart_id != cart_id:" data-layer="service">
+    <p class="stop-see">既存注文のカートと、要求者のカートが違えば 404（他人の注文を見せない）。状態が <code>payment_failed</code> なら 409 <code>payment_failed</code>、それ以外は 200 で既存の注文応答。</p>
+    <p class="stop-say">同じキーの再送は、自分のカートの注文なら 200 で同じ注文を返します。他人のカートの注文だった場合は、存在を知られないように 404 にします。</p>
+    <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 2 の <code>mark_cart_ordered</code> へ。<kbd>⌘⇧O</kbd> で <code>_confirm</code></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_confirm" data-focus="if await orders_repo.mark_cart_ordered(session, cart_id) == 0:" data-layer="service">
+    <p class="stop-see">手順 2。カートを active → ordered に条件付き UPDATE。影響行数が 0（別の確定が先に通った）なら rollback して 409 <code>already_ordered</code>。</p>
+    <p class="stop-say">手順 2 で、カートを注文済みに切り替えます。冪等キーが違っても、同じカートを同時に 2 回は確定できません。</p>
+    <p class="stop-next">次へ: <code>mark_cart_ordered</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered" data-focus="Cart.status == CartStatus.active" data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see"><code>UPDATE carts SET status='ordered' WHERE id=? AND status='active'</code> の 1 文。SELECT してから UPDATE する二段にしていない。影響行数を返す。</p>
+    <p class="stop-say">条件付きの UPDATE 1 文です。active のカートだけを切り替え、更新された行数で成功か失敗かを判断します。</p>
+    <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 3 の <code>_recalculate_and_compare</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_recalculate_and_compare" data-focus="if (d.subtotal, d.shipping_fee, d.total) != (" data-layer="service" data-link="更新した行数が戻る">
+    <p class="stop-see">手順 3。非公開商品が混じっていれば 409 <code>out_of_stock</code>。その時点の単価と設定で <code>calc_totals</code> を計算し、表示金額 <code>display</code> と 1 円でも違えば 409 <code>price_changed</code>（<code>amounts</code> に再計算後の金額）。引当より前に照合する。</p>
+    <p class="stop-say">画面に出した金額は信用せず、サーバーで計算し直して照合します。1 円でも違えば、価格変更として 409 を返します。在庫を押さえる前に照合するのは、不一致のときに在庫の行をロックしないためです。</p>
+    <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 4 の <code>_reserve_all</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_reserve_all" data-focus="for r in sorted(rows, key=lambda x: x.variant_id):" data-layer="service">
+    <p class="stop-see">手順 4。<code>variant_id</code> の昇順で <code>reserve_stock</code> を呼ぶ（複数のカートが同じ商品群を逆順に引き当てて起きるデッドロックを避ける）。影響行数が 0 の明細を集め、1 つでもあれば 409 <code>out_of_stock</code> を返し、variant_id の一覧を付ける。</p>
+    <p class="stop-say">在庫は、バリエーション ID の昇順に 1 つずつ引き当てます。足りない明細が 1 つでもあれば、全体を rollback して、足りない明細の ID を返します。</p>
+    <p class="stop-next">次へ: <code>reserve_stock</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-focus="Variant.stock &gt;= quantity" data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see"><code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock &gt;= :q</code> の 1 文。影響行数（0 か 1）を返す。0 なら在庫不足。</p>
+    <p class="stop-say">在庫の引当は、条件付きの UPDATE 1 文です。在庫が足りるときだけ減らし、足りなければ更新は 0 行になります。2 つの注文が同時に来ても、後に処理された側が 0 行になります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/catalog.py</code> を開き、<code>Variant</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock_non_negative" data-layer="db" data-link="SQL の UPDATE（variants.stock）">
+    <p class="stop-see"><code>variants.stock</code> に <code>CHECK (stock &gt;= 0)</code> の制約。条件付き UPDATE が破れても、DB が負の在庫を断る二重の備え。</p>
+    <p class="stop-say">在庫には、条件付き UPDATE に加えて、マイナスにならない CHECK 制約も付けています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>adapters/payment.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter" data-focus="= result or" data-layer="infra" data-link="引当のあと、決済の部品の呼び出し（authorize）">
+    <p class="stop-see">手順 5。決済スタブは、環境変数 <code>PAYMENT_STUB_RESULT</code>（<code>ok</code> か <code>ng</code>。未設定は <code>ok</code>）の値をそのまま返す。<code>get_payment_adapter</code> が設定から作り、テストでは差し替えられる。カード情報は扱わない。</p>
+    <p class="stop-say">決済はスタブです。環境変数で決めた ok か ng を返すだけで、カード情報は扱いません。テストでは ng に差し替えて、失敗側の動きを確かめています。</p>
+    <p class="stop-next">次へ: <code>services/orders.py</code> の <code>_confirm</code> に戻り、手順 6（<code>if result == "ok":</code> 以降）へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py#L213-246" data-focus="await orders_repo.insert_order_items(" data-layer="service" data-link="決済の結果 ok が戻る">
+    <p class="stop-see">手順 6 の ok 側。状態遷移の表（<code>order_state.assert_transition</code>）を確かめて <code>accepted</code> に更新し、<code>order_items</code>（確定時の単価と商品名）・<code>payments</code>・<code>audit_logs</code>（<code>order.confirm</code>）を書いて commit。</p>
+    <p class="stop-say">決済が ok なら、状態を受付済みに更新し、明細・決済・監査ログを書いて、まとめて commit します。明細には、注文した時点の単価と商品名を保存します。</p>
+    <p class="stop-next">次へ: <code>insert_order_items</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_order_items" data-focus="unit_price_at_order=i.unit_price," data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see"><code>order_items</code> に <code>unit_price_at_order</code>・<code>product_name_at_order</code> を保存する。あとで商品の価格や名前を変えても、注文の記録は変わらない（IT-014-08）。<code>payments</code> は provider と amount だけで、カード情報の列は無い。</p>
+    <p class="stop-say">明細は、その時点の単価と商品名をコピーして保存します。商品マスタを後から変えても、過去の注文は変わりません。</p>
+    <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 6 の ng 側へ。<kbd>⌘⇧F</kbd> で <code>payment_failed</code> を検索して <code>_confirm</code> の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py#L248-271" data-focus="await session.commit()" data-layer="service" data-link="決済の結果 ng のとき（別の分岐）">
+    <p class="stop-see">手順 6 の ng 側。<code>payment_failed</code>・<code>payments</code>（ng）・<code>audit_logs</code>（<code>order.payment_failed</code>）を 1 回目の commit で保存する。そのあと別のトランザクションで <code>restore_stock</code> と <code>restore_cart_active</code> を実行して 2 回目の commit、最後に 409 <code>payment_failed</code>。<span class="tstat none">対応する自動テスト（2 回目の前に落とす）なし</span></p>
+    <p class="stop-say">決済が ng のときは、注文を決済失敗の状態で残し、そのあとで在庫とカートを元に戻して、409 を返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>_create_order</code> を開き、手順 7 の <code>mail.send_order_confirmation</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order" data-focus="await mail.send_order_confirmation(response)" data-layer="service">
+    <p class="stop-see">手順 7。commit 後に <code>build_order_response</code> で応答を作り、メールアダプタを呼ぶ。例外が出ても握りつぶし、<code>audit_logs</code> に <code>mail.failed</code> を書いて commit。最後は <code>return 201, response</code>。</p>
+    <p class="stop-say">メールの送信に失敗しても、注文はすでに確定しているので、201 のまま返します。失敗は監査ログに残します。</p>
+    <p class="stop-next">次へ: <code>send_order_confirmation</code> にカーソルを置いて <kbd>F12</kbd>（<code>mail</code> の実体は <code>OutboxMailAdapter</code>）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter" data-focus="path.write_text(" data-layer="infra" data-link="関数の呼び出し（メールの部品）">
+    <p class="stop-see">メールは送らず、<code>apps/api/.mail-outbox/&lt;注文番号&gt;.txt</code> に本文を書く。宛先・氏名・住所・電話が平文で入る。ログには注文番号とマスクしたメールだけを出す。</p>
+    <p class="stop-say">メールは実際には送らず、ファイルに書き出します。ログには個人情報を出さないようにしています。</p>
+    <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開き、<code>OrderOut</code> へ</p>
+  </li>
+</ol>
+
+<p>エラーの分岐は次のとおりです。FastAPI は <code>{code, ...詳細}</code> の形で返し、BFF が許可した詳細キーだけを通します。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>状態</th><th>code</th><th>条件</th><th>判定する場所</th></tr></thead>
+<tbody>
+<tr><td>401</td><td><code>unauthorized</code></td><td>内部トークンが無い・不一致</td><td><a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a></td></tr>
+<tr><td>400</td><td><code>validation_error</code>（<code>fields</code>）</td><td>入力の形が違う（郵便番号が 7 桁以外、メールの形式が不正、氏名が 51 文字など）。<code>reason</code> は required・format・too_long・out_of_range</td><td><a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn">OrderCreateIn</a></td></tr>
+<tr><td>404</td><td><code>not_found</code></td><td>カートのトークンが無い・未知。他人のカートの冪等キー</td><td><a class="ref" data-ref="apps/api/app/services/checkout.py::resolve_existing_cart">resolve_existing_cart</a>、<a class="ref" data-ref="apps/api/app/services/orders.py::_existing_order_result">_existing_order_result</a></td></tr>
+<tr><td>422</td><td><code>unsupported_value</code>（<code>field</code>）</td><td>受け取り方法が <code>delivery</code> 以外、支払い方法が <code>card</code> 以外</td><td><a class="ref" data-ref="apps/api/app/services/orders.py::_check_supported">_check_supported</a></td></tr>
+<tr><td>409</td><td><code>already_ordered</code>（<code>order_number</code>）</td><td>カートが active でなく既存注文も無い／手順 2 が 0 行／冪等キー衝突後に相手が rollback（番号は null）</td><td><a class="ref" data-ref="apps/api/app/services/orders.py::_create_order">_create_order</a>、<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a></td></tr>
+<tr><td>409</td><td><code>price_changed</code>（<code>amounts</code>）</td><td>再計算した小計・送料・合計が、表示金額と 1 円でも違う</td><td><a class="ref" data-ref="apps/api/app/services/orders.py::_recalculate_and_compare">_recalculate_and_compare</a></td></tr>
+<tr><td>409</td><td><code>out_of_stock</code>（<code>items</code>）</td><td>非公開商品が混じる／引当が 0 行の明細がある</td><td>_recalculate_and_compare、<a class="ref" data-ref="apps/api/app/services/orders.py::_reserve_all">_reserve_all</a></td></tr>
+<tr><td>409</td><td><code>empty_cart</code></td><td>明細が 0 件（<code>calc_totals</code> が弾く）</td><td><a class="ref" data-ref="apps/api/app/services/pricing.py::calc_totals">calc_totals</a></td></tr>
+<tr><td>409</td><td><code>payment_failed</code>（<code>order_number</code>）</td><td>決済 ng／同じキーの再送で既存が <code>payment_failed</code></td><td>_confirm、_existing_order_result</td></tr>
+<tr><td>409</td><td><code>invalid_transition</code>（<code>from</code>・<code>to</code>）</td><td>状態遷移の表に無い遷移（通常は起きない）</td><td><a class="ref" data-ref="apps/api/app/services/order_state.py::assert_transition">assert_transition</a></td></tr>
+<tr><td>500</td><td><code>internal_error</code></td><td>注文番号が 2 回続けて衝突、<code>system_settings</code> の不備、そのほか想定外の例外</td><td>insert_pending_order、例外ハンドラ</td></tr>
+<tr><td>403</td><td><code>forbidden</code></td><td>CSRF 不一致（BFF。FastAPI へは進まない）</td><td><a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a></td></tr>
+<tr><td>503</td><td><code>upstream_unavailable</code></td><td>FastAPI に接続できない・15 秒を超えた（BFF）</td><td><a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">proxyOrderRequest</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn"><p>今は直していない点（コード解説書 9 章 B2）: 決済 NG の経路は、<code>payment_failed</code> の commit と、在庫・カートを戻す commit の 2 段です。間でプロセスが落ちると、在庫が引かれたまま残ります。設計仕様書 9.4 で P1 では受け入れるとした「既知の穴」です。コードには、この申し送りのコメントがありません。</p></div>
+
+<h3 id="r06-display">④ 応答から表示まで</h3>
+
+<ol class="route" data-title="順路：注文確定の応答から完了画面の表示まで">
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::OrderOut" data-focus="status: OrderStatusLiteral" data-layer="api">
+    <p class="stop-see">応答の形（Pydantic の <code>OrderOut</code>）。<code>order_number</code>・<code>status</code>（8 値）・<code>items</code>・金額・内税・税率・お届け先・メール・<code>ordered_at</code>。注文 ID・カート ID・バリエーション ID は含めない。</p>
+    <p class="stop-say">応答には、注文番号、状態、明細、金額、お届け先、注文日時を入れます。内部の ID は出しません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<code>build_order_response</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="ordered_at=order.created_at.replace(tzinfo=UTC)" data-layer="service" data-link="OrderOut を作る関数の呼び出し">
+    <p class="stop-see">DB の行から応答を組み立てる。明細は <code>order_items</code> の確定時の単価・商品名。内税は <code>calc_tax_included</code> で注文時の税率から求める。注文日時は UTC として返し、表示のときに JST に直す。</p>
+    <p class="stop-say">応答は、DB に保存した注文の内容から組み立てます。明細は、注文した時点の単価と商品名です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> を開き、<code>create_order</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/orders.py::create_order" data-focus="response.status_code = http_status" data-layer="api" data-link="関数の戻り値（注文応答）">
+    <p class="stop-see">新規は 201（デコレータの既定）、同じ冪等キーの再送は 200 に、ここで切り替える。</p>
+    <p class="stop-say">新規の注文は 201、同じキーの再送は 200 で返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff" data-link="HTTP 応答（JSON・201 または 200）">
+    <p class="stop-see">成功は FastAPI の本文と status（201・200）をそのまま返す。エラーは <code>result.error</code> を同じ status で返す。<code>Cache-Control: no-store</code>。</p>
+    <p class="stop-say">BFF は、成功なら応答をそのまま返し、エラーなら整形したコードだけを返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/api.ts</code> を開き、<code>sanitizeErrorBody</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::sanitizeErrorBody" data-focus="ALLOWED_ERROR_DETAIL_KEYS.has(key)" data-layer="bff">
+    <p class="stop-see">エラー本文は <code>code</code> と、許可した詳細キー（<code>fields</code>・<code>items</code>・<code>amounts</code>・<code>order_number</code> など）だけを通す。</p>
+    <p class="stop-say">エラーの本文は、コードと、あらかじめ決めた詳細だけを通します。SQL やスタックトレースは画面に出しません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen" data-link="HTTP 応答（JSON）">
+    <p class="stop-see">失敗は <code>OrderApiError(status, 本文, Retry-After の秒数)</code> を throw。成功は <code>{ status, data }</code>。</p>
+    <p class="stop-say">クライアント関数は、成功なら応答を返し、失敗なら status と本文を入れたエラーを投げます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderConfirm.tsx</code> に戻り、<code>createOrder(body)</code> の次の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-focus="saveLastOrder(order);" data-layer="screen">
+    <p class="stop-see">成功の後始末（この順）。(1) 応答を <code>saveLastOrder</code> で保存 (2) 確定前の入力を <code>clearCheckoutSession()</code> で削除 (3) <code>applyCart({ item_count: 0 })</code> でヘッダーのバッジを 0 に (4) トースト「ご注文ありがとうございます」 (5) <code>/orders/complete?n=注文番号</code> へ移動。遷移するので <code>busy</code> は解かない。</p>
+    <p class="stop-say">成功したら、応答を保存し、確定前の入力を消し、カートのバッジを 0 にして、完了画面へ移ります。</p>
+    <p class="stop-next">次へ: <code>saveLastOrder</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/checkout-session.ts::saveLastOrder" data-focus="write(LAST_ORDER_KEY, order)" data-layer="screen">
+    <p class="stop-see">sessionStorage のキー <code>guapp.lastOrder</code> に注文応答を JSON で保存する。完了画面の再掲に使う。</p>
+    <p class="stop-say">注文の応答は、完了画面に表示するために sessionStorage へ保存します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>app/orders/complete/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/orders/complete/page.tsx::OrderCompletePage" data-focus="isOrderNumber(raw) ? raw : null" data-layer="screen" data-link="画面遷移（GET /orders/complete?n=注文番号）">
+    <p class="stop-see">URL の <code>?n=</code> は <code>isOrderNumber</code> で形を確かめ、外れれば <code>null</code> にする。Next.js 16 では <code>searchParams</code> が Promise。</p>
+    <p class="stop-say">完了画面のページです。URL の注文番号は、形を確かめてから本体に渡します。</p>
+    <p class="stop-next">次へ: <code>OrderComplete</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="const order = found ?? stored;" data-layer="screen">
+    <p class="stop-see">sessionStorage の注文があり、URL の番号と一致するときだけ再掲。別の番号で開かれたら保存済みの注文は使わず、照会フォーム（7 章）に回す。完了画面に来たら、確定前の入力（<code>guapp.checkout</code>）は確定の成否に関わらず消す。</p>
+    <p class="stop-say">保存した注文が URL の番号と一致していれば、その注文を表示します。違うときは照会フォームを出します。</p>
+    <p class="stop-next">次へ: <code>CompletedOrder</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::CompletedOrder" data-focus="order.order_number" data-layer="screen">
+    <p class="stop-see">見出し（<code>payment_failed</code> の注文なら「この注文は決済に失敗しています」）、注文番号、注文日時（JST）、メール案内、明細（<code>OrderItemsList</code>）、お届け先（<code>ShippingSummary</code>）、金額（<code>AmountSummary</code>）、「買い物を続ける」。</p>
+    <p class="stop-say">完了画面には、注文番号、注文日時、明細、お届け先、金額を表示します。メールは実際には送らずファイルに書き出しているので、その旨の注意書きも画面に出しています。</p>
+    <p class="stop-next">次へ（エラーのとき）: 下の順路へ</p>
+  </li>
+</ol>
+
+<ol class="route" data-title="順路：注文確定が失敗したときの画面の出し分け">
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-focus="const route = routeOrderError(status, errBody);" data-layer="screen">
+    <p class="stop-see"><code>catch</code> で status と本文を <code>routeOrderError</code> に渡し、先にダイアログを閉じる。<code>route.kind</code> の 5 通りで <code>switch</code>。</p>
+    <p class="stop-say">失敗したときは、status と本文を、戻し先を決める関数に渡します。戻し先は 5 種類あります。</p>
+    <p class="stop-next">次へ: <code>routeOrderError</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/order-errors.ts::routeOrderError" data-focus="case &quot;price_changed&quot;:" data-layer="screen">
+    <p class="stop-see">応答 → 戻し先の対応表（純粋関数、<code>order-errors.test.ts</code> が全行を確かめる）。<code>price_changed</code> と <code>payment_failed</code> は <code>checkout</code>（確認画面の入力欄へ戻す）、<code>out_of_stock</code>・<code>empty_cart</code>・404 は <code>cart</code>、<code>already_ordered</code> は完了画面へ。</p>
+    <p class="stop-say">戻し先は 1 つの関数に集めてあります。金額が変わったときと決済に失敗したときは注文手続きへ、在庫切れはカートへ、注文済みは完了画面へ戻します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderConfirm.tsx</code> に戻り、<code>case "checkout":</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-focus="case &quot;checkout&quot;:" data-layer="screen">
+    <p class="stop-see"><code>prepare</code> を <code>null</code> にしたフォーム値を保存（<code>focus</code> は <code>form</code> か <code>payment</code>）→ トースト → <code>/checkout</code> へ。<code>prepare</code> を捨てるので、次に確認画面へ進むと、新しい冪等キーで prepare が呼び直される。</p>
+    <p class="stop-say">金額が変わったり、決済に失敗したりしたときは、入力を残したまま注文手続きに戻します。古い冪等キーは捨てて、次に確認画面へ進むときに新しいキーを取り直します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>CheckoutForm.tsx</code> を開き、<code>CheckoutFormInner</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="session?.serverErrors" data-layer="screen" data-link="画面遷移（/checkout）">
+    <p class="stop-see">戻ってきた入力欄の復元。<code>serverErrors</code>（400 の項目エラー）があれば、赤字の初期値にする。</p>
+    <p class="stop-say">戻ってきたときは、保存しておいた入力と、サーバーが返した項目ごとのエラーを復元し、エラーは赤字で表示します。</p>
+    <p class="stop-next">次へ: 同じ関数の <code>useEffect</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="paymentRef.current?.scrollIntoView" data-layer="screen">
+    <p class="stop-see"><code>focus</code> が <code>payment</code>（決済失敗で戻ったとき）なら、支払い方法の欄までスクロールしてフォーカスする。復元に使った <code>serverErrors</code> と <code>focus</code> は 1 回で消す。</p>
+    <p class="stop-say">決済に失敗して戻ったときは、支払い方法の欄にフォーカスを合わせます。</p>
+  </li>
+</ol>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>応答</th><th>戻し先（<code>route.kind</code>）</th><th>画面の動き</th></tr></thead>
+<tbody>
+<tr><td>400 <code>validation_error</code></td><td>field_errors</td><td>フォーム値と <code>serverErrors</code>（<code>prepare</code> は残す）を保存し、トースト「入力内容に誤りがあります。赤字の項目を確認してください」→ <code>/checkout</code> で項目を赤字に</td></tr>
+<tr><td>404 <code>not_found</code></td><td>cart</td><td>入力を消し、トースト「カートの情報が無効になりました…」→ <code>/cart</code></td></tr>
+<tr><td>409 <code>out_of_stock</code></td><td>cart</td><td>入力を消し、トースト「在庫切れの商品があります」→ <code>/cart?oos=variant_id,…</code></td></tr>
+<tr><td>409 <code>empty_cart</code></td><td>cart</td><td>入力を消し、トースト「カートに商品が入っていません」→ <code>/cart</code></td></tr>
+<tr><td>409 <code>price_changed</code></td><td>checkout（focus: form）</td><td><code>prepare</code> を捨て、トースト「金額が変わりました。内容をご確認のうえ、もう一度お進みください」→ <code>/checkout</code></td></tr>
+<tr><td>409 <code>payment_failed</code></td><td>checkout（focus: payment）</td><td><code>prepare</code> を捨て、トースト「決済に失敗しました。支払い方法をご確認ください」→ <code>/checkout</code>（支払い方法へフォーカス）</td></tr>
+<tr><td>409 <code>already_ordered</code>（番号あり）</td><td>complete</td><td>入力を消し、バッジを 0 に、トースト（info）「このカートはすでに注文済みです」→ <code>/orders/complete?n=番号</code>。番号なしならカートへ</td></tr>
+<tr><td>403 <code>forbidden</code></td><td>stay</td><td>その場に留まり、トースト「ページを再読み込みしてからもう一度お試しください」。ボタンを戻す</td></tr>
+<tr><td>422・429・503・その他の 5xx</td><td>stay</td><td>その場に留まり、トーストだけ出す。<code>inflight</code> と <code>busy</code> を戻すので、もう一度押せる</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r06-test">⑤ テスト 1 本の説明</h3>
+
+<p><strong>推し:</strong> <span class="tid">UT-WEB-03</span> <span class="req">F-036</span> <span class="tstat pass">✅ 通過（ローカル 2026-10-03・CI とも）</span></p>
+
+<div class="table-wrap">
+<table>
+<tbody>
+<tr><th>仕様（テスト設計書 5.2 章）</th><td>UT-WEB-03 ／ 処理中表示（F-036）／ 正常 ／ 「送信中の状態」→「ボタン disabled、処理中表示、再クリックで 2 回目の送信が発生しない」</td></tr>
+<tr><th>この仕様が守るもの</th><td>購入ボタンを連打しても、同じ注文が 2 回送られないこと（使い勝手のための対策）。防御の本体は冪等キーの UNIQUE（IT-014-02）で、この対策がやるのは、画面上で連打を抑えるところまで。</td></tr>
+<tr><th>テストコード</th><td><a class="ref" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="expect(fetchMock).toHaveBeenCalledTimes(1)">ut-web-02-03.order-confirm.test.tsx の「送信中は両ボタン disabled…」</a>（Vitest。<code>it</code> の名前で探す）</td></tr>
+<tr><th>実行条件</th><td>Vitest と Testing Library だけで動く。DB・サーバーは不要で、<code>fetch</code> はモック。CI でも動く。</td></tr>
+</tbody>
+</table>
+</div>
+
+<ol>
+<li><strong>準備:</strong> sessionStorage の <code>guapp.checkout</code> に、入力値と prepare 応答（金額 3,980・550・4,530）を入れる。Cookie に <code>csrf_token</code> を置き（<code>ensureCsrfToken</code> が余計な <code>fetch</code> をしないように）、<code>fetch</code> を「いつまでも返らない Promise」に差し替える。これで「送信中」の状態を作り、<code>OrderConfirm</code> を描画する。</li>
+<li><strong>実行:</strong> 「注文を確定する」を押してダイアログを開き、「確定する」を連続 2 回押す（<span class="loc" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="fireEvent.click(ok);"></span>）。</li>
+<li><strong>確認:</strong>
+  <ol>
+    <li><code>fetch</code> が 1 回しか呼ばれていない（<span class="loc" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="expect(fetchMock).toHaveBeenCalledTimes(1)"></span>）。さらに 1 回押しても増えない。</li>
+    <li>画面の「注文を確定する」が disabled で、表示が「処理中…」、<code>aria-busy</code> が true、「戻る」も disabled。</li>
+    <li>「処理中…」のボタンが 2 つ（画面とダイアログ）あり、どちらも disabled。ダイアログの「キャンセル」も disabled（<span class="loc" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="expect(busyButtons).toHaveLength(2)"></span>）。</li>
+    <li>送信先が <code>/api/orders</code> の POST で、<code>X-CSRF-Token</code> が Cookie の値と同じ。本文には、冪等キー、お届け先（<code>ship_postal_code</code> は <code>1000001</code>、住所は全角スペース区切り）、<code>display</code> の 3 金額が入っている（<span class="loc" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="expect(body).toMatchObject({"></span>）。</li>
+    <li>201 を返すと、<code>/orders/complete?n=GU-260918-7K3M9Q2X</code> へ移り、<code>guapp.lastOrder</code> が保存され、<code>guapp.checkout</code> が消え、トースト「ご注文ありがとうございます」が出る。</li>
+  </ol>
+</li>
+</ol>
+
+<div class="note fact"><p>事実: <code>inflight</code> のフラグを外したときにこのテストが赤くなるかは、確かめていません。防御を 1 つずつ外して赤くなることを確認したのは、DB 側の 3 つ（UNIQUE・カートの条件付き UPDATE・<code>stock &gt;= ?</code>）だけです（テスト設計書 1.4 の #8）。</p></div>
+
+<p><strong>予備:</strong> <span class="tid">IT-014-05</span> ／ <a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_05_tampered_total_is_409_price_changed_and_nothing_persists">test_it_014_05_tampered_total_is_409_price_changed_and_nothing_persists</a> <span class="tstat pass">✅ 通過（ローカル）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span></p>
+<p>仕様は「表示金額を改ざん（合計 -1 円）→ 409。orders・order_items に行が残らない。stock 不変」。テストは、カートに 1,990 円を 2 点入れて prepare し、<code>display.total</code> を 1 円減らして POST する。確認するのは、409 <code>price_changed</code> が返り <code>amounts</code> が正しい金額であること、orders・order_items・payments が 0 件であること、在庫が変わらないこと、カートが active のままであること。続けて、商品の価格を変えてから古い表示金額で送ると、<code>amounts.subtotal</code> が 4,180 で返ることも確かめる。</p>
+
+<h3 id="r06-compare">⑥ 仕様書との突き合わせ</h3>
+
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述（ID・該当箇所）</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr>
+<td>確認ダイアログ</td>
+<td><span class="tid">UT-WEB-02</span>（5.2 章）「ダイアログ表示。キャンセルで送信されない」</td>
+<td>ダイアログの文言を確認し、キャンセル後は <code>fetch</code> も <code>push</code> も 0 回（<a class="ref" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L135-150" data-focus="queryByRole(&quot;dialog&quot;)">UT-WEB-02</a>）<span class="tstat pass">✅ 通過</span></td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>処理中表示・連打</td>
+<td><span class="tid">UT-WEB-03</span>（5.2 章）「ボタン disabled、処理中表示、再クリックで 2 回目の送信が発生しない」</td>
+<td><code>fetch</code> 1 回、両ボタン disabled、「処理中…」、<code>aria-busy</code>（<a class="ref" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L153-207" data-focus="expect(fetchMock).toHaveBeenCalledTimes(1)">UT-WEB-03</a>）<span class="tstat pass">✅ 通過</span></td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>成功・失敗のトースト</td>
+<td><span class="tid">ST-F036-01</span>（3.1 章）「成功・失敗をトーストで表示」、<span class="tid">AT-05</span>（2 章）</td>
+<td>手動 <span class="tstat manual">🖐 2026-09-18 合格</span>は成功側のみ（10 章にも「成功側のみ確認」と記載）。失敗側は、UT-WEB-03 の 409 <code>price_changed</code>・<code>out_of_stock</code>・503 の各テストがトーストの文言まで確認している</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>正常系の登録内容</td>
+<td><span class="tid">IT-014-01</span>（4 章）「201。orders 受付済・order_items・payments・audit_logs が 1 件ずつ。stock が減る。carts が ordered」</td>
+<td>orders 1・<code>accepted</code>、<code>order_items</code> は 2 行（2 明細のカートで確かめている）、payments 1（stub／ok）、audit_logs 1（<code>order.confirm</code>）、在庫は数量分減少、カートは ordered、確定時単価 1,990、outbox のファイル（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_01_happy_path_creates_all_rows_and_mail">test_it_014_01…</a>）。仕様の「1 件ずつ」と <code>order_items</code> の行数は、記述の粒度が合っていない</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>同じ冪等キーで 20 同時</td>
+<td><span class="tid">IT-014-02</span>（4 章）「注文は 1 件。全応答が 200 または 201 で同じ注文番号。stock の減少は数量 × 1 回分」</td>
+<td>20 件を <code>asyncio.gather</code> で送り、201 がちょうど 1 回、注文番号は 1 種類、orders・order_items・payments が各 1、在庫は <code>before - 2</code>、<code>inflight_max &gt;= 2</code>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py::test_it_014_02_same_key_20_concurrent_requests_yield_one_order">test_it_014_02…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>同じカートに別キー 2 同時</td>
+<td><span class="tid">IT-014-03</span>（4 章）「注文は 1 件。もう一方は 409 で code が already_ordered」</td>
+<td>ステータスが 201 と 409 のちょうど 1 組、負けた側の <code>code</code> は <code>already_ordered</code> で注文番号は勝った側と同じ、orders 1・在庫 −1・カート ordered（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py::test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_ordered">test_it_014_03…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>在庫 1 の取り合い</td>
+<td><span class="tid">IT-014-04</span>（4 章）「1 件成功、1 件は 409 out_of_stock。stock は 0 に等しい。order_items は 1 行。反復 30 回」</td>
+<td><code>ITERATIONS = 30</code>。201 と 409 の 1 組、負けた側は <code>{"code":"out_of_stock","items":[…]}</code>、在庫 0、order_items 1 行、勝ったカート ordered・負けたカート active。30 回とも通過（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_04_stock_race.py::test_it_014_04_two_carts_race_for_last_unit">test_it_014_04…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>表示金額の改ざん</td>
+<td><span class="tid">IT-014-05</span>（4 章）対象列は「DS-PRC-014-1 手順 4」。「409。orders・order_items に行が残らない。stock 不変」</td>
+<td>値は仕様どおり（409・0 件・在庫不変・カート active）。ただし金額の照合は、設計仕様書 draft-v3 の 4.4 で手順 3 に移っており、実物と手順番号が合っていない（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_05_tampered_total_is_409_price_changed_and_nothing_persists">test_it_014_05…</a>）</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>決済 NG</td>
+<td><span class="tid">IT-014-06</span>（4 章）「orders は決済失敗で残る。payments に ng。stock は元の値。carts は active」</td>
+<td>値は仕様どおり。加えて、同じキーの再送は同じ 409、prepare をやり直すと新しいキーで 201（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_06_payment_ng_keeps_failed_order_and_restores_stock_and_cart">test_it_014_06…</a>）。2 段の commit の間で落ちる場合は、再現するテストが無い</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>引当失敗</td>
+<td><span class="tid">IT-014-07</span>（4 章）対象列は「DS-PRC-014-1 手順 3」。「ROLLBACK され orders に行が残らない。応答に在庫切れの variant_id 一覧」</td>
+<td>値は仕様どおり（<code>items</code> に variant_id、orders 0、先に引当した分も戻る）。引当は実物では手順 4 で、手順番号が古い（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_07_reserve_failure_rolls_back_and_lists_variants">test_it_014_07…</a>）</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>確定時単価の保存</td>
+<td><span class="tid">IT-014-08</span>（4 章）対象列は「DS-PRC-014-1 手順 3」</td>
+<td>値は仕様どおり（価格を 9,990 円に変えても <code>unit_price_at_order</code> は 1,990、商品名・合計も不変）。保存は実物では手順 6 で、手順番号が古い（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_08_price_change_after_confirm_does_not_affect_order">test_it_014_08…</a>）</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>在庫・価格の手動確認</td>
+<td><span class="tid">ST-F014-02</span>「手順 3」（在庫）、<span class="tid">ST-F014-03</span>「手順 4」（価格）（3.1 章）</td>
+<td>手動 <span class="tstat manual">🖐 2026-09-24 合格</span>（どちらも）。実物の手順は価格が 3、在庫が 4 で、仕様書の番号が入れ替わっている</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>メール失敗</td>
+<td><span class="tid">IT-014-09</span>（4 章）「メールアダプタが例外 → 201 で注文成立。audit_logs に mail.failed」</td>
+<td>201、状態 <code>accepted</code>、<code>mail.failed</code> が 1 件、outbox にファイルが無い（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_09_mail_failure_still_201_and_audited">test_it_014_09…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>メールの出力先</td>
+<td><span class="tid">AT-01</span>（2 章）「確認メールがログに出力される」、1.3 章「メール: ログ出力スタブ」</td>
+<td>実物は <code>apps/api/.mail-outbox/</code> のファイル出力で、ログには注文番号とマスクしたメールだけ。設計仕様書 4.4 の手順 7 は直してあるが、テスト設計書は直っていない。IT-014-01 は outbox のファイルを確認している</td>
+<td class="ng">ng</td>
+</tr>
+<tr>
+<td>メール失敗の手動確認</td>
+<td><span class="tid">ST-F014-06</span>（3.1 章）「メールスタブを失敗させて確定」</td>
+<td>Mac の記録は 2026-09-24 に合格（1 回目の権限の方式は不成立、書き出し先をファイルに置き換えた 2 回目で合格）。Windows の記録は未実施（注入点が無い）で、IT-014-09 で自動テスト済みとしている</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>BFF の結合テスト</td>
+<td><span class="tid">IT-BFF-01</span>・<span class="tid">02</span>（4 章）。4 章の冒頭は「FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ」</td>
+<td>実物は Vitest で、<code>fetch</code> をモックして BFF の Route Handler を直接呼ぶ。FastAPI へは実際には届かない。内容は仕様どおり（内部トークン・カートのトークンの付与、201、CSRF なしは 403 で <code>fetch</code> 0 回）（<a class="ref" data-ref="apps/web/tests/it-bff-01-02.orders-route.test.ts">it-bff-01-02.orders-route.test.ts</a>）</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>在庫引当の単体</td>
+<td><span class="tid">UT-014-03</span>・<span class="tid">04</span>（5.1 章）数量 2・在庫 5 → 1 行、数量 = 在庫 → 1 行、数量 = 在庫 + 1 → 0 行</td>
+<td>SQLite で <code>reserve_stock</code> を実行。数量 2・在庫 5 → 1 行（在庫 3）、数量 5 → 1 行（在庫 0）、数量 6 → 0 行（在庫 5 のまま）（<a class="ref" data-ref="apps/api/tests/unit/test_ut_014_reserve_stock.py">test_ut_014_reserve_stock.py</a>）<span class="tstat pass">✅ 通過（CI でも）</span></td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>IT を CI で回す</td>
+<td>1.2 章「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」</td>
+<td>CI の api は <code>200 passed, 100 skipped</code>。<code>ci.yml</code> に <code>DATABASE_URL_TEST</code> が無く、IT-014-01〜09 を含む結合テスト 100 件が全件スキップ。ローカルは全件通過</td>
+<td class="ng">ng</td>
+</tr>
+<tr>
+<td>通過件数の記載</td>
+<td>10 章の記載: IT・UT は全件 CI 緑、api 213 passed・web 130 passed（テスト設計書 10 章の末尾）</td>
+<td>2026-10-03 の手元は api 300 件・web 228 件が通過。記載は手元のコマンドの数で、件数が古い。CI は api が結合テストをスキップしている</td>
+<td class="warn">warn</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn"><p>コード解説書 9 章 D3 のとおり、IT-014-01〜09 を含む結合テスト 100 件は CI で実行されていません。ローカルでは通っています。<code>ci.yml</code> に環境変数を 1 行足す修正は、今は入れていません。足したあとに 100 件が通るかも、確かめていません（同時実行のテストは uvicorn を実際に起動するため、CI で初めて落ちる可能性があります）。</p></div>
+
+<h3 id="r06-qa">詰まりそうな質問</h3>
+
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>二重注文や在庫の取り合いは、どう防いでいますか</summary>
+  <div class="qa-body">
+    <p>防ぎ方は 4 段あります。1 段目は画面で、<code>inflight</code> フラグで連打を止めます。ただ、これは使い勝手のための対策で、防御の本体ではありません。2 段目は、同じ冪等キーの 2 本目を <code>orders.idempotency_key</code> の UNIQUE で DB が断り、既存の注文を 200 で返します（IT-014-02: 20 同時でも注文は 1 件）。3 段目は、別の冪等キーで同じカートを 2 回確定しようとした場合です。カートの active → ordered の条件付き UPDATE が 1 回しか通らず、もう一方は 409 <code>already_ordered</code> になります（IT-014-03）。4 段目は在庫で、<code>WHERE stock &gt;= :q</code> の UPDATE 1 文が、足りなければ 0 行になります。<code>CHECK (stock &gt;= 0)</code> もあります（IT-014-04: 在庫 1 に 2 件を同時に送って、成功は 1 件だけ。これを 30 回繰り返す）。</p>
+    <div class="followup"><p class="followup-q">追撃: その結合テストは、CI で動いていますか</p><p>動いていません。結合テスト 100 件は CI ではスキップされています（コード解説書 9 章 D3）。ローカルでは通っています。また、防御を外して赤くなることの確認は、2026-09-18 に 3 つとも実施して、総合 PASS でした（<code>scripts/mutation-check/result-20260918.md</code>、テスト設計書 1.4 の #8）。</p></div>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>決済に失敗したとき、在庫が戻らなくなることはありませんか</summary>
+  <div class="qa-body">
+    <p>あります。決済 NG の経路は、<code>payment_failed</code> を commit してから、別のトランザクションで在庫とカートを戻す 2 段です。間でプロセスが落ちると、在庫が引かれたまま残ります。設計仕様書 9.4 に、P1 では受け入れる穴として書いてあります。決済スタブは同期で結果を返すので、実害はほぼ無いと見ています。P2 の期限切れ処理で回収する予定です。</p>
+    <p>そうなった注文を見つける SQL は、コード解説書 9 章の付録 9.6 にあります（<code>payment_failed</code> の注文のカートが <code>ordered</code> のまま残っているものを探す）。2 段目の前で落ちる場合を再現するテストは、今はありません。</p>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>画面の金額を書き換えられたら、どうなりますか</summary>
+  <div class="qa-body">
+    <p>画面の金額は表示用で、サーバーが確定時の単価と設定から計算し直した値と照合します。1 円でも違えば 409 <code>price_changed</code> で、注文は作られません（IT-014-05、手動の ST-SEC-04 は 2026-09-24 に合格）。確認画面を出したあとに価格が変わった場合も同じ扱いです。画面は注文手続きに戻り、次に確認画面を開くときに金額を取り直します。</p>
+  </div>
+</details>
+</section>

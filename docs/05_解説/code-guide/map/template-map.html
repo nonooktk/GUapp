@@ -1,0 +1,809 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUapp リポジトリ地図</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+{{PARTIAL:tokens.css}}
+
+/* ---------- ベース ---------- */
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans JP',system-ui,sans-serif;font-size:15px;line-height:1.8;padding-block:0 64px;padding-inline:16px;overflow-wrap:anywhere}
+h1,h2,h3,h4{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;line-height:1.3;text-wrap:balance;margin:0}
+h1{font-size:clamp(26px,5vw,38px);font-weight:900;letter-spacing:-.01em}
+h2{font-size:clamp(20px,3.2vw,24px);font-weight:900;margin-top:40px;padding-top:16px;border-top:3px solid var(--ink)}
+h3{font-size:17px;font-weight:700;color:var(--navy)}
+h4{font-size:12.5px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);margin-top:18px}
+p{margin:10px 0;max-width:44em}
+ul,ol{max-width:44em;padding-left:1.4em}
+li{margin:4px 0}
+strong{font-weight:700}
+a{color:var(--navy)}
+code{font-family:var(--mono);font-size:.9em;background:var(--navy-soft);padding:1px 6px;border-radius:4px}
+:focus-visible{outline:2px solid var(--navy);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.wrap{max-width:1140px;margin:0 auto}
+
+/* レイヤー色（カード・ツリーの左線・バッジ共通） */
+[data-layer="web"]{--lc:var(--l-bff)}
+[data-layer="api"]{--lc:var(--l-api)}
+[data-layer="docs"]{--lc:var(--l-repo)}
+[data-layer="scripts"]{--lc:var(--l-service)}
+[data-layer="ci"]{--lc:var(--l-ci)}
+[data-layer="root"]{--lc:var(--l-infra)}
+.layer{display:inline-block;font-size:12px;font-weight:700;line-height:1.7;padding:0 9px;border-radius:999px;white-space:nowrap;vertical-align:baseline;color:var(--lc,var(--ink-2));background:var(--navy-soft);border:1px solid var(--lc,var(--line))}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .layer{background:color-mix(in srgb,var(--lc,var(--ink-3)) 12%,var(--paper))}
+}
+
+{{PARTIAL:drawer.css}}
+
+/* ---------- ヘッダー ---------- */
+header.top{padding-block:44px 24px;border-bottom:1px solid var(--line)}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.lead{margin-top:14px;font-size:16.5px;color:var(--ink-2);max-width:44em}
+.lead>:first-child{margin-top:0}
+.meta{display:flex;flex-wrap:wrap;gap:6px 24px;margin-top:18px;font-size:13px;color:var(--ink-3)}
+.meta a{color:var(--ink-2)}
+.head-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-top:16px}
+.howto{margin:0;padding:8px 14px;background:var(--navy-soft);border-radius:6px;font-size:14px;color:var(--ink);max-width:none;flex:1 1 320px}
+.howto .ref-demo{font-family:var(--mono);font-size:.9em;color:var(--navy);font-weight:500}
+
+/* ボタン（ドロワーの .btn は drawer.css。ここでは強調版だけ足す） */
+.btn.primary{background:var(--navy);border-color:var(--navy);color:var(--on-accent)}
+.btn.primary:hover{color:var(--on-accent);opacity:.9}
+.btn.is-open{background:var(--navy-soft);border-color:var(--navy)}
+.btn.primary.is-open{background:var(--navy);color:var(--on-accent)}
+.btn.small{font-size:12.5px;padding:3px 10px}
+
+/* ---------- 全体図 ---------- */
+.sec-lead{color:var(--ink-2);font-size:14px;margin:8px 0 0;max-width:none}
+.blocks{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+.blk{flex:1 1 220px;min-width:0;background:var(--paper);border:1px solid var(--line);border-top:4px solid var(--lc,var(--ink-3));border-radius:6px;padding:12px 14px 12px;display:flex;flex-direction:column;gap:4px;cursor:default}
+.blk[data-big]{flex-basis:min(400px,100%)}
+.blk.is-current{border-color:var(--lc,var(--ink-3));box-shadow:0 0 0 2px var(--lc,var(--ink-3))}
+.blk-main{font:inherit;text-align:left;background:none;border:0;padding:0;margin:0;color:inherit;cursor:pointer;display:block;width:100%;border-radius:4px}
+.blk-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}
+.blk-title{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--lc,var(--ink-2));overflow-wrap:anywhere}
+.blk-sub{display:block;margin-top:2px;font-weight:700;font-size:14.5px;line-height:1.5}
+.blk-sum{display:block;margin-top:4px;font-size:13.5px;line-height:1.65;color:var(--ink-2)}
+.blk-stat{margin:4px 0 0;font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+.chips{display:flex;flex-wrap:wrap;gap:4px 6px;list-style:none;margin:2px 0 0;padding:0;max-width:none}
+.chips li{margin:0;min-width:0;max-width:100%}
+.chip{font:inherit;font-family:var(--mono);font-size:12px;line-height:1.5;padding:1px 9px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink-2);cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.chip:hover{border-color:var(--lc,var(--navy));color:var(--ink)}
+.chip small{color:var(--ink-3);font-size:11px;margin-left:5px}
+.chips .more{font-size:12px;color:var(--ink-3);padding:1px 4px}
+
+/* ---------- ツリーと説明パネル ---------- */
+.explorer{display:block;margin-top:16px}
+@media (min-width:760px){
+  .explorer{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:20px;align-items:start}
+}
+.tree-col{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:6px}
+.tree-tools{position:sticky;top:0;z-index:3;background:var(--paper);padding:8px;border-bottom:1px solid var(--line);border-radius:6px 6px 0 0}
+.tree-tools .find{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.tree-tools input{flex:1 1 180px;min-width:0;font:inherit;font-size:14px;line-height:1.5;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.tree-tools .count{font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+.sel-bar{display:none;align-items:center;gap:8px;margin-top:6px;font-size:12.5px}
+.sel-bar .sb-label{flex:none;color:var(--ink-3)}
+.sel-bar .sb-path{flex:1 1 0;min-width:0;font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-2)}
+@media (max-width:759.98px){
+  .sel-bar{display:flex}
+}
+.tree{list-style:none;margin:0;padding:4px 0 8px;max-width:none}
+.tree .empty{margin:0;padding:12px 16px;color:var(--ink-3);font-size:14px}
+.row{display:flex;align-items:center;gap:6px;min-height:28px;margin:0;padding:1px 10px 1px calc(6px + var(--d,0) * 14px);border-left:3px solid transparent;font-size:14px;line-height:1.4;cursor:pointer;scroll-margin-top:64px;scroll-margin-bottom:16px}
+@media (max-width:759.98px){.row{scroll-margin-top:104px}}
+.row[data-layer]{border-left-color:var(--lc)}
+.row:hover{background:var(--navy-soft)}
+.row.is-sel{background:var(--navy-soft);box-shadow:inset 0 0 0 1px var(--navy)}
+.row:focus-visible{outline:2px solid var(--navy);outline-offset:-2px}
+.row .tw{flex:none;width:14px;text-align:center;color:var(--ink-3);font-size:11px;line-height:1}
+.row .fd{flex:none;width:15px;height:11px;border-radius:2px;background:var(--amber);opacity:.8;margin:0 5px 0 0}
+.row .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.is-dir .nm{font-weight:500}
+.row.is-sel .nm{font-weight:700}
+.row.is-hit .nm{background:var(--amber-soft);border-radius:3px;padding:0 3px}
+.row .rl{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:6px;font-size:12px;color:var(--ink-2)}
+.row .cn{flex:none;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.ft{--fc:var(--ink-3);flex:none;box-sizing:border-box;min-width:30px;padding:0 3px;text-align:center;font-family:var(--mono);font-size:10.5px;line-height:1.6;border-radius:3px;color:var(--fc);border:1px solid var(--fc);background:var(--navy-soft)}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .ft{background:color-mix(in srgb,var(--fc) 10%,var(--paper))}
+}
+.ft[data-k="py"]{--fc:var(--l-api)}
+.ft[data-k="ts"],.ft[data-k="tsx"],.ft[data-k="css"]{--fc:var(--l-screen)}
+.ft[data-k="js"],.ft[data-k="mjs"],.ft[data-k="json"],.ft[data-k="lock"]{--fc:var(--l-repo)}
+.ft[data-k="yml"],.ft[data-k="yaml"],.ft[data-k="toml"]{--fc:var(--l-infra)}
+.ft[data-k="sh"],.ft[data-k="sql"]{--fc:var(--l-service)}
+.ft[data-k="docx"]{--fc:var(--l-bff)}
+.ft[data-k="img"]{--fc:var(--l-db)}
+
+.panel{min-width:0;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:14px 18px 20px}
+@media (min-width:760px){
+  .panel{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;overscroll-behavior:contain}
+}
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:0 2px;font-family:var(--mono);font-size:12.5px;line-height:1.9;color:var(--ink-3)}
+.crumbs button{font:inherit;background:none;border:0;padding:0 4px;color:var(--navy);cursor:pointer;border-radius:3px}
+.crumbs button:hover{background:var(--navy-soft)}
+.crumbs .cur{padding:0 4px;color:var(--ink);font-weight:500}
+.p-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:6px}
+.p-title{font-family:var(--mono);font-size:19px;font-weight:500;overflow-wrap:anywhere}
+.kind{display:inline-block;font-size:12px;font-weight:700;line-height:1.7;padding:0 9px;border-radius:999px;background:var(--line);color:var(--ink-2);white-space:nowrap}
+.p-role{margin:6px 0 0;font-weight:700;font-size:15.5px;max-width:none}
+.acts{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:12px}
+.p-body{margin-top:10px}
+.p-body>:first-child{margin-top:0}
+.p-body p,.p-body ul,.p-body ol{max-width:none}
+.p-empty{color:var(--ink-2);max-width:none}
+.p-nodesc{margin:12px 0 0;font-size:13px;color:var(--ink-3);max-width:none}
+.noprev{margin:10px 0 0;padding:6px 12px;border-radius:6px;background:var(--amber-soft);font-size:13.5px;max-width:none}
+.panel ul.plain{padding-left:1.3em;margin:6px 0 0;max-width:none}
+.kf{list-style:none;padding:0;margin:6px 0 0;max-width:none}
+.kf li{margin:2px 0}
+.kf button{font:inherit;text-align:left;display:block;width:100%;background:none;border:1px solid transparent;border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--ink)}
+.kf button:hover{background:var(--navy-soft);border-color:var(--line)}
+.kf .kf-n{font-family:var(--mono);font-size:13.5px;font-weight:500;color:var(--navy)}
+.kf .kf-d{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);overflow-wrap:anywhere}
+.kf .kf-r{display:block;font-size:13px;color:var(--ink-2)}
+.kf .kf-x{display:block;padding:4px 8px}
+.glinks{list-style:none;padding:0;margin:6px 0 0;max-width:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px;margin:8px 0 0}
+.stats div{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.stats dt{font-size:11.5px;color:var(--ink-3);font-weight:500}
+.stats dd{margin:0;font-family:var(--mono);font-size:13.5px;overflow-wrap:anywhere}
+.exts{display:flex;flex-wrap:wrap;gap:4px 6px;list-style:none;padding:0;margin:8px 0 0;max-width:none}
+.exts li{margin:0;font-size:12.5px;padding:0 9px;border:1px solid var(--line);border-radius:999px;background:var(--bg);font-family:var(--mono)}
+.exts li b{font-weight:500;color:var(--ink-3);margin-left:5px}
+.only-narrow{display:none}
+@media (max-width:759.98px){.only-narrow{display:block;margin-top:14px}}
+
+/* 使い方のコツ・フッター */
+.tips{margin-top:40px}
+.tips-body{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 20px 14px;max-width:none}
+.tips-body h3{margin-top:12px}
+.tips-body p,.tips-body ul,.tips-body ol{max-width:46em}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-3)}
+
+@media print{.drawer,.drawer-backdrop,.ref-tip{display:none!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">GUapp ／ どこに何があるかを引く地図</div>
+  <h1>GUapp リポジトリ地図</h1>
+  <div class="lead">
+{{INTRO_HTML}}
+  </div>
+  <div class="meta">
+    <span>ツリー <a href="https://github.com/nonooktk/GUapp/commit/{{COMMIT_FULL}}" target="_blank" rel="noopener noreferrer"><code>{{COMMIT}}</code></a></span>
+    <span>コード <a href="https://github.com/nonooktk/GUapp/commit/{{CODE_COMMIT_FULL}}" target="_blank" rel="noopener noreferrer"><code>{{CODE_COMMIT}}</code></a></span>
+    <span>フォルダ {{TOTAL_DIRS}} ／ ファイル {{TOTAL_FILES}}</span>
+    <span>作成 {{BUILD_DATE}}</span>
+    <span>リポジトリ <a href="https://github.com/nonooktk/GUapp" target="_blank" rel="noopener noreferrer">nonooktk/GUapp</a></span>
+  </div>
+  <div class="head-actions">
+    <a class="btn primary" href="{{GUIDE_URL}}">コード解説書を開く</a>
+    <p class="howto">全体図のカードか左のツリーを選ぶと、右に説明が出ます。<span class="ref-demo">青い等幅の名前</span>をクリックするとコードが開きます。</p>
+  </div>
+  <noscript><p class="noprev">この地図の表示には JavaScript が必要です。</p></noscript>
+</header>
+
+<main id="content">
+<section id="overview" aria-labelledby="overview-h">
+  <h2 id="overview-h">全体図</h2>
+  <p class="sec-lead">IDE のエクスプローラーの上から順に並べています。カードを押すと、下のツリーで該当フォルダまで開きます。</p>
+  <div class="blocks" id="blocks"></div>
+</section>
+
+<section id="explorer" aria-labelledby="explorer-h">
+  <h2 id="explorer-h">フォルダとファイル</h2>
+  <div class="explorer">
+    <div class="tree-col">
+      <div class="tree-tools">
+        <div class="find">
+          <label class="visually-hidden" for="tree-filter">ツリーをパスで絞り込む</label>
+          <input type="search" id="tree-filter" placeholder="パスで絞り込み（例: cart）" autocomplete="off">
+          <span class="count" id="tree-count" aria-live="polite"></span>
+        </div>
+        <div class="sel-bar" id="sel-bar" hidden>
+          <span class="sb-label">選択中</span>
+          <span class="sb-path" id="sel-path"></span>
+          <button type="button" class="btn small" data-act="to-panel">説明へ ↓</button>
+        </div>
+      </div>
+      <ul class="tree" id="tree" role="tree" aria-label="リポジトリのフォルダとファイル"></ul>
+    </div>
+    <aside class="panel" id="panel" tabindex="-1" aria-label="選択中のフォルダ・ファイルの説明"></aside>
+  </div>
+</section>
+
+{{TIPS_SECTION}}
+
+<footer>GUapp リポジトリ地図 ／ ツリー {{COMMIT}}・コード {{CODE_COMMIT}} ／ 作成 {{BUILD_DATE}}。コードのプレビューは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
+</main>
+</div>
+<div class="visually-hidden" id="live" aria-live="polite"></div>
+
+<script type="application/json" id="snippets-data">{{SNIPPETS_JSON}}</script>
+{{SNIPPETS_CODE}}
+<script type="application/json" id="map-data">{{MAP_JSON}}</script>
+<script id="hljs-script" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" async></script>
+<script>
+(function () {
+  'use strict';
+
+{{PARTIAL:drawer.js}}
+
+  /* ---------------------------------------------------------------
+     地図のデータ
+  --------------------------------------------------------------- */
+  var LAYER_LABEL = { web: 'Web', api: 'API', docs: 'ドキュメント', scripts: 'スクリプト', ci: 'CI', root: 'ルート' };
+  var REASON = {
+    env: '環境変数ファイルのためプレビュー対象外',
+    secret: '秘密検査の設定ファイルのためプレビュー対象外',
+    test: 'テストコードのためプレビュー対象外',
+    public: '静的アセット置き場（public）のためプレビュー対象外',
+    image: '画像ファイルのためプレビューなし',
+    binary: 'バイナリファイル（docx など）のためプレビューなし',
+    html: 'HTML（解説書・地図の出力）のためプレビュー対象外',
+    big: 'サイズが 200KB を超えるためプレビュー対象外',
+    out: 'この種類のファイルはプレビュー対象外',
+    err: '読み込めなかったためプレビューなし'
+  };
+  var IMG = { png: 1, jpg: 1, jpeg: 1, gif: 1, webp: 1, avif: 1, ico: 1, bmp: 1, svg: 1 };
+
+  var MAP = { files: [], blocks: [], nodes: {}, collapse: [], guide: { url: '', titles: {} }, repo: '', tree: { blob: '', dir: '' }, code: { blob: '', dir: '' } };
+  try { MAP = JSON.parse(document.getElementById('map-data').textContent) || MAP; } catch (e) { /* 空の地図で続行 */ }
+  var DESC = MAP.nodes || {};
+  var GUIDE = MAP.guide || { url: '', titles: {} };
+
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function descOf(p) { return has(DESC, p) ? DESC[p] : {}; }
+  function snOf(p) { return has(SN, p) ? SN[p] : null; }
+  function escA(s) { return esc(s).replace(/"/g, '&quot;'); }
+  function fmtNum(n) { return Number(n).toLocaleString('ja-JP'); }
+  function fmtSize(b) {
+    if (b < 1024) { return b + ' B'; }
+    if (b < 1048576) { return (b / 1024).toFixed(1) + ' KB'; }
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+  function norm(s) { return String(s).normalize('NFKC').toLowerCase(); }
+  function extOf(name) { var i = name.lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : ''; }
+  function extLabel(name) { var e = extOf(name); return e ? '.' + e : (name.charAt(0) === '.' ? name : '(拡張子なし)'); }
+  function smooth() { return RM.matches ? 'auto' : 'smooth'; }
+
+  /* ---------------------------------------------------------------
+     ツリーの構築（ls-tree の平らな一覧 → 入れ子）
+  --------------------------------------------------------------- */
+  var ROOT = { path: '', name: '', type: 'dir', parent: null, depth: -1, children: [] };
+  var BYPATH = Object.create(null);
+  BYPATH[''] = ROOT;
+
+  function ensureDir(path) {
+    if (BYPATH[path]) { return BYPATH[path]; }
+    var i = path.lastIndexOf('/');
+    var parent = ensureDir(i < 0 ? '' : path.slice(0, i));
+    var n = { path: path, name: path.slice(i + 1), type: 'dir', parent: parent, children: [] };
+    parent.children.push(n);
+    BYPATH[path] = n;
+    return n;
+  }
+
+  function buildTree() {
+    MAP.files.forEach(function (f) {
+      var path = f[0], i = path.lastIndexOf('/');
+      var parent = ensureDir(i < 0 ? '' : path.slice(0, i));
+      var n = { path: path, name: path.slice(i + 1), type: 'file', parent: parent, size: f[1], lines: f[2], why: f[3], treeOnly: !!f[4] };
+      parent.children.push(n);
+      BYPATH[path] = n;
+    });
+    (MAP.collapse || []).forEach(function (c) {
+      var n = BYPATH[c.path];
+      if (n && n.type === 'dir') { n.collapsed = true; n.label = c.label || ''; }
+    });
+    var ord = 0;
+    (function walk(n, depth) {
+      n.depth = depth;
+      n.key = norm(n.path);
+      n.ord = ord++;
+      if (n.type === 'file') { n.count = 1; return; }
+      n.children.sort(function (a, b) {
+        if (a.type !== b.type) { return a.type === 'dir' ? -1 : 1; }
+        var x = a.name.toLowerCase(), y = b.name.toLowerCase();
+        if (x !== y) { return x < y ? -1 : 1; }
+        return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+      });
+      n.count = 0; n.dirs = 0; n.lines = 0; n.exts = Object.create(null);
+      var treeOnly = n.children.length > 0;
+      n.children.forEach(function (c) {
+        walk(c, depth + 1);
+        if (!c.treeOnly) { treeOnly = false; }
+        if (c.type === 'file') {
+          n.count += 1;
+          var k = extLabel(c.name);
+          n.exts[k] = (n.exts[k] || 0) + 1;
+          if (c.lines != null) { n.lines += c.lines; }
+        } else {
+          n.count += c.count; n.dirs += 1 + c.dirs; n.lines += c.lines;
+          Object.keys(c.exts).forEach(function (k) { n.exts[k] = (n.exts[k] || 0) + c.exts[k]; });
+        }
+      });
+      n.treeOnly = treeOnly;
+    })(ROOT, -1);
+
+    // ブロック（色分け）: 自分か祖先のうち最も近いブロックを持たせる
+    var blockAt = Object.create(null);
+    (MAP.blocks || []).forEach(function (b) { blockAt[b.path] = b; });
+    (function assign(n, inherit) {
+      var own = n.path !== '' ? blockAt[n.path] : null;
+      n.block = own || inherit || null;
+      if (n.type === 'dir') { n.children.forEach(function (c) { assign(c, n.block); }); }
+    })(ROOT, null);
+    ROOT.children.forEach(function (c) { if (c.type === 'file' && blockAt['']) { c.block = blockAt['']; } });
+    ROOT.block = null;
+  }
+
+  /* ---------------------------------------------------------------
+     状態
+  --------------------------------------------------------------- */
+  var $tree = $('#tree'), $filter = $('#tree-filter'), $count = $('#tree-count'), $panel = $('#panel');
+  var $blocks = $('#blocks'), $selbar = $('#sel-bar'), $selpath = $('#sel-path'), $live = $('#live');
+  var sel = null;      // 選択中のパス（null: 未選択、'': リポジトリ全体）
+  var cursor = null;   // キーボードのフォーカス行
+  var terms = [];      // 絞り込みの語（AND）
+  var open = Object.create(null);       // 開いているフォルダ
+  var VISIBLE = [], ROWEL = Object.create(null), KEEP = Object.create(null), SELF = Object.create(null), HITS = 0;
+
+  function initOpen() {
+    var a = BYPATH.apps;
+    if (a && a.type === 'dir') {
+      open.apps = true;
+      a.children.forEach(function (c) { if (c.type === 'dir') { open[c.path] = true; } });
+    }
+  }
+
+  function isOpenNow(n) { return n.type === 'dir' && !n.collapsed && (terms.length > 0 || !!open[n.path]); }
+
+  /* ---------------------------------------------------------------
+     ツリーの描画
+  --------------------------------------------------------------- */
+  function mark(n) {
+    var self = terms.every(function (t) { return n.key.indexOf(t) >= 0; });
+    var any = self;
+    if (n.type === 'dir') { n.children.forEach(function (c) { if (mark(c)) { any = true; } }); }
+    if (any) { KEEP[n.path] = 1; }
+    if (self) { SELF[n.path] = 1; }
+    return any;
+  }
+
+  function computeVisible() {
+    VISIBLE = []; KEEP = Object.create(null); SELF = Object.create(null); HITS = 0;
+    var filtering = terms.length > 0;
+    if (filtering) { ROOT.children.forEach(mark); }
+    (function walk(list) {
+      list.forEach(function (n) {
+        if (filtering && !KEEP[n.path]) { return; }
+        VISIBLE.push(n);
+        if (filtering && SELF[n.path]) { HITS++; }
+        if (isOpenNow(n)) { walk(n.children); }
+      });
+    })(ROOT.children);
+  }
+
+  function rowRole(n) {
+    if (n.collapsed) { return n.label || ''; }
+    return descOf(n.path).role || '';
+  }
+
+  function ftHtml(n) {
+    var e = extOf(n.name), k = e, label = e;
+    if (IMG[e]) { k = 'img'; label = '画像'; }
+    if (!label || label.length > 4) { k = ''; label = '·'; }
+    return '<span class="ft" data-k="' + escA(k) + '" aria-hidden="true">' + esc(label) + '</span>';
+  }
+
+  function renderTree() {
+    var hadFocus = $tree.contains(document.activeElement);
+    computeVisible();
+    var visSet = Object.create(null);
+    VISIBLE.forEach(function (n) { visSet[n.path] = true; });
+    if (cursor === null || !visSet[cursor]) {
+      cursor = (sel && visSet[sel]) ? sel : (VISIBLE.length ? VISIBLE[0].path : null);
+    }
+    var filtering = terms.length > 0, html = '';
+    VISIBLE.forEach(function (n) {
+      var isDir = n.type === 'dir';
+      var expandable = isDir && !n.collapsed;
+      var isOpen = expandable && isOpenNow(n);
+      var role = rowRole(n);
+      var cls = 'row' + (isDir ? ' is-dir' : '') + (n.path === sel ? ' is-sel' : '') + (filtering && SELF[n.path] ? ' is-hit' : '');
+      html += '<li class="' + cls + '" role="treeitem" data-p="' + escA(n.path) + '" aria-level="' + (n.depth + 1) + '"' +
+        ' aria-selected="' + (n.path === sel ? 'true' : 'false') + '"' +
+        (expandable ? ' aria-expanded="' + (isOpen ? 'true' : 'false') + '"' : '') +
+        (n.block && n.block.layer ? ' data-layer="' + escA(n.block.layer) + '"' : '') +
+        ' style="--d:' + n.depth + '" tabindex="' + (n.path === cursor ? '0' : '-1') + '"' +
+        ' title="' + escA(n.path + (role ? '  ' + role : '')) + '">' +
+        '<span class="tw" aria-hidden="true">' + (expandable ? (isOpen ? '▾' : '▸') : '') + '</span>' +
+        (isDir ? '<span class="fd" aria-hidden="true"></span>' : ftHtml(n)) +
+        '<span class="nm">' + esc(n.name) + '</span>' +
+        '<span class="rl">' + esc(role) + '</span>' +
+        (isDir ? '<span class="cn" title="ファイル数">' + fmtNum(n.count) + '</span>' : '') +
+        '</li>';
+    });
+    $tree.innerHTML = html || '<li class="empty" role="none">該当するパスがありません</li>';
+    ROWEL = Object.create(null);
+    $$('li.row', $tree).forEach(function (li) { ROWEL[li.getAttribute('data-p')] = li; });
+    if (hadFocus && cursor !== null && ROWEL[cursor]) { ROWEL[cursor].focus({ preventScroll: true }); }
+    $count.textContent = filtering ? HITS + ' 件ヒット' : '';
+  }
+
+  function focusRow(path, scroll) {
+    var li = ROWEL[path];
+    if (!li) { return; }
+    var old = ROWEL[cursor];
+    if (old && old !== li) { old.tabIndex = -1; }
+    cursor = path;
+    li.tabIndex = 0;
+    li.focus({ preventScroll: true });
+    if (scroll !== false) { li.scrollIntoView({ block: 'nearest', behavior: smooth() }); }
+  }
+
+  /* ---------------------------------------------------------------
+     選択
+  --------------------------------------------------------------- */
+  function visibleTarget(n) {
+    var t = n;
+    for (var a = n.parent; a && a !== ROOT; a = a.parent) { if (a.collapsed) { t = a; } }
+    return t;
+  }
+
+  function updateSelBar() {
+    $selbar.hidden = sel === null;
+    $selpath.textContent = sel === null ? '' : (sel === '' ? 'GUapp（リポジトリ全体）' : sel);
+  }
+
+  function markBlocks() {
+    var cur = sel !== null && BYPATH[sel] && BYPATH[sel].block ? BYPATH[sel].block.id : '';
+    $$('.blk', $blocks).forEach(function (c) { c.classList.toggle('is-current', !!cur && c.getAttribute('data-id') === cur); });
+  }
+
+  function select(path, o) {
+    o = o || {};
+    var n = BYPATH[path];
+    if (!n || n === ROOT) { return; }
+    n = visibleTarget(n);
+    if (o.reveal && terms.length && !KEEP[n.path]) { terms = []; $filter.value = ''; }
+    if (o.reveal) {
+      for (var a = n.parent; a && a !== ROOT; a = a.parent) { open[a.path] = true; }
+      if (o.openSelf && n.type === 'dir' && !n.collapsed) { open[n.path] = true; }
+    }
+    sel = n.path; cursor = n.path;
+    renderTree(); renderPanel(); markBlocks(); updateSelBar();
+    $live.textContent = '選択: ' + n.path;
+    var li = ROWEL[n.path];
+    if (li && o.focus) { li.focus({ preventScroll: true }); }
+    if (li && o.scroll) { li.scrollIntoView({ block: o.scroll, behavior: smooth() }); }
+  }
+
+  function selectRoot(scroll) {
+    sel = '';
+    renderTree(); renderPanel(); markBlocks(); updateSelBar();
+    $live.textContent = '選択: リポジトリ全体';
+    if (scroll) { $('#explorer').scrollIntoView({ block: 'start', behavior: smooth() }); }
+  }
+
+  /* ---------------------------------------------------------------
+     説明パネル
+  --------------------------------------------------------------- */
+  function ghUrl(n) {
+    if (n === ROOT) { return MAP.tree.dir; }
+    var base = n.treeOnly ? MAP.tree : MAP.code;
+    var enc = n.path.split('/').map(encodeURIComponent).join('/');
+    return (n.type === 'dir' ? base.dir + '/' : base.blob) + enc;
+  }
+
+  function crumbsHtml(n) {
+    var segs = n.path.split('/'), acc = '';
+    var h = '<nav class="crumbs" aria-label="パス"><button type="button" data-go="">GUapp</button>';
+    segs.forEach(function (s, i) {
+      acc = acc ? acc + '/' + s : s;
+      h += '<span aria-hidden="true">/</span>';
+      if (i === segs.length - 1) { h += '<span class="cur" aria-current="true">' + esc(s) + '</span>'; }
+      else { h += '<button type="button" data-go="' + escA(acc) + '">' + esc(s) + '</button>'; }
+    });
+    return h + '</nav>';
+  }
+
+  function statsHtml(n) {
+    var h = '<h4>中身</h4><dl class="stats">';
+    var files = 0, dirs = 0;
+    n.children.forEach(function (c) { if (c.type === 'dir') { dirs++; } else { files++; } });
+    h += '<div><dt>ファイル（配下）</dt><dd>' + fmtNum(n.count) + ' 件</dd></div>';
+    h += '<div><dt>直下</dt><dd>' + fmtNum(dirs) + ' フォルダ・' + fmtNum(files) + ' ファイル</dd></div>';
+    h += '<div><dt>サブフォルダ（配下）</dt><dd>' + fmtNum(n.dirs) + ' 件</dd></div>';
+    h += '<div><dt>合計行数（テキスト）</dt><dd>' + fmtNum(n.lines) + ' 行</dd></div></dl>';
+    var arr = Object.keys(n.exts).map(function (k) { return [k, n.exts[k]]; })
+      .sort(function (a, b) { return b[1] - a[1] || (a[0] < b[0] ? -1 : 1); });
+    var top = arr.slice(0, 8), rest = 0;
+    arr.slice(8).forEach(function (x) { rest += x[1]; });
+    if (top.length) {
+      h += '<ul class="exts" aria-label="拡張子の内訳">';
+      top.forEach(function (x) { h += '<li>' + esc(x[0]) + '<b>' + fmtNum(x[1]) + '</b></li>'; });
+      if (rest) { h += '<li>その他<b>' + fmtNum(rest) + '</b></li>'; }
+      h += '</ul>';
+    }
+    return h;
+  }
+
+  function fileStatsHtml(n) {
+    var h = '<h4>ファイル情報</h4><dl class="stats">';
+    h += '<div><dt>行数</dt><dd>' + (n.lines == null ? '—' : fmtNum(n.lines) + ' 行') + '</dd></div>';
+    h += '<div><dt>サイズ</dt><dd>' + fmtSize(n.size) + '</dd></div>';
+    h += '<div><dt>種類</dt><dd>' + esc(extLabel(n.name)) + '</dd></div></dl>';
+    return h;
+  }
+
+  function keyFilesHtml(list) {
+    var h = '<h4>主なファイル</h4><ul class="kf">';
+    list.forEach(function (p) {
+      var t = BYPATH[p];
+      if (!t) { h += '<li><span class="kf-x"><span class="kf-n">' + esc(p) + '</span></span></li>'; return; }
+      var i = p.lastIndexOf('/');
+      var role = rowRole(t);
+      h += '<li><button type="button" data-go="' + escA(p) + '" title="' + escA(p) + '"><span class="kf-n">' + esc(t.name) + '</span>' +
+        (i > 0 ? '<span class="kf-d">' + esc(p.slice(0, i)) + '</span>' : '') +
+        (role ? '<span class="kf-r">' + esc(role) + '</span>' : '') + '</button></li>';
+    });
+    return h + '</ul>';
+  }
+
+  function guideHtml(ids) {
+    var h = '<h4>解説書の関連章</h4><ul class="glinks">';
+    ids.forEach(function (id) {
+      var label = (GUIDE.titles && GUIDE.titles[id]) || id;
+      h += '<li><a href="' + escA((GUIDE.url || '') + '#' + id) + '" target="_blank" rel="noopener noreferrer">' + esc(label) + ' ↗</a></li>';
+    });
+    return h + '</ul>';
+  }
+
+  function actionsHtml(n, d) {
+    var h = '<div class="acts">';
+    if (n.type === 'file' && snOf(n.path)) {
+      h += '<button type="button" class="btn primary" data-ref="' + escA(n.path) + '">中身を見る</button>';
+    }
+    if (d.ref && d.ref !== n.path && snOf(d.ref)) {
+      var sym = snOf(d.ref).symbol;
+      h += '<button type="button" class="btn" data-ref="' + escA(d.ref) + '">主な関数を見る' + (sym ? '（' + esc(sym) + '）' : '') + '</button>';
+    }
+    h += '<a class="btn" target="_blank" rel="noopener noreferrer" href="' + escA(ghUrl(n)) + '">GitHub で開く ↗</a>';
+    if (n !== ROOT) { h += '<button type="button" class="btn" data-copy="' + escA(n.path) + '">パスをコピー</button>'; }
+    return h + '</div>';
+  }
+
+  function renderPanel() {
+    var h = '';
+    if (sel === null) {
+      h = '<p class="p-empty">全体図のカード、または左のツリーのフォルダ・ファイルを選ぶと、ここに説明が出ます。</p>' + statsHtml(ROOT).replace('<h4>中身</h4>', '<h4>リポジトリ全体</h4>');
+    } else if (sel === '') {
+      var rb = (MAP.blocks || []).filter(function (b) { return b.path === ''; })[0];
+      h += '<div class="p-head"><h3 class="p-title">GUapp</h3><span class="kind">リポジトリ全体</span></div>';
+      if (rb && rb.subtitle) { h += '<p class="p-role">' + esc(rb.subtitle) + '</p>'; }
+      h += actionsHtml(ROOT, {});
+      if (rb && rb.summary) { h += '<div class="p-body"><p>' + esc(rb.summary) + '</p></div>'; }
+      h += statsHtml(ROOT);
+      h += '<h4>ルート直下</h4><ul class="kf">';
+      ROOT.children.forEach(function (c) {
+        var role = rowRole(c);
+        h += '<li><button type="button" data-go="' + escA(c.path) + '"><span class="kf-n">' + esc(c.name) + (c.type === 'dir' ? '/' : '') + '</span>' +
+          (role ? '<span class="kf-r">' + esc(role) + '</span>' : '') + '</button></li>';
+      });
+      h += '</ul>';
+    } else {
+      var n = BYPATH[sel], d = descOf(n.path), isDir = n.type === 'dir';
+      h += crumbsHtml(n);
+      h += '<div class="p-head"><h3 class="p-title">' + esc(n.name) + '</h3><span class="kind">' + (isDir ? 'フォルダ' : 'ファイル') + '</span>';
+      if (n.block && n.block.layer) { h += '<span class="layer" data-layer="' + escA(n.block.layer) + '">' + esc(LAYER_LABEL[n.block.layer] || n.block.layer) + '</span>'; }
+      h += '</div>';
+      var role = d.role || (n.collapsed ? n.label : '');
+      if (role) { h += '<p class="p-role">' + esc(role) + '</p>'; }
+      h += actionsHtml(n, d);
+      if (!isDir && !snOf(n.path)) {
+        h += '<p class="noprev">プレビューなし: ' + esc(REASON[n.why] || REASON.out) + '</p>';
+      }
+      if (d.body_html) { h += '<div class="p-body">' + d.body_html + '</div>'; }
+      else if (!role) { h += '<p class="p-nodesc">説明は未登録です（件数・拡張子・行数は自動集計）。</p>'; }
+      if (d.open_when && d.open_when.length) {
+        h += '<h4>こういうときに開く</h4><ul class="plain">' + d.open_when.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>';
+      }
+      if (d.key_files && d.key_files.length) { h += keyFilesHtml(d.key_files); }
+      if (d.guide && d.guide.length) { h += guideHtml(d.guide); }
+      h += isDir ? statsHtml(n) : fileStatsHtml(n);
+      h += '<div class="only-narrow"><button type="button" class="btn small" data-act="to-tree">↑ ツリーへ戻る</button></div>';
+    }
+    $panel.innerHTML = h;
+    $panel.scrollTop = 0;
+    initRefs();
+  }
+
+  /* ---------------------------------------------------------------
+     全体図（ブロックのカード）
+  --------------------------------------------------------------- */
+  function renderBlocks() {
+    var list = (MAP.blocks || []).filter(function (b) { return b.path === '' || BYPATH[b.path]; });
+    list.sort(function (a, b) {
+      var x = a.path === '' ? 1e9 : BYPATH[a.path].ord, y = b.path === '' ? 1e9 : BYPATH[b.path].ord;
+      return x - y;
+    });
+    if (!list.length) { $('#overview').hidden = true; return; }
+    var html = '';
+    list.forEach(function (b) {
+      var n = b.path === '' ? ROOT : BYPATH[b.path];
+      var isRoot = b.path === '';
+      var big = !isRoot && n.count >= 60;
+      var kids = n.children.filter(function (c) { return c.type === 'dir'; });
+      var kidsAreDirs = kids.length > 0;
+      if (!kidsAreDirs) { kids = n.children.filter(function (c) { return c.type === 'file'; }); }
+      if (isRoot) { kids = n.children.filter(function (c) { return c.type === 'file'; }); kidsAreDirs = false; }
+      var limit = big ? 14 : 8, shown = kids.slice(0, limit), more = kids.length - shown.length;
+      var stat;
+      if (isRoot) { stat = 'ルート直下のファイル ' + fmtNum(kids.length) + ' 件'; }
+      else if (n.type === 'file') { stat = 'ファイル 1 件'; }
+      else { stat = fmtNum(n.count) + ' ファイル ／ ' + fmtNum(n.dirs) + ' フォルダ'; }
+      html += '<article class="blk" data-id="' + escA(b.id) + '" data-p="' + escA(b.path) + '" data-layer="' + escA(b.layer) + '"' + (big ? ' data-big="1"' : '') + '>' +
+        '<button type="button" class="blk-main" data-go="' + escA(b.path) + '">' +
+        '<span class="blk-top"><span class="blk-title">' + esc(b.title) + '</span><span class="layer" data-layer="' + escA(b.layer) + '">' + esc(LAYER_LABEL[b.layer] || b.layer) + '</span></span>' +
+        (b.subtitle ? '<span class="blk-sub">' + esc(b.subtitle) + '</span>' : '') +
+        (b.summary ? '<span class="blk-sum">' + esc(b.summary) + '</span>' : '') +
+        '</button><p class="blk-stat">' + stat + '</p>';
+      if (shown.length) {
+        html += '<ul class="chips" aria-label="' + escA(b.title) + ' の中身">';
+        shown.forEach(function (c) {
+          html += '<li><button type="button" class="chip" data-go="' + escA(c.path) + '" title="' + escA(c.path) + '">' + esc(c.name) +
+            (c.type === 'dir' ? '<small>' + fmtNum(c.count) + '</small>' : '') + '</button></li>';
+        });
+        if (more > 0) { html += '<li class="more">ほか ' + fmtNum(more) + '</li>'; }
+        html += '</ul>';
+      }
+      html += '</article>';
+    });
+    $blocks.innerHTML = html;
+  }
+
+  /* ---------------------------------------------------------------
+     イベント
+  --------------------------------------------------------------- */
+  function copyText(btn, text) {
+    var orig = btn.textContent;
+    function done(msg) { btn.textContent = msg; setTimeout(function () { btn.textContent = orig; }, 1800); }
+    function fallback() {
+      try {
+        var ta = el('textarea', { 'aria-hidden': 'true', tabindex: '-1' });
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        var ok = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        done(ok ? 'コピーしました' : 'コピーできませんでした');
+      } catch (err) { done('コピーできませんでした'); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(function () { done('コピーしました'); }, fallback); }
+    else { fallback(); }
+  }
+
+  function initEvents() {
+    // 全体図: ブロック・サブフォルダのチップ → ツリーで該当まで展開して選択
+    $blocks.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-go]') : null;
+      if (!b) {
+        var card = e.target.closest ? e.target.closest('.blk') : null;
+        if (card) { b = card.querySelector('.blk-main'); }
+      }
+      if (!b) { return; }
+      var p = b.getAttribute('data-go');
+      if (p === '') { selectRoot(true); } else { select(p, { reveal: true, openSelf: true, scroll: 'center', focus: true }); }
+    });
+
+    // ツリー
+    $tree.addEventListener('click', function (e) {
+      var li = e.target.closest ? e.target.closest('li.row') : null;
+      if (!li) { return; }
+      var n = BYPATH[li.getAttribute('data-p')];
+      if (!n) { return; }
+      cursor = n.path;
+      var expandable = n.type === 'dir' && !n.collapsed;
+      if (expandable && !terms.length) { open[n.path] = !open[n.path]; }
+      if (expandable && e.target.closest('.tw')) { renderTree(); return; }
+      select(n.path, {});
+    });
+    $tree.addEventListener('focusin', function (e) {
+      var li = e.target.closest ? e.target.closest('li.row') : null;
+      if (!li) { return; }
+      var p = li.getAttribute('data-p');
+      if (p !== cursor) {
+        if (ROWEL[cursor]) { ROWEL[cursor].tabIndex = -1; }
+        cursor = p; li.tabIndex = 0;
+      }
+    });
+    $tree.addEventListener('keydown', function (e) {
+      var li = e.target.closest ? e.target.closest('li.row') : null;
+      if (!li || e.altKey || e.ctrlKey || e.metaKey) { return; }
+      var n = BYPATH[li.getAttribute('data-p')];
+      var i = VISIBLE.indexOf(n);
+      if (!n || i < 0) { return; }
+      var expandable = n.type === 'dir' && !n.collapsed, isOpen = expandable && isOpenNow(n), handled = true;
+      switch (e.key) {
+        case 'ArrowDown': if (i + 1 < VISIBLE.length) { focusRow(VISIBLE[i + 1].path); } break;
+        case 'ArrowUp': if (i > 0) { focusRow(VISIBLE[i - 1].path); } break;
+        case 'Home': focusRow(VISIBLE[0].path); break;
+        case 'End': focusRow(VISIBLE[VISIBLE.length - 1].path); break;
+        case 'ArrowRight':
+          if (expandable && !isOpen) { cursor = n.path; open[n.path] = true; renderTree(); }
+          else if (isOpen && VISIBLE[i + 1] && VISIBLE[i + 1].parent === n) { focusRow(VISIBLE[i + 1].path); }
+          break;
+        case 'ArrowLeft':
+          if (isOpen && !terms.length) { cursor = n.path; open[n.path] = false; renderTree(); }
+          else if (n.parent && n.parent !== ROOT && ROWEL[n.parent.path]) { focusRow(n.parent.path); }
+          break;
+        case 'Enter':
+        case ' ': select(n.path, {}); break;
+        default: handled = false;
+      }
+      if (handled) { e.preventDefault(); }
+    });
+
+    // 絞り込み
+    $filter.addEventListener('input', function () {
+      terms = norm($filter.value).split(/\s+/).filter(Boolean);
+      renderTree();
+    });
+    $filter.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && $filter.value) { e.preventDefault(); $filter.value = ''; terms = []; renderTree(); }
+    });
+
+    // 説明パネル・選択バー
+    $panel.addEventListener('click', function (e) {
+      var g = e.target.closest ? e.target.closest('[data-go]') : null;
+      if (g) {
+        var p = g.getAttribute('data-go');
+        if (p === '') { selectRoot(false); }
+        else { select(p, { reveal: true, openSelf: !!(BYPATH[p] && BYPATH[p].type === 'dir'), scroll: 'nearest' }); }
+        return;
+      }
+      var c = e.target.closest ? e.target.closest('[data-copy]') : null;
+      if (c) { copyText(c, c.getAttribute('data-copy')); return; }
+      var a = e.target.closest ? e.target.closest('[data-act="to-tree"]') : null;
+      if (a) {
+        var li = sel ? ROWEL[sel] : null;
+        if (li) { li.focus({ preventScroll: true }); li.scrollIntoView({ block: 'center', behavior: smooth() }); }
+        else { $('#explorer').scrollIntoView({ block: 'start', behavior: smooth() }); }
+      }
+    });
+    $selbar.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-act="to-panel"]')) {
+        $panel.scrollIntoView({ block: 'start', behavior: smooth() });
+        $panel.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     起動
+  --------------------------------------------------------------- */
+  function init() {
+    buildDrawer();
+    buildTree();
+    initOpen();
+    renderBlocks();
+    renderTree();
+    renderPanel();
+    updateSelBar();
+    initEvents();
+    initRefs();
+    initRefEvents();
+    initTip();
+    initHljs();
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+})();
+</script>

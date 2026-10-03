@@ -1,0 +1,39 @@
+:root{
+  color-scheme:light;
+  --bg:#f6f7f9; --paper:#ffffff; --ink:#1c2230; --ink-2:#4a5468; --ink-3:#7b8497;
+  --line:#dde1e8; --navy:#1f3a68; --navy-soft:#e6ecf6; --red:#b8312f; --red-soft:#f9e9e8;
+  --green:#2f7a4c; --green-soft:#e6f2ea; --amber:#9a6b12; --amber-soft:#f8efd9;
+  --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+  --on-accent:#ffffff; --backdrop:rgba(20,24,33,.38); --shadow:rgba(20,24,33,.22);
+  --code-bg:#f3f5f9; --code-ink:#1c2230; --code-gutter:#68738a; --code-gutter-bg:#e9edf4;
+  --hl-kw:#7a3aa8; --hl-str:#2f7a4c; --hl-num:#9a6b12; --hl-com:#6b7488;
+  --hl-fn:#1f3a68; --hl-type:#0f6b73; --hl-attr:#9a6b12; --hl-meta:#6b7488;
+  --l-screen:#2b6cb0; --l-bff:#6b46c1; --l-api:#0f766e; --l-service:#2f7a4c;
+  --l-repo:#9a6b12; --l-db:#b8312f; --l-ci:#5f6a7f; --l-infra:#a3477d;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#141821; --paper:#1c212c; --ink:#e8ebf1; --ink-2:#b4bccb; --ink-3:#8791a4;
+    --line:#2e3542; --navy:#8fb0e6; --navy-soft:#1f2a3d; --red:#e57b78; --red-soft:#3a2323;
+    --green:#7cc79a; --green-soft:#1f3328; --amber:#e0b35a; --amber-soft:#3a3120;
+    --on-accent:#10141c; --backdrop:rgba(0,0,0,.55); --shadow:rgba(0,0,0,.5);
+    --code-bg:#151a23; --code-ink:#e8ebf1; --code-gutter:#8791a4; --code-gutter-bg:#1a202c;
+    --hl-kw:#c39bea; --hl-str:#7cc79a; --hl-num:#e0b35a; --hl-com:#8791a4;
+    --hl-fn:#8fb0e6; --hl-type:#6fd0d8; --hl-attr:#e0b35a; --hl-meta:#8791a4;
+    --l-screen:#7fb2ea; --l-bff:#b39bea; --l-api:#5fcdc0; --l-service:#7cc79a;
+    --l-repo:#e0b35a; --l-db:#e57b78; --l-ci:#a9b3c6; --l-infra:#e08fc0;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#141821; --paper:#1c212c; --ink:#e8ebf1; --ink-2:#b4bccb; --ink-3:#8791a4;
+  --line:#2e3542; --navy:#8fb0e6; --navy-soft:#1f2a3d; --red:#e57b78; --red-soft:#3a2323;
+  --green:#7cc79a; --green-soft:#1f3328; --amber:#e0b35a; --amber-soft:#3a3120;
+  --on-accent:#10141c; --backdrop:rgba(0,0,0,.55); --shadow:rgba(0,0,0,.5);
+  --code-bg:#151a23; --code-ink:#e8ebf1; --code-gutter:#8791a4; --code-gutter-bg:#1a202c;
+  --hl-kw:#c39bea; --hl-str:#7cc79a; --hl-num:#e0b35a; --hl-com:#8791a4;
+  --hl-fn:#8fb0e6; --hl-type:#6fd0d8; --hl-attr:#e0b35a; --hl-meta:#8791a4;
+  --l-screen:#7fb2ea; --l-bff:#b39bea; --l-api:#5fcdc0; --l-service:#7cc79a;
+  --l-repo:#e0b35a; --l-db:#e57b78; --l-ci:#a9b3c6; --l-infra:#e08fc0;
+}

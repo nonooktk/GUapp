@@ -1,0 +1,325 @@
+<section id="s04" data-title="横断的な仕組み">
+<h2>4. 横断的な仕組み</h2>
+
+<p>建物に例えると、商品閲覧やカートといった機能は個別の部屋で、この章で扱う仕組みは玄関の鍵、非常口、防犯カメラ、消火設備にあたります。どの部屋にも共通してかかっているため、部屋の中身（各機能のコード）を読んでも見えてきません。</p>
+
+<p>正確には、認証、入力検査、エラー形式、ログ、二重注文の防止、在庫の整合など、複数の機能をまたいで守る規則を実装している箇所です。各節は「何を防ぐか」「どこに実装したか」「どう動くか」「どのテストが守っているか」の順に書きます。レビューで画面に出すときは、各節の参照リンクからコードを開いてください。</p>
+
+<h3 id="s04-map">この章で扱う仕組みの早見表</h3>
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>仕組み</th><th>防ぐもの</th><th>主な実装</th><th>層</th></tr></thead>
+<tbody>
+<tr><td><a href="#s04-secrets">秘密をブラウザに出さない</a></td><td>トークンなどが JavaScript に混ざって配られる</td><td><a class="ref" data-ref="apps/web/lib/env-validation.ts::validateEnv">validateEnv</a>、<a class="ref" data-ref="apps/web/lib/server/env.ts::getEnv">getEnv</a>、ci.yml</td><td><span class="layer" data-layer="bff">BFF</span> <span class="layer" data-layer="ci">CI</span></td></tr>
+<tr><td><a href="#s04-token">内部トークン</a></td><td>FastAPI への直接アクセス</td><td><a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-cors">CORS と Swagger 非表示</a></td><td>他サイトからの API 呼び出し、API 仕様の公開</td><td><a class="ref" data-ref="apps/api/app/core/security.py::install_cors">install_cors</a>、<a class="ref" data-ref="apps/api/app/main.py::create_app">create_app</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-csrf">CSRF</a></td><td>他サイトから勝手に送られる状態変更</td><td><a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a></td><td><span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a href="#s04-cookie">Cookie の属性</a></td><td>Cookie の盗み読み・平文送信</td><td><a class="ref" data-ref="apps/web/lib/cookie.ts::buildSetCookie">buildSetCookie</a></td><td><span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a href="#s04-client-ip">利用者 IP の扱い</a></td><td>IP の偽装によるレート制限の回避</td><td><a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">resolveClientIp</a></td><td><span class="layer" data-layer="bff">BFF</span> <span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-double-order">二重注文の防止（4 層）</a></td><td>連打・再送・2 タブでの二重確定</td><td><a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a> ほか</td><td>全層</td></tr>
+<tr><td><a href="#s04-stock">在庫の確保</a></td><td>売り越し（マイナス在庫）</td><td><a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a></td><td><span class="layer" data-layer="repo">リポジトリ</span></td></tr>
+<tr><td><a href="#s04-errors">エラー応答の形</a></td><td>内部情報の漏えい、画面ごとに違うエラー形式</td><td><a class="ref" data-ref="apps/api/app/core/errors.py::install_error_handlers">install_error_handlers</a></td><td><span class="layer" data-layer="api">API</span> <span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a href="#s04-logging">ログとマスク</a></td><td>ログへの秘密・個人情報の混入</td><td><a class="ref" data-ref="apps/api/app/core/logging.py::SecretMaskFilter">SecretMaskFilter</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-ratelimit">レート制限</a></td><td>注文照会の総当たり</td><td><a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-config">設定と DB 接続</a></td><td>設定漏れ、接続数の使い過ぎ</td><td><a class="ref" data-ref="apps/api/app/core/config.py::Settings">Settings</a>、<a class="ref" data-ref="apps/api/app/core/db.py::build_engine">build_engine</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+<tr><td><a href="#s04-types">画面と API の型</a></td><td>両者の食い違い</td><td><a class="ref" data-ref="apps/web/lib/types.ts">lib/types.ts</a></td><td><span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a href="#s04-supply">依存と秘密の検査</a></td><td>脆弱な依存、秘密のコミット</td><td>dependabot、gitleaks、pre-commit</td><td><span class="layer" data-layer="ci">CI</span></td></tr>
+<tr><td><a href="#s04-test-hooks">テスト専用フック</a></td><td>本番でのテスト用 URL・待ち時間の混入</td><td><a class="ref" data-ref="apps/api/app/main.py#L40-46">main.py の is_test 分岐</a></td><td><span class="layer" data-layer="api">API</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s04-secrets">秘密をブラウザに出さない：名前の検査、server-only、CI の 2 重チェック</h3>
+
+<p>防ぎたいのは、<code>INTERNAL_TOKEN</code> などサーバーだけが知るべき値が、ブラウザに配る JavaScript に混ざることです。Next.js は名前が <code>NEXT_PUBLIC_</code> で始まる環境変数をビルド時にブラウザ向けの JavaScript へ埋め込みます。付いていない変数はサーバー側でしか読めません。このため、名前の付け間違いと、クライアント側のコードからサーバー専用モジュールを import してしまう間違いの 2 つを、別々の仕組みで止めています。</p>
+
+<div class="flow" data-title="秘密がブラウザへ出る前に止める 4 段">
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/env-validation.ts::findLeakedPublicSecretKeys">
+    <strong>名前を検査する</strong>
+    <p><code>NEXT_PUBLIC_</code> で始まり、名前に TOKEN・SECRET・PASSWORD・DATABASE_URL・API_KEY のいずれかを含む変数があれば拒否する。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/env.ts::getEnv">
+    <strong>環境変数を読む入口を 1 つにする</strong>
+    <p><code>getEnv()</code> が初回に <code>validateEnv(process.env)</code> を通し、結果をキャッシュする。必須の 3 つ（API_BASE_URL・INTERNAL_TOKEN・IMAGE_BASE_URL）が欠けると例外。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/api.ts::apiFetch">
+    <strong>秘密を触るモジュールに server-only を付ける</strong>
+    <p><code>lib/server/</code> 配下の 8 ファイルの先頭に <code>import "server-only"</code> がある。クライアントコンポーネントから import するとビルドが失敗する。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L146-185">
+    <strong>CI で、防御が効いていることを毎回確かめる</strong>
+    <p>わざと違反するファイルを作ってビルドを走らせ、失敗しなければ CI を赤にする。続けて、ビルド成果物 <code>.next/static</code> にダミーのトークン値が含まれないことを全文検索する。</p>
+  </div>
+</div>
+
+<p>実装の見どころは、判定を純粋関数に分けている点です。<a class="ref" data-ref="apps/web/lib/env-validation.ts::validateEnv" data-note="NEXT_PUBLIC_ の検査 → 必須キー → APP_ENV → TRUSTED_PROXY_HOPS の順に検証する">validateEnv</a> は <code>process.env</code> を直接読まず、引数で受け取ります。<code>server-only</code> も付いていないため、Vitest から直接呼べます。一方、実際に <code>process.env</code> を渡す <a class="ref" data-ref="apps/web/lib/server/env.ts::getEnv">getEnv</a> は <code>server-only</code> を付けた側に置いています。検証はプロセスの起動時ではなく <code>getEnv</code> の初回呼び出し時に走ります（ファイル内のコメントは「起動時拒否」と書くが、実装は遅延実行）。</p>
+
+<p>CI 側の 2 つの検査は <a class="ref" data-ref=".github/workflows/ci.yml#L146-185">server-only ガード</a>と <a class="ref" data-ref=".github/workflows/ci.yml#L196-211">.next/static の全文検索</a>です。ガードは <code>app/ci-server-only-check/page.tsx</code> を一時的に作り、<code>"use client"</code> のままサーバー専用の <code>@/lib/server/env</code> を import させます。ビルドが成功したら「ガードが壊れている」として失敗させ、失敗しても原因が <code>server-only</code> でなければやはり失敗させます。フォルダ名を <code>_</code> で始めるとNext.js がルートから除外して検査にならないため、先頭に <code>_</code> を付けない名前にしてある、とコメントに理由があります。</p>
+
+<p>対応テストは <span class="tid">UT-WEB-05</span>（<code>tests/ut-web-05.env-validation.test.ts</code>。<code>NEXT_PUBLIC_INTERNAL_TOKEN</code> を含む環境が <code>EnvValidationError</code> で拒否される）です。<span class="tid">UT-WEB-06</span>（server-only）は、テスト設計書で CI へ移管されており、上の CI ステップが担当します。<code>.next/static</code> の検索はテスト設計書の <span class="tid">ST-SEC-09</span> を先に自動化したものです。</p>
+
+<h3 id="s04-token">内部トークン：BFF 以外からは FastAPI に入れない</h3>
+
+<p>FastAPI の URL を知った人が BFF を飛ばして直接叩けば、CSRF 検証や Basic 認証を迂回できてしまいます。FastAPI は <code>X-Internal-Token</code> ヘッダの値が環境変数 <code>INTERNAL_TOKEN</code> と一致するリクエストだけを受け付けます。</p>
+
+<p>実装は <a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token" data-note="未設定なら全拒否。比較は hmac.compare_digest">verify_internal_token</a> です。期待値が空、またはヘッダが無いときは 401 <code>unauthorized</code> を返します。設定を忘れたときに素通しにならず、全拒否に倒れる作りです。値の比較には <code>hmac.compare_digest</code> を使い、比較にかかる時間から値を推測されないようにしています。</p>
+
+<p>この検証を <code>/api/v1</code> 配下の全ルーターに掛けているのは <a class="ref" data-ref="apps/api/app/main.py::build_protected_router" data-note="prefix=/api/v1 と dependencies に verify_internal_token を 1 か所だけ書く">build_protected_router</a> の 1 行（<a class="ref" data-ref="apps/api/app/main.py#L50-66">main.py の L50-66</a>）です。個別のルートに書くのではなくルーター単位で付けるので、新しいルートを足しても付け忘れが起きません。死活監視の <code>/api/v1/health</code> だけは、<a class="ref" data-ref="apps/api/app/main.py#L35-38">保護ルーターの外</a>に <code>health.router</code> をそのまま登録して対象外にしています。Web 側では <a class="ref" data-ref="apps/web/lib/server/api.ts::apiFetch">apiFetch</a> が全リクエストにこのヘッダを付けます。</p>
+
+<div class="note fact">
+<p><code>security.py</code> には <code>INTERNAL_TOKEN_EXEMPT_PATHS</code>（対象外パスの集合）が定義されていますが、コード中から参照されていません。対象外になっているのは、<code>health.router</code> を保護ルーターとは別に登録しているためです。定数は説明用に残っている状態です。</p>
+</div>
+
+<p>確かめているテストは <span class="tid">UT-SEC-02</span>（トークンの欠落・不一致で 401、<code>INTERNAL_TOKEN</code> 未設定なら全拒否、health は対象外）と、実 DB を使う <span class="tid">IT-060-01</span> です。公開環境の確認記録（<code>docs/05_検収/公開環境_確認記録_20260925.md</code>）にも、トークン無しで <code>/api/v1/products</code> を直接叩くと 401 になった記録があります。</p>
+
+<h3 id="s04-cors">CORS と Swagger 非表示：本番で API の仕様を見せない</h3>
+
+<p>対象は 2 つあります。他サイト上のスクリプトがブラウザ経由で FastAPI を呼ぶことと、本番で API の仕様書（<code>/docs</code>・<code>/redoc</code>・<code>/openapi.json</code>）が誰にでも見えることです。</p>
+
+<p><a class="ref" data-ref="apps/api/app/core/security.py::install_cors" data-note="許可は 1 オリジンのみ。未設定・* なら CORS 自体を付けない">install_cors</a> は環境変数 <code>CORS_ALLOW_ORIGIN</code> の 1 オリジンだけを許可します。未設定または <code>*</code> のときはミドルウェアを付けません。つまり、設定を誤るとどこからも許可されない側に倒れます。許可するヘッダは <code>Content-Type</code> と <code>X-Internal-Token</code>、メソッドは GET・POST・PATCH・DELETE・OPTIONS です。</p>
+
+<p>Swagger の非表示は <a class="ref" data-ref="apps/api/app/main.py#L22-27">create_app の L22-27</a>にあります。<code>APP_ENV=production</code> のときだけ、<code>docs_url</code>・<code>redoc_url</code>・<code>openapi_url</code> を <code>None</code> にして FastAPI を作ります。ルートが無くなるので、3 つのパスは 404 <code>{"code":"not_found"}</code> を返します。この形はエラー応答の共通ハンドラで揃えています（<a href="#s04-errors">エラー応答の形</a>）。</p>
+
+<div class="note opinion">
+<p>BFF から FastAPI への呼び出しはサーバー同士の通信で、ブラウザの CORS は関係しません。この設定が実際に効くのは、他サイトのスクリプトが FastAPI を直接呼ぼうとした場合に限られます。内部トークンと合わせた多層防御の 1 枚、という位置づけだと思います。</p>
+</div>
+
+<p>検証は <code>tests/unit/test_ut_cors.py</code>（許可外オリジンにはヘッダが付かない、ワイルドカードと空なら CORS 無効）、<span class="tid">IT-CORS-01</span>（プリフライト）、<code>test_ut_app_production_docs_disabled</code>（本番モードで 3 パスが 404）、テスト設計書の <span class="tid">ST-SEC-02</span> です。公開環境では、許可外オリジンの OPTIONS が許可ヘッダ無しで拒否されたこと、3 パスが 404 になったことを 2026-09-25 に確認しています。</p>
+
+<h3 id="s04-csrf">CSRF：Double Submit Cookie で、他サイトからの状態変更を止める</h3>
+
+<p>狙われるのは、ブラウザが Cookie を自動で付けて送る性質です。この性質を悪用し、他サイトのページからカート変更や注文確定を勝手に送らせる攻撃（CSRF）に対して、ここでは「Double Submit Cookie」方式を使います。同じ値を Cookie とヘッダの両方に載せさせ、一致したときだけ受け付けます。他サイトは Cookie を送らせられても、値を読み取れないため、一致するヘッダを作れません。</p>
+
+<div class="flow" data-title="CSRF トークンの発行から検証まで">
+  <div class="flow-step" data-layer="screen" data-ref="apps/web/lib/client/cart-api.ts::ensureCsrfToken">
+    <strong>ブラウザが Cookie を確認する</strong>
+    <p><code>document.cookie</code> に <code>csrf_token</code> が無ければ、先に <code>GET /api/cart</code> を呼んで発行させる。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/csrf.ts::issueCsrfCookieIfMissing">
+    <strong>BFF が発行する</strong>
+    <p>Cookie が無い（または形が不正な）ときだけ、32 バイトの乱数を base64url（43 文字）にして <code>Set-Cookie</code> する。</p>
+  </div>
+  <div class="flow-step" data-layer="screen" data-ref="apps/web/lib/client/cart-api.ts::mutate">
+    <strong>状態変更でヘッダに載せる</strong>
+    <p>POST・PATCH・DELETE では Cookie の値を <code>X-CSRF-Token</code> ヘッダに載せて送る。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">
+    <strong>各 Route Handler の先頭で検証する</strong>
+    <p>Cookie とヘッダが両方あり、形が正しく、一致するときだけ通す。不一致は 403 <code>{"code":"forbidden"}</code> を返し、FastAPI へは到達させない。</p>
+  </div>
+</div>
+
+<p>判定の中身は <a class="ref" data-ref="apps/web/lib/csrf-validation.ts::isCsrfValid" data-note="形の検査 → 43 文字を XOR で比べる定数時間比較">isCsrfValid</a> です。まず <a class="ref" data-ref="apps/web/lib/csrf-validation.ts::isCsrfTokenShape">isCsrfTokenShape</a> で「英数字と <code>-</code>・<code>_</code> の 43 文字」を確認し、その後、1 文字ずつ XOR を積み上げる比較で一致を見ます。先頭の不一致で早く返さないので、応答時間から 1 文字ずつ当てられません。</p>
+
+<p>検証を呼んでいるルートは 5 種類で、いずれも関数の先頭で <code>const denied = verifyCsrf(request); if (denied) return denied;</code> の形です。カート追加（<a class="ref" data-ref="apps/web/app/api/cart/items/route.ts::POST">POST /api/cart/items</a>）、数量変更・削除（<a class="ref" data-ref="apps/web/app/api/cart/items/[id]/route.ts::PATCH">PATCH</a>・<a class="ref" data-ref="apps/web/app/api/cart/items/[id]/route.ts::DELETE">DELETE</a>）、金額計算（<a class="ref" data-ref="apps/web/app/api/checkout/prepare/route.ts::POST">POST /api/checkout/prepare</a>）、注文確定（<a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST">POST /api/orders</a>）、注文照会（<a class="ref" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST">POST /api/orders/[orderNumber]/lookup</a>）です。GET は検証しません。トークンの発行を担うのは <code>GET /api/cart</code> で、カート取得の応答に <code>Set-Cookie</code> が付く副作用があります。</p>
+
+<div class="note fact">
+<p>FastAPI 側には CSRF の検証がありません（<code>apps/api/app</code> 配下に csrf を含むコードは無い）。CSRF はブラウザが相手の攻撃なので、ブラウザと直接話す BFF だけで検証する設計です。FastAPI は内部トークンで守っています。</p>
+</div>
+
+<p>守っているテストは <code>tests/csrf-validation.test.ts</code>（一致で通過、欠落・不一致・形の不正で拒否）、<code>tests/bff.cart-route.test.ts</code>、<span class="tid">IT-BFF-02</span>（<code>tests/it-bff-01-02.orders-route.test.ts</code>。CSRF が無ければ 403 で、FastAPI を呼ばない）です。</p>
+
+<h3 id="s04-cookie">Cookie の属性：カートトークンと CSRF トークンで付け方を変える</h3>
+
+<p>Cookie で問題になるのは、スクリプトによる盗み読みと、http での平文送信です。Cookie 文字列を組み立てる処理は <a class="ref" data-ref="apps/web/lib/cookie.ts::buildSetCookie" data-note="値の文字種を検査してから属性を並べる。改行によるヘッダ注入を防ぐ">buildSetCookie</a> の 1 か所に集めています。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Cookie</th><th>用途</th><th>HttpOnly</th><th>SameSite</th><th>Secure</th><th>寿命</th></tr></thead>
+<tbody>
+<tr><td><code>cart_token</code></td><td>匿名カートの識別</td><td>付く</td><td>Lax</td><td>本番のみ</td><td>90 日</td></tr>
+<tr><td><code>csrf_token</code></td><td>CSRF の照合用</td><td>付かない</td><td>Lax</td><td>本番のみ</td><td>90 日</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>カート用は <a class="ref" data-ref="apps/web/lib/cookie.ts::buildCartTokenCookie">buildCartTokenCookie</a>、CSRF 用は <a class="ref" data-ref="apps/web/lib/cookie.ts::buildCsrfTokenCookie" data-note="httpOnly: false を渡す唯一の呼び出し。JS が読んでヘッダに載せるため">buildCsrfTokenCookie</a> です。CSRF 用だけ HttpOnly を付けないのは、ブラウザの JavaScript が値を読んで <code>X-CSRF-Token</code> に載せる必要があるからです。<code>Secure</code> は <code>APP_ENV=production</code> のときだけ付きます。ローカルの http では Secure 付きの Cookie がブラウザに保存されないためです。値に使える文字は英数字と <code>.</code>・<code>_</code>・<code>-</code> に限り、改行などを含めてヘッダを書き換える注入を防いでいます。</p>
+
+<p>カートのトークン自体は FastAPI が発行し（<code>secrets.token_urlsafe(32)</code>）、BFF が応答を見て Cookie を更新します。Cookie とトークンが異なるときだけ <a class="ref" data-ref="apps/web/lib/server/cart-proxy.ts#L58-64">Set-Cookie を付ける</a>実装です。</p>
+
+<p>属性を確かめるのは <span class="tid">ST-SEC-07</span>（<code>tests/st-sec-07.cookie.test.ts</code>。development では Secure が付かず、production では付く。値に改行を含むと例外）と <code>tests/csrf-validation.test.ts</code>（csrf_token に HttpOnly が無い）です。公開環境でも、Set-Cookie に <code>cart_token</code>・<code>csrf_token</code> とも <code>Secure</code> が付くことを 2026-09-25 に確認しています。</p>
+
+<h3 id="s04-client-ip">利用者 IP の扱い：ブラウザが付けた X-Forwarded-For は転送しない</h3>
+
+<p>問題になるのは、ヘッダを 1 行付けるだけでレート制限（注文照会の 100 回/時/IP）を回避されること、他人の IP を名指しして 429 を出させることです。ブラウザから来た <code>X-Forwarded-For</code> は利用者が自由に書けます。Azure App Service のフロントエンドはこのヘッダに追記する動作なので、公開環境でも利用者が先頭に偽の IP を置けます。</p>
+
+<div class="flow" data-title="FastAPI に渡す IP が決まるまで">
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/order-proxy.ts::clientIp">
+    <strong>BFF が IP を 1 つに決める</strong>
+    <p>受信ヘッダと環境変数 <code>TRUSTED_PROXY_HOPS</code> を <code>resolveClientIp</code> に渡す。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">
+    <strong>信頼できる送信元だけを使う</strong>
+    <p>hops が 1 以上のときだけ、まず <code>X-Client-IP</code>（App Service のフロントエンドが付ける値）、次に <code>X-Forwarded-For</code> を右から hops 番目で採る。どちらも無い、または hops が 0 なら、接続元（既定は 127.0.0.1）。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">
+    <strong>決めた IP を単一の値として付け直す</strong>
+    <p>利用者が送ってきたヘッダは転送せず、決めた IP だけを <code>X-Forwarded-For</code> に載せて FastAPI を呼ぶ。</p>
+  </div>
+  <div class="flow-step" data-layer="api" data-ref="apps/api/app/core/rate_limit.py::client_ip">
+    <strong>FastAPI が受け取って数える</strong>
+    <p><code>client_ip</code> は <code>X-Forwarded-For</code> の先頭を採る。内部トークン付きの呼び出し（＝BFF）だけが届くので、この値を信用している。</p>
+  </div>
+</div>
+
+<p>hops の意味は「信頼できるプロキシが何段あるか」です。XFF は左が元の利用者、右へ向かってプロキシが追記した順に並びます。右から hops 番目を採れば、信頼できるプロキシ自身が書いた値だけを使えます。<a class="ref" data-ref="apps/web/lib/client-ip.ts::stripPort">stripPort</a> は <code>IP:ポート</code> 形式のポートを落とし、<a class="ref" data-ref="apps/web/lib/client-ip.ts::isIpLike">isIpLike</a> が IP らしくない値（空文字、<code>unknown</code>、巨大な文字列）を弾きます。環境変数の検証では、<code>TRUSTED_PROXY_HOPS</code> は 0 以上の整数だけを許し、未設定は 0 です（<a class="ref" data-ref="apps/web/lib/env-validation.ts#L71-76">env-validation.ts の L71-76</a>）。</p>
+
+<div class="note warn">
+<p>設計仕様書 P1 draft-v3 の環境変数の表（8.2 の <code>TRUSTED_PROXY_HOPS</code> の行）は、App Service 配下では 1 にすると定めています。ところが公開用のデプロイスクリプト（<a class="ref" data-ref="scripts/azure-deploy/02-settings.sh#L88-121">02-settings.sh の L88-121</a>）が投入する設定は、api が 7 つ、web が 7 つで、どちらにも <code>TRUSTED_PROXY_HOPS</code> がありません。リポジトリ全体を検索しても、この名前を設定している箇所はコードと <code>.env.example</code> の空欄だけです。コード上は hops=0 となり、公開環境では全利用者が 127.0.0.1 として数えられます。推測ですが、注文照会の 100 回/時の枠を全員で共有している状態です。実際のヘッダの挙動までは本書では確認していません。第 9 章の A1 で扱います。</p>
+</div>
+
+<p>IP の判定を守るのは <code>tests/st-sec-xff.client-ip.test.ts</code>（hops=0 では偽の XFF・X-Client-IP を無視して 127.0.0.1、hops=1 なら末尾、hops=2 なら右から 2 番目、要素数より大きければフォールバック）と、<span class="tid">IT-BFF-01</span>（利用者が付けた <code>x-forwarded-for</code> がそのまま出ないこと）です。</p>
+
+<h3 id="s04-double-order">二重注文の防止：4 層で止める</h3>
+
+<p>起きてほしくないのは、連打、通信の再送、同じカートを 2 つのタブで確定するといった操作で、注文が 2 件できることです。1 か所だけの対策では、ボタン連打は止められても 2 タブは止められず、DB の一意制約だけでは異なるキーの同時送信を止められません。そこで性質の違う 4 つの防御を重ねています。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>層</th><th>仕組み</th><th>止めるもの</th><th>主な実装</th></tr></thead>
+<tbody>
+<tr><td>1 画面</td><td>確定操作中はボタンを無効にし、送信も 1 回に絞る</td><td>連打・二重クリック</td><td><a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L40-41">inflight</a>、<a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L64-67">submit</a></td></tr>
+<tr><td>2 冪等キー</td><td>確認画面の表示時に 1 回限りのキーを発行し、注文表のキー列を一意にする</td><td>同じ操作の再送・同時 20 本</td><td><a class="ref" data-ref="apps/api/app/services/checkout.py::new_idempotency_key">new_idempotency_key</a>、<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a></td></tr>
+<tr><td>3 カートの状態</td><td>カートを active から ordered へ、条件付き UPDATE の 1 文で切り替える</td><td>キーが異なる同じカートの確定（2 タブ）</td><td><a class="ref" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered">mark_cart_ordered</a></td></tr>
+<tr><td>4 一意制約</td><td>注文番号の列を一意にする。衝突したら 1 回だけ作り直す</td><td>乱数の衝突による同じ番号の注文</td><td><a class="ref" data-ref="apps/api/app/models/order.py::Order">Order.order_number</a>、<a class="ref" data-ref="apps/api/app/repositories/orders.py#L72-109">insert_pending_order の再生成</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>層 1 は使い勝手のための防御で、設計書も「二重送信の防御は冪等キー側で行う」としています。<a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L40-41">OrderConfirm の inflight</a>は <code>useRef</code> の同期フラグで、state の更新を待たずに立てます。React の state は再描画まで値が変わらないため、連続クリックが両方通ってしまうのを避けるためです。確認ダイアログも処理中は閉じられません。</p>
+
+<p>層 2 の流れは次のとおりです。確認画面へ進むときに <a class="ref" data-ref="apps/web/components/CheckoutForm.tsx#L143-144">prepareCheckout</a> が呼ばれ、サーバーが <code>secrets.token_urlsafe(32)</code>（43 文字）のキーを返します。確定時にそのキーを添えて送ると、<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a> が注文を INSERT します。同じキーの注文が既にあれば一意制約違反となり、<a class="ref" data-ref="apps/api/app/repositories/orders.py::DuplicateIdempotencyKey">DuplicateIdempotencyKey</a> に変換されます。呼び出し側の <a class="ref" data-ref="apps/api/app/services/orders.py::_create_order">_create_order</a>（<a class="ref" data-ref="apps/api/app/services/orders.py#L364-371">L364-371</a>）は既存の注文を読み直し、<a class="ref" data-ref="apps/api/app/services/orders.py::_existing_order_result">_existing_order_result</a> で応答を作ります。既存の注文が別のカートのものなら 404、決済失敗の注文なら 409、それ以外は 200 でその注文を返します。他人のカートに紐づく注文を、キーが同じというだけで返さないための照合です。</p>
+
+<p>層 3 は <code>UPDATE carts SET status='ordered' WHERE id=? AND status='active'</code> の 1 文です。影響行数が 0 なら、他の処理が先にカートを注文済みにしています。その場合は <a class="ref" data-ref="apps/api/app/services/orders.py#L197-200">ROLLBACK して 409 <code>already_ordered</code></a> を返します。影響行数の判定なので、読んでから書くまでの間に割り込まれる隙がありません。</p>
+
+<div class="note fact">
+<p>「別タブで開き直す」場合を追うと、層の分担が分かります。確認画面のフォーム値と冪等キーは <code>sessionStorage</code> に入っていて、これはタブごとに別です。新しいタブで注文手続きをやり直すと、確認画面へ進む時点で別のキーが発行されます。両方のタブで確定すると、キーが違うので層 2 の一意制約には当たらず、層 3 で後の側が 409 <code>already_ordered</code> になります。画面は <a class="ref" data-ref="apps/web/lib/order-errors.ts::routeOrderError">routeOrderError</a> の対応表に従い、既存の注文番号つきで完了画面へ送ります。なお、タブを複製した場合は <code>sessionStorage</code> が複製されると思うので、同じキーとなり層 2 で 200 が返る、という別の経路になります（この点はコードでは確認していない）。</p>
+</div>
+
+<p>もう 1 つ、同じカートに 2 本が同時に届くと、MySQL がデッドロックを検出して片方を打ち切ることがあります。注文の INSERT がカートの行に共有ロックを取り、続く UPDATE で互いに排他ロックを待ち合うためです。<a class="ref" data-ref="apps/api/app/services/orders.py::_create_order_with_deadlock_retry" data-note="MySQL のエラー 1213・1205 のとき 1 回だけ ROLLBACK してやり直す">_create_order_with_deadlock_retry</a> が、エラー番号 1213（デッドロック）と 1205（ロック待ちの超過）を 1 回だけやり直します。やり直した側は相手の COMMIT 後の状態を見るので、キーが異なれば 409、同じなら 200 に着地します。</p>
+
+<div class="note opinion">
+<p>設計仕様書 7.4（DS-DEC-07）の「4 層」は、冪等キーの一意制約、カート状態、Stripe Session 1 つ、Webhook の event_id の 4 つです。後ろの 2 つは Stripe を使う P2 の内容で、P1 のコードにはありません。この節は、実際にコードにある防御（画面、冪等キー、カート状態、注文番号の一意制約）を数えています。設計書と数え方が違う点は、レビューで聞かれたときのために押さえておくとよいと思います。</p>
+</div>
+
+<p>対応テストは <span class="tid">IT-014-02</span>（同じキーで 20 本を同時に送っても注文は 1 件）、<span class="tid">IT-014-03</span>（同じカートに 2 つのキーを同時に送ると 201 と 409 が 1 つずつ）、<span class="tid">UT-014-01</span>（注文番号の衝突は 1 回だけ再生成し、2 回目は 500）、<span class="tid">UT-WEB-03</span>（送信中は両ボタン無効で、連続 2 回クリックしても fetch は 1 回）です。<code>scripts/mutation-check</code> は、層 2（キーの UNIQUE）と層 3（<code>Cart.status == CartStatus.active</code> の条件）を 1 つずつ外して、該当テストが赤くなることを確かめるスクリプトです（第 6 章）。</p>
+
+<h3 id="s04-stock">在庫の確保：条件付き UPDATE の影響行数で判定する</h3>
+
+<p>売り越しとは、最後の 1 点を 2 人が同時に買って、在庫がマイナスになることです。「在庫を読む、足りていれば減らす」の 2 手に分けると、2 人が同時に「足りている」と判断してしまいます。そこで判定と減算を SQL の 1 文にまとめています。</p>
+
+<p>実装は <a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-note="WHERE stock >= :q のときだけ減算。戻り値の影響行数が 1 なら確保、0 なら在庫不足">reserve_stock</a> です。<code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock &gt;= :q</code> を発行し、影響行数（0 か 1）を返します。InnoDB は UPDATE の対象行に排他ロックを掛けるため、同じ行への 2 本目はロックの解放を待ってから条件を評価し直します。1 本目で在庫が尽きていれば、2 本目は 0 行になります。</p>
+
+<p>複数明細の注文では <a class="ref" data-ref="apps/api/app/services/orders.py::_reserve_all" data-note="variant_id 昇順で引き当て、0 行の明細を集めて 409">_reserve_all</a> が呼び出します。<code>variant_id</code> の昇順に引き当てるのは、複数のカートが同じ商品群を逆の順に取り合うデッドロックを避けるためです。1 つでも 0 行なら、在庫切れの <code>variant_id</code> の一覧を付けて 409 <code>out_of_stock</code> を返し、そこまでの引き当てを含めてトランザクション全体を ROLLBACK します（<a class="ref" data-ref="apps/api/app/services/orders.py#L358-363">L358-363</a>）。<code>variants.stock</code> には <code>CHECK (stock &gt;= 0)</code> の制約もあり（<a class="ref" data-ref="apps/api/app/models/catalog.py::Variant">Variant</a>）、コードの判定をすり抜けた場合でも DB が負の値を拒否します。</p>
+
+<p>決済が NG だったときは、注文を <code>payment_failed</code> として COMMIT したあと、別のトランザクションで <a class="ref" data-ref="apps/api/app/repositories/orders.py::restore_stock">restore_stock</a> と <a class="ref" data-ref="apps/api/app/repositories/orders.py::restore_cart_active">restore_cart_active</a> により在庫とカートを戻します（<a class="ref" data-ref="apps/api/app/services/orders.py#L248-271">L248-271</a>）。失敗した注文の記録は残し、戻す処理は別に確定させる作りです。</p>
+
+<p>在庫の確保を守るテストは <span class="tid">UT-014-03</span>・<span class="tid">UT-014-04</span>（数量が在庫以下なら 1 行、超えれば 0 行で在庫は変わらない。SQLite の in-memory）、<span class="tid">IT-014-04</span>（2 つのカートが最後の 1 点を争い、片方だけが成功。有効試行 30 回）、<span class="tid">IT-014-06</span>（決済 NG で在庫とカートが戻る）です。<code>scripts/mutation-check</code> は <code>Variant.stock &gt;= quantity</code> の条件を外して、これらが赤くなることも確かめます。</p>
+
+<h3 id="s04-errors">エラー応答の形：1 か所で決め、画面側で文言に変える</h3>
+
+<p>漏らしたくないのは、FastAPI の既定エラー本文や例外メッセージ、SQL、接続文字列です。加えて、画面ごとにエラーの形がばらつくのも避けたい点です。設計仕様書 4.5（DS-DEC-32）が形を決めており、判定の順序は 認証・CSRF（401/403）、入力の形（400）、存在と所有（404）、業務規則（422）、DB の状態（409）、回数（429）、その他（500）です。</p>
+
+<p>API 側は <a class="ref" data-ref="apps/api/app/core/errors.py::AppError" data-note="AppError(status, code, **detail) で投げると {code, ...detail} になる">AppError</a> を 1 系統だけ使います。ルーターに <code>HTTPException</code> を直接書かず、業務エラーは <code>AppError(409, "out_of_stock", items=[...])</code> のように投げます。<a class="ref" data-ref="apps/api/app/core/errors.py::install_error_handlers">install_error_handlers</a> が 4 つのハンドラを登録して、本文を揃えます。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>例外</th><th>応答</th><th>実装</th></tr></thead>
+<tbody>
+<tr><td><code>AppError</code></td><td>指定の status と <code>{code, ...詳細}</code></td><td><a class="ref" data-ref="apps/api/app/core/errors.py#L129-130">_app_error_handler</a></td></tr>
+<tr><td>Pydantic の入力検証エラー</td><td>400 <code>{code:"validation_error", fields:[{name, reason}]}</code>。reason は required・format・too_long・out_of_range の 4 語</td><td><a class="ref" data-ref="apps/api/app/core/errors.py::validation_error_body">validation_error_body</a>、<a class="ref" data-ref="apps/api/app/core/errors.py::map_reason">map_reason</a></td></tr>
+<tr><td>Starlette の HTTPException（未定義ルートの 404、メソッド違いの 405 など）</td><td><code>{code:"not_found"}</code> など。405 は <code>Allow</code> ヘッダを保つ</td><td><a class="ref" data-ref="apps/api/app/core/errors.py::_http_exception_handler">_http_exception_handler</a></td></tr>
+<tr><td>その他の未捕捉例外</td><td>500 固定文言。詳細はログのみ</td><td><a class="ref" data-ref="apps/api/app/core/errors.py::_unhandled_error_handler">_unhandled_error_handler</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<p><a class="ref" data-ref="apps/api/app/core/errors.py::map_reason">map_reason</a> には 1 つ工夫があります。文字列の最小長違反（<code>string_too_short</code>）で、入力が空または空白のみ（全角スペース含む）なら、利用者から見て「未入力」なので <code>required</code> にします。それ以外の最小長違反は <code>out_of_range</code> のままです。</p>
+
+<p>BFF 側は、FastAPI の本文をそのまま流さず、<a class="ref" data-ref="apps/web/lib/server/api.ts::sanitizeErrorBody" data-note="code と許可した詳細キー以外は捨てる。code が無ければ bad_response／upstream_error に丸める">sanitizeErrorBody</a> を通します。通してよい詳細のキーは <a class="ref" data-ref="apps/web/lib/server/api.ts::ALLOWED_ERROR_DETAIL_KEYS">許可リスト</a>（fields・items・amounts・order_number・from・to・field・limit・message）に固定しています。FastAPI に接続できないときは <a class="ref" data-ref="apps/web/lib/server/api.ts::UpstreamUnavailableError">UpstreamUnavailableError</a> を投げ、BFF が 503 <code>upstream_unavailable</code> に変えます。</p>
+
+<p>画面側は、コードを利用者向けの文言と戻し先に対応付けます。注文系は <a class="ref" data-ref="apps/web/lib/order-errors.ts::routeOrderError" data-note="409 out_of_stock はカートへ、price_changed は注文手続きへ、already_ordered は完了画面へ、などの対応表">routeOrderError</a>、カート系は <a class="ref" data-ref="apps/web/lib/cart-messages.ts::cartErrorMessage">cartErrorMessage</a>、注文照会は <a class="ref" data-ref="apps/web/lib/order-errors.ts::lookupErrorMessage">lookupErrorMessage</a> です。注文照会の 404 は、番号の不存在とメールの不一致を区別しない 1 つの文言にしています。存在する番号を推測させないためです。</p>
+
+<p>エラー応答のテストは <span class="tid">UT-SEC-02</span>（500 は固定文言で、ログの接続文字列はマスクされる。reason の 4 語。空文字と空白のみは required）、<span class="tid">UT-SEC-03</span>（404・405 も <code>{code}</code> の形。本番の <code>/docs</code> の 404 も同形）、<code>tests/bff.api-error-shape.test.ts</code>、<code>tests/order-errors.test.ts</code> です。</p>
+
+<h3 id="s04-logging">ログとマスク：秘密のパターンを潰し、個人情報は書かない</h3>
+
+<p>ログに残したくないのは、接続文字列やトークン、メールアドレスです。ログは障害調査で多くの人が読み、外部に渡ることもあります。対策は 2 つで、書き出す直前に秘密のパターンを伏せ字にするフィルタと、そもそも個人情報をログに渡さない書き方です。</p>
+
+<p>フィルタは <a class="ref" data-ref="apps/api/app/core/logging.py::SecretMaskFilter" data-note="メッセージ・引数・例外テキストの順に、パターンと INTERNAL_TOKEN の実値を ***に置換">SecretMaskFilter</a> です。対象は Stripe 系のキー、<code>scheme://user:pass@host</code> の資格情報部分、<code>Bearer</code> トークン、<code>X-Internal-Token</code> ヘッダの値（パターンは <a class="ref" data-ref="apps/api/app/core/logging.py::_PATTERNS">_PATTERNS</a>）、それに <code>INTERNAL_TOKEN</code> の実値です。実値は設定から受け取り、4 文字未満は誤マスクを避けるため対象にしません。<a class="ref" data-ref="apps/api/app/core/logging.py::setup_logging">setup_logging</a> が全ハンドラ（uvicorn のロガーも含む）にこのフィルタを付け、<a class="ref" data-ref="apps/api/app/main.py#L20">create_app の L20</a> が <code>INTERNAL_TOKEN</code> の実値を渡します。</p> <!-- pragma: allowlist secret -->
+
+<p>フィルタは <code>record.args</code> の構造を保ったまま中身だけを置換します。uvicorn のアクセスログは 5 要素のタプルを展開して整形するため、引数を 1 つの文字列に潰すとリクエストのたびにログの書き込みエラーになる、と実起動で確認した経緯がコメントに残っています。</p>
+
+<p>個人情報のほうは、ログに書く箇所でメールをマスクします。<a class="ref" data-ref="apps/api/app/adapters/mail.py::mask_email" data-note="test@example.com → t***@example.com。形が崩れていれば全部隠す">mask_email</a> は <code>t***@example.com</code> の形にする関数で、注文確定のログ（<a class="ref" data-ref="apps/api/app/services/orders.py#L376-399">services/orders.py の L376-399</a>）とメールアダプタが使います。配送先の氏名・住所・電話は、ログに渡していません。Web 側も、注文系の取り次ぎでは接続不可のときにパスだけを出し、本文を出力しない方針です（<a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">proxyOrderRequest</a>）。</p>
+
+<div class="note fact">
+<p>メールの送信は<a class="ref" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter">OutboxMailAdapter</a>のファイル出力で、本番でも同じアダプタが使われます（<a class="ref" data-ref="apps/api/app/adapters/mail.py::get_mail_adapter">get_mail_adapter</a> はこれしか返さない）。注文確認メールの本文には配送先が入り、<code>apps/api/.mail-outbox/</code> にファイルとして書かれます。このディレクトリは gitignore 済みで、デプロイ用 zip からも除外されます。</p>
+</div>
+
+<p>マスクのテストは <span class="tid">UT-SEC-01</span>（Stripe キー、接続文字列、Bearer、内部トークンのマスク。引数の構造の保持。全ハンドラへの取り付け）、<code>test_ut_mail_mask_email</code>、<code>test_ut_mail_outbox_writes_file_and_log_is_masked</code> です。</p>
+
+<h3 id="s04-ratelimit">レート制限：注文照会だけ、プロセス内メモリで数える</h3>
+
+<p>狙われやすいのは、注文番号とメールアドレスの組を総当たりで試す注文照会です。注文番号は 8 文字のランダム値ですが、照会が無制限だと当てにいけるため、1 つの IP につき 1 時間 100 回までに絞っています。</p>
+
+<p>数える処理は <a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter" data-note="キーごとに直近の呼び出し時刻を deque に持ち、窓の外を捨ててから件数を見る">SlidingWindowRateLimiter</a> の <a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter.hit">hit</a> です。キー（IP）ごとに直近 3,600 秒の呼び出し時刻を <code>deque</code> に持ち、100 回に達していれば次に空く秒数を返します。<a class="ref" data-ref="apps/api/app/core/rate_limit.py::lookup_rate_limit">lookup_rate_limit</a> がそれを受けて 429 <code>rate_limited</code> と <code>Retry-After</code> ヘッダを返します。制限器はアプリに 1 つで、<a class="ref" data-ref="apps/api/app/main.py#L32-33">create_app で <code>app.state</code> に持たせて</a>います。注文照会のルートへは <a class="ref" data-ref="apps/api/app/routers/orders.py#L45-54">dependencies に依存関数として</a>付けます。この制限をかけているのは注文照会だけです。検索 API の制限は ADR-0003（見送り）で、公開時は Basic 認証があることを理由に ADR-0004 でも見送りを維持しています。</p>
+
+<div class="note warn">
+<p>カウンタはプロセスのメモリ上にあります。公開環境の api は <code>uvicorn --workers 2</code>（<a class="ref" data-ref="scripts/azure-deploy/config.sh#L50-51">config.sh の L50-51</a>）で起動するため、ワーカー（プロセス）ごとに別々に数えます。計算上は、1 つの IP が 1 時間に最大 200 回まで通りうる構成です（実際のリクエストの振り分けは未確認）。設計仕様書 P1 draft-v3 の申し送りにも「2 ワーカーでは共有ストアに置き換えること」とあり、設計上は既知で、コードは未対応です。第 9 章の B1 で扱います。</p>
+</div>
+
+<p>レート制限のテストは <code>test_ut_rate_limit_100_ok_101_limited_with_retry_after</code>（100 回目まで OK、101 回目は制限され <code>Retry-After</code> が付く）と、実 DB を使う <span class="tid">IT-023-02</span> です。</p>
+
+<h3 id="s04-config">設定と DB 接続：環境変数を型に落とし、接続数を絞れるようにする</h3>
+
+<p>設定漏れで意図しない動作をすることと、共用の講義サーバーに接続を使いすぎることが、ここでの心配事です。API の設定は <a class="ref" data-ref="apps/api/app/core/config.py::Settings" data-note="pydantic-settings。APP_ENV は development / test / production のみ">Settings</a> の 1 クラスに集め、<a class="ref" data-ref="apps/api/app/core/config.py::get_settings">get_settings</a> がプロセスごとに 1 回だけ読みます（<code>lru_cache</code>）。<code>APP_ENV</code> は 3 つの値しか受け付けず、<code>is_production</code>・<code>is_test</code> の判定に使われます。既定値のない秘密（<code>INTERNAL_TOKEN</code> など）は空文字が既定で、空のままなら内部トークン検証が全拒否になり、CORS は無効になります。</p>
+
+<p>DB エンジンは <a class="ref" data-ref="apps/api/app/core/db.py::build_engine" data-note="SQLite（単体テスト用）はプール引数を受け付けないので分岐する">build_engine</a> で作ります。接続プールは既定で 20 本と余裕 10 本ですが、<code>DB_POOL_SIZE</code>・<code>DB_MAX_OVERFLOW</code> で上書きできます。共用の講義サーバー向けにデプロイスクリプトは 5 と 5 を設定します（<a class="ref" data-ref="scripts/azure-deploy/config.sh#L44-45">config.sh の L44-45</a>）。ワーカーを増やすと、この本数がワーカーの数だけ掛かるためです。<a class="ref" data-ref="apps/api/app/core/db.py::get_session">get_session</a> は 1 リクエスト 1 セッションを渡す FastAPI の依存で、commit は各サービスが明示的に行います。</p>
+
+<div class="note fact">
+<p><code>Settings</code> には <code>DB_SSL_CA_PATH</code> と <code>IMAGE_BASE_URL</code> の項目がありますが、API のアプリコードのどこからも参照されていません（<code>apps/api/app</code> 配下の検索で確認）。公開環境の SSL は <code>DATABASE_URL</code> の <code>ssl_ca</code> クエリで効いており、デプロイスクリプトが <code>DB_SSL_CA_PATH</code> を設定していても実際の接続には使われません。<code>IMAGE_BASE_URL</code> を使うのは Web 側です。</p>
+</div>
+
+<p>接続数の設定を守るテストは <span class="tid">UT-DBCONF-01</span>（<code>tests/unit/test_ut_dbconf_01_pool_config.py</code>。既定は 20／10、環境変数で上書きできる）です。</p>
+
+<h3 id="s04-types">画面と API の型：手で合わせていて、自動の検査はない</h3>
+
+<p>起きうる事故は、API の応答の形を変えたのに、画面側の型が古いまま気づかれないことです。両者を自動で合わせる仕組みは無く、手で合わせています。画面側の型は <a class="ref" data-ref="apps/web/lib/types.ts">lib/types.ts</a> に手で書かれており、FastAPI 側の Pydantic モデル（<code>apps/api/app/schemas/</code>）とは別々に管理されています。同じ形が両側にある例が、カートの明細です（TypeScript の <a class="ref" data-ref="apps/web/lib/types.ts::CartItem">CartItem</a> と Python の <a class="ref" data-ref="apps/api/app/schemas/cart.py::CartLineOut">CartLineOut</a>。名前も違う）。注文確定の入力は <a class="ref" data-ref="apps/web/lib/types.ts::OrderCreateBody">OrderCreateBody</a> と <a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn">OrderCreateIn</a>、応答は <a class="ref" data-ref="apps/web/lib/types.ts::OrderResponse">OrderResponse</a> と <a class="ref" data-ref="apps/api/app/schemas/order.py::OrderOut">OrderOut</a> が対応します。</p>
+
+<p>照合の手がかりは <code>apps/api/openapi.json</code> です。FastAPI が出力する API の契約で、コマンドで再出力するとファイルが更新されます（<code>apps/api/README.md</code> に手順）。<code>lib/types.ts</code> の冒頭コメントは「食い違いが見つかったらここを直す」と書きますが、突き合わせは人が行います。テストでもこのファイルは参照されておらず、更新を忘れても CI は落ちません。さらに、BFF は FastAPI の応答を実行時に検証せず <code>as T</code> でキャストするだけです（<a class="ref" data-ref="apps/web/lib/server/api.ts#L113">api.ts の L113</a>）。</p>
+
+<div class="note opinion">
+<p>API の形を変える PR では、<code>openapi.json</code> の再出力と <code>lib/types.ts</code> の確認を手順に入れると、漏れを防げると思います。OpenAPI から型を生成する選択肢もありますが、依存の追加になるため、現状のコードからは判断できません。</p>
+</div>
+
+<h3 id="s04-supply">依存と秘密の検査：Dependabot、gitleaks、pre-commit</h3>
+
+<p>対象は、脆弱性のある依存を使い続けることと、秘密がリポジトリに入ることの 2 つです。前者は Dependabot と CI の監査、後者は gitleaks（CI）と detect-secrets（コミット前）で、それぞれ二重にしています。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>検査</th><th>実装</th><th>動く場面</th><th>失敗したとき</th></tr></thead>
+<tbody>
+<tr><td>依存の更新</td><td><a class="ref" data-ref=".github/dependabot.yml">dependabot.yml</a>。npm・uv・GitHub Actions を週次で確認し、minor と patch はまとめて 1 本の PR にする</td><td>週 1 回（GitHub 側）</td><td>PR が立つ（2026-09-29 時点で #16〜#20 の 5 本が未マージ）</td></tr>
+<tr><td>既知の脆弱性の監査</td><td><a class="ref" data-ref=".github/workflows/ci.yml#L213-248">ci.yml の deps-audit</a>。<code>pip-audit --strict</code> と <code>pnpm audit --audit-level high</code></td><td>PR と main への push</td><td><a class="ref" data-ref=".github/workflows/ci.yml#L217-218">ジョブに <code>continue-on-error: true</code></a> が付き、失敗しても PR は止まらない（非ブロック）</td></tr>
+<tr><td>秘密のスキャン（履歴全体）</td><td><a class="ref" data-ref=".github/workflows/secrets-scan.yml#L18-28">secrets-scan.yml の gitleaks</a>。<code>fetch-depth: 0</code> で履歴を全部走査</td><td>PR と main への push</td><td>マージ必須のチェックに指定されている（第 6 章）</td></tr>
+<tr><td>秘密のスキャン（コミット前）</td><td><a class="ref" data-ref=".pre-commit-config.yaml#L28-34">pre-commit の detect-secrets</a>。許容済みは <code>.secrets.baseline</code></td><td>手元の <code>git commit</code></td><td>コミットが止まる</td></tr>
+<tr><td>.env 系のコミット拒否</td><td><a class="ref" data-ref=".pre-commit-config.yaml#L36-43">forbid-dotenv</a>（<a class="ref" data-ref="scripts/hooks/forbid_dotenv.py">forbid_dotenv.py</a>）。<code>.env.example</code> だけ許可</td><td>手元の <code>git commit</code></td><td>コミットが止まる</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>ダミー値の許容は、行の末尾に <code>pragma: allowlist secret</code> または <code>gitleaks:allow</code> を書く方式です（<a class="ref" data-ref=".gitleaks.toml">.gitleaks.toml</a>）。コード中の <code>ci-only-*</code> のような値がこの印を付けて残されており、印の付いた行を <code>git grep</code> で一覧できます。</p>
+
+<div class="note fact">
+<p>pre-commit は、各自が <code>pre-commit install</code> を実行して初めて効きます。サーバー側では強制されないため、実行していない環境からの push は止まりません。サーバー側の最終防御は gitleaks です。</p>
+</div>
+
+<h3 id="s04-test-hooks">テスト専用フックを本番で読み込まない</h3>
+
+<p>紛れ込むと困るのは、同時実行のテストで使う「処理中の数を数える」機構と「意図的な待ち時間」、およびテスト用 URL（<code>/_test/metrics</code>・<code>/_test/reset</code>）です。待ち時間が本番で有効になると、注文確定が意図せず遅くなります。</p>
+
+<p>仕組みは 3 重です。1 つ目は、<a class="ref" data-ref="apps/api/app/main.py#L40-46" data-note="APP_ENV=test のときだけ、その場で import してルートを登録する">create_app の <code>if settings.is_test:</code></a> の中でだけ <code>testing_hooks</code> とテスト用ルーターを import し、登録することです。トップレベルで import しないので、本番では読み込まれません。2 つ目は、<a class="ref" data-ref="apps/api/app/core/testing_hooks.py">testing_hooks.py</a> 自体が <code>APP_ENV=test</code> 以外では全関数が何もしない作りであることです。3 つ目は、使う側（<a class="ref" data-ref="apps/api/app/services/orders.py#L158-163">_maybe_test_delay</a>、<a class="ref" data-ref="apps/api/app/services/orders.py#L290-298">create_order</a>）も <code>is_test</code> の内側で遅延 import することです。</p>
+
+<p>対応テストは 4 つです。<code>test_ut_hooks_noop_when_not_test</code>（本番モードで何もしない）、<code>test_ut_test_routes_absent_outside_test_env</code>（development と production で <code>/_test/*</code> が 404）、<code>test_ut_hooks_not_imported_by_production_path</code>（別プロセスで <code>app.main</code> を import し、<code>testing_hooks</code> が <code>sys.modules</code> に無いことを確認）、<code>test_ut_test_routes_present_in_test_env</code>（test モードでは動く）。すべて <code>tests/unit/test_ut_app_production_docs_and_hooks.py</code> にあります。</p>
+</section>

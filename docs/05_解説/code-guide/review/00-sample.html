@@ -1,0 +1,93 @@
+<section id="r00" data-title="サンプル（動作確認用）">
+<h2>0. サンプル本文（動作確認用）</h2>
+<p>この章は組み立て基盤の動作確認用です。本番ビルド（<code>--include-sample</code> なし）には入りません。</p>
+<p class="asked">「購入ボタンを押す」「注文を確定する」</p>
+
+<h3 id="r00-route">順路（停留所）</h3>
+<ol class="route" data-title="順路：購入ボタンから注文作成まで（サンプル）">
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="inflight.current" data-layer="screen" data-note="二重送信を ref で止めている">
+    <p class="stop-see"><code>OrderConfirm</code> の <code>submit</code>。<code>inflight.current</code> を見て二重押しを止める。</p>
+    <p class="stop-say">購入ボタンを押すと、まず画面側で二重送信を止めてから、注文の中身を作って送ります。</p>
+    <p class="stop-next">次へ: <kbd>F12</kbd> で <code>createOrder</code> の定義へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::createOrder" data-layer="screen">
+    <p class="stop-see">focus なしの例。範囲の開始行（<code>createOrder</code> の宣言）が出る。</p>
+    <p class="stop-say">ブラウザからは Next.js の <code>/api/orders</code> にだけ送ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/api/orders/route.ts</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="proxyOrderRequest(request" data-layer="bff">
+    <p class="stop-see">BFF の <code>POST</code>。バックエンドへ転送する <code>proxyOrderRequest</code> の行。</p>
+    <p class="stop-say">Next.js が CSRF を確かめたうえで、FastAPI へ内部 HTTP で渡します。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>create_order</code> を検索</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/orders.py::create_order" data-focus="orders_service.create_order" data-layer="api">
+    <p class="stop-see">ルーターの <code>create_order</code>。サービスを呼ぶ行（Python）。</p>
+    <p class="stop-say">ルーターは受け取って返すだけで、判断はサービスに任せています。</p>
+    <p class="stop-next">次へ: <kbd>F12</kbd> でサービスの <code>create_order</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::create_order" data-focus="_create_order_with_deadlock_retry" data-layer="service">
+    <p class="stop-see">サービスの入口。デッドロック時の再試行を含む呼び出し（Python）。</p>
+    <p class="stop-say">ここから在庫の引き当て、決済、確定までを 1 つのまとまりとして進めます。</p>
+  </li>
+</ol>
+
+<h3 id="r00-loc">インラインの行番号とキー</h3>
+<p>二重送信の防止は <span class="loc" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="inflight.current"></span> の行です。
+focus なしは <span class="loc" data-ref="apps/api/app/routers/orders.py::create_order"></span>（範囲の開始行。デコレータ行から始まる）。
+Python 側の呼び出しは <span class="loc" data-ref="apps/api/app/services/orders.py::create_order" data-focus="settings.is_test"></span> です。</p>
+<p>IDE の操作: <kbd>⌘P</kbd> でファイルを開く、<kbd>⌃G</kbd> で行へ移動、<kbd>F12</kbd> で定義へ、<kbd>⌥←</kbd> で戻る。</p>
+<p>既存の参照も使えます: <a class="ref" data-ref="apps/api/app/services/orders.py::_confirm" data-focus="mark_cart_ordered" data-note="カートを「注文済み」に切り替える条件付き更新">_confirm</a>（解説書でも <code>data-focus</code> が効きます）。</p>
+
+<h3 id="r00-tstat">テストの状態バッジ</h3>
+<p>
+<span class="tstat pass">✅ 通過（ローカル）</span>
+<span class="tstat ciskip">⏭ CI ではスキップ</span>
+<span class="tstat fail">❌ 失敗</span>
+<span class="tstat manual">🖐 手動で合格</span>
+<span class="tstat none">— テストなし</span>
+<span class="tstat notimpl">未実装</span>
+</p>
+
+<h3 id="r00-compare">仕様書との突き合わせ</h3>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>仕様書</th><th>テスト</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>在庫が足りないとき</td><td>409 を返す</td><td>409 を確認</td><td class="ok">一致</td></tr>
+<tr><td>同じ冪等キーで再送</td><td>201 ではなく 200</td><td>201 を期待</td><td class="ng">不一致</td></tr>
+<tr><td>決済が遅いとき</td><td>タイムアウトの扱いは未定</td><td>モックで即応答</td><td class="warn">要注意</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-script">台本ボックス</h3>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>購入ボタンを押すと、画面は二重送信を止めたうえで注文を Next.js に送り、Next.js が FastAPI に渡します。FastAPI のサービスが在庫・決済・確定を 1 つのまとまりで進め、結果を画面へ返します。</p>
+</div>
+
+<h3 id="r00-existing">既存の部品</h3>
+<div class="flow" data-title="フロー図（サンプル）">
+  <div class="flow-step" data-layer="screen" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="setBusy(true)">
+    <strong>注文確認画面</strong>
+    <p>data-focus はフロー図のステップにも使えます。</p>
+  </div>
+  <div class="flow-step" data-layer="api" data-ref="apps/api/app/routers/orders.py::create_order">
+    <strong>ルーター</strong>
+    <p>FastAPI が受ける。</p>
+  </div>
+</div>
+<div class="note fact"><p>注記・バッジ・表の絞り込み・Q&amp;A・直書きコードも、解説書と同じ書き方で使えます。</p></div>
+<p><span class="status done">実装済み</span> <span class="req">F-012</span> <span class="tid">IT-014-03</span> <span class="layer" data-layer="api">API</span></p>
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>二重注文はどう防いでいますか</summary>
+  <div class="qa-body"><p>冪等キーの一意制約と、カートの「注文済み」への切り替えで防いでいます。</p></div>
+</details>
+<pre class="code" data-lang="sql">SELECT o.order_number FROM orders AS o WHERE o.idempotency_key = :key LIMIT 1;</pre>
+</section>
+
+<section id="r99" data-title="サンプル 2 章目（目次確認用）">
+<h2>99. 2 章目</h2>
+<h3 id="r99-a">小見出し A</h3>
+<p>目次の現在地ハイライトの確認用。</p>
+</section>

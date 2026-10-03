@@ -1,0 +1,127 @@
+<section id="s12" data-title="用語集">
+<h2>12. 用語集</h2>
+
+<p>レビューで出そうな用語を 34 語、話題ごとに並べた。各項目は、その語が指す仕組みを先に書き、このコードのどこに出てくるかを参照で添えた。参照のない語は、このリポジトリでは概念としてだけ使っている。</p>
+
+<h3 id="s12-structure">12.1 構成と画面</h3>
+
+<dl>
+<dt id="s12-bff">BFF（Backend For Frontend）</dt>
+<dd>ブラウザ専用の窓口になるサーバー層。このアプリでは Next.js の Route Handler（<code>/api/*</code>）が担い、FastAPI の URL と内部トークンをブラウザに出さずに取り次ぐ。呼び出しの共通部分は <a class="ref" data-ref="apps/web/lib/server/api.ts::apiFetch">apiFetch</a>、注文確定の入口は <a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST">POST /api/orders</a>。</dd>
+
+<dt id="s12-route-handler">Route Handler</dt>
+<dd>Next.js の App Router で <code>app/api/**/route.ts</code> に書く、GET・POST などの HTTP メソッド名の関数。BFF の実体である。例: <a class="ref" data-ref="apps/web/app/api/cart/route.ts::GET">カート取得の GET</a>。</dd>
+
+<dt id="s12-components">Server Component / Client Component</dt>
+<dd>Server Component はサーバーだけで実行され、FastAPI を直接呼んで画面の初回表示を作る。Client Component はファイル先頭の <code>"use client"</code> で示し、ブラウザで動いて状態やクリックを扱う。例: <a class="ref" data-ref="apps/web/app/products/page.tsx::ProductsPage">ProductsPage</a>（サーバー）と <a class="ref" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid">ProductsGrid</a>（クライアント）。</dd>
+
+<dt id="s12-server-only">server-only</dt>
+<dd>「このモジュールはサーバー専用」と宣言するための import。クライアントコンポーネントから import するとビルドが失敗する。環境変数のローダー（<a class="ref" data-ref="apps/web/lib/server/env.ts::getEnv">getEnv</a>）など、秘密を触るモジュールの先頭に置いてある。CI には、違反ファイルでビルドが失敗することを確かめる工程がある（<a class="ref" data-ref=".github/workflows/ci.yml#L146-185">ci.yml</a>）。</dd>
+
+<dt id="s12-sessionstorage">sessionStorage</dt>
+<dd>ブラウザがタブごとに持つ保存領域で、タブを閉じると消える。注文手続きの入力値と冪等キーを、入力画面から確認画面へ渡すために使っている（<a class="ref" data-ref="apps/web/lib/checkout-session.ts::saveCheckoutSession">saveCheckoutSession</a>）。個人情報を長く残さないため、localStorage は使わない。</dd>
+
+<dt id="s12-proxy">proxy.ts と HTTP Basic 認証</dt>
+<dd>Next.js 16 で <code>middleware.ts</code> の後継になったファイルで、リクエストが画面や API に届く前に呼ばれる。ここでは、レビュー用の公開環境にサイト全体の HTTP Basic 認証をかけるために使っている（<a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy</a>、照合は <a class="ref" data-ref="apps/web/lib/basic-auth.ts::verifyBasicAuthHeader">verifyBasicAuthHeader</a>）。</dd>
+</dl>
+
+<h3 id="s12-security">12.2 セキュリティ</h3>
+
+<dl>
+<dt id="s12-internal-token">内部トークン</dt>
+<dd>BFF から FastAPI への呼び出しに付ける共有の秘密で、ヘッダ <code>X-Internal-Token</code> で送る。FastAPI は一定時間で比較し、期待値が未設定なら全リクエストを拒否する（<a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a>）。</dd>
+
+<dt id="s12-csrf">CSRF と Double Submit Cookie</dt>
+<dd>CSRF は、利用者のブラウザに別サイトから状態を変えるリクエストを送らせる攻撃である。Double Submit Cookie は、同じトークンを Cookie とリクエストヘッダの両方で送らせ、一致を確かめる対策で、BFF で検証している（<a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a>、判定規則は <a class="ref" data-ref="apps/web/lib/csrf-validation.ts::isCsrfValid">isCsrfValid</a>）。</dd>
+
+<dt id="s12-cookie-attr">HttpOnly・SameSite・Secure</dt>
+<dd>Cookie の属性。HttpOnly は JavaScript から読めなくし、SameSite=Lax は別サイトからの送信を制限し、Secure は HTTPS でだけ送る。カートのトークンは HttpOnly、CSRF トークンは JS が読むため HttpOnly なし、Secure は production だけに付ける（<a class="ref" data-ref="apps/web/lib/cookie.ts::buildSetCookie">buildSetCookie</a>）。</dd>
+
+<dt id="s12-cors">CORS</dt>
+<dd>ブラウザが別のオリジン（ホストとポートの組）の API を呼んでよいかを、サーバー側が許可する仕組み。FastAPI は BFF の 1 オリジンだけを許可し、未設定や <code>*</code> なら CORS を付けない（<a class="ref" data-ref="apps/api/app/core/security.py::install_cors">install_cors</a>）。</dd>
+
+<dt id="s12-xff">X-Forwarded-For</dt>
+<dd>プロキシが付ける、元の送信元 IP を並べたヘッダ。利用者が自分で付けて偽装できるため、信頼できる位置の値だけを使う（<a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">resolveClientIp</a>）。設定の漏れが第 9 章の A1 である。</dd>
+
+<dt id="s12-rate-limit">レート制限</dt>
+<dd>一定時間内の呼び出し回数に上限を設けて、総当たりを止める仕組み。ゲスト注文照会に 100 回/時/IP を設け、超えると 429 と <code>Retry-After</code> を返す（<a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a>）。</dd>
+
+<dt id="s12-idor">IDOR</dt>
+<dd>他人の注文番号やカートの ID を指定して、他人のデータを見たり操作したりできてしまう脆弱性。他人のものは存在しないのと同じ 404 で返して対策している（<a class="ref" data-ref="apps/api/app/services/orders.py::_existing_order_result">_existing_order_result</a>）。</dd>
+
+<dt id="s12-secret-mask">秘密のマスク</dt>
+<dd>ログに書く前に、Stripe のキー・接続文字列・Bearer トークン・内部トークンの値を <code>***</code> に置き換える処理（<a class="ref" data-ref="apps/api/app/core/logging.py::SecretMaskFilter">SecretMaskFilter</a>）。</dd>
+
+<dt id="s12-secret-scan">gitleaks と detect-secrets</dt>
+<dd>リポジトリに秘密（鍵やトークン）が混ざっていないかを調べるツール。detect-secrets は commit の前に（<a class="ref" data-ref=".pre-commit-config.yaml">pre-commit</a>）、gitleaks は CI で履歴全体を走査する（<a class="ref" data-ref=".github/workflows/secrets-scan.yml">secrets-scan.yml</a>）。</dd>
+
+<dt id="s12-dependabot">Dependabot</dt>
+<dd>依存ライブラリの更新 PR を自動で出す GitHub の機能。npm・uv・GitHub Actions を週次で見ている（<a class="ref" data-ref=".github/dependabot.yml">dependabot.yml</a>）。</dd>
+</dl>
+
+<h3 id="s12-data">12.3 データと注文</h3>
+
+<dl>
+<dt id="s12-idempotency">冪等キー</dt>
+<dd>同じ操作を 2 回送っても、1 回分の結果になるように、操作に付ける固有の値。確認画面の準備で FastAPI が発行し（<a class="ref" data-ref="apps/api/app/services/checkout.py::new_idempotency_key">new_idempotency_key</a>）、注文の INSERT では <code>orders.idempotency_key</code> の UNIQUE 制約で重複を止める（<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a>）。</dd>
+
+<dt id="s12-conditional-update">条件付き UPDATE</dt>
+<dd>更新の条件を UPDATE 文の WHERE に入れ、影響した行数で成否を判断する書き方。在庫引当では <code>stock &gt;= :q</code> を条件にし、0 行なら在庫不足とする（<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>）。</dd>
+
+<dt id="s12-transaction">トランザクションと ROLLBACK</dt>
+<dd>複数の DB 更新を、全部成功させるか全部取り消すかにまとめる単位。COMMIT で確定し、ROLLBACK で取り消す。注文確定の境界は <a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a> に集めてある。</dd>
+
+<dt id="s12-deadlock">デッドロック</dt>
+<dd>2 つの処理が互いの持つロックを待ち合って進まなくなる状態。InnoDB は一方を失敗させる。同じカートの同時確定で起き、ROLLBACK して 1 回だけやり直す（<a class="ref" data-ref="apps/api/app/services/orders.py::_create_order_with_deadlock_retry">_create_order_with_deadlock_retry</a>）。</dd>
+
+<dt id="s12-orm">ORM とバインド変数</dt>
+<dd>ORM は、SQL をプログラムのコードから組み立てる仕組み（ここでは SQLAlchemy）。バインド変数は値を SQL 文と別に渡す方式で、値が SQL として解釈されない。SQL インジェクションを防ぐ土台である。例: <a class="ref" data-ref="apps/api/app/repositories/search.py::build_match_condition">build_match_condition</a>。</dd>
+
+<dt id="s12-pydantic">Pydantic</dt>
+<dd>入力の型と形を宣言して検証する Python のライブラリ。FastAPI の入力検証に使い、違反は 400 <code>validation_error</code> に変換する。例: <a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn">OrderCreateIn</a>。</dd>
+
+<dt id="s12-alembic">Alembic</dt>
+<dd>テーブル定義の変更履歴（マイグレーション）を管理するツール。最初の版は <a class="ref" data-ref="apps/api/alembic/versions/0001_p1_initial.py">0001_p1_initial.py</a>、コンテンツ表の追加が <a class="ref" data-ref="apps/api/alembic/versions/371a338f4624_p2a_contents.py">371a338f4624_p2a_contents.py</a>。</dd>
+
+<dt id="s12-audit">監査ログ</dt>
+<dd>誰がいつ何をしたかを DB に残す記録で、<code>audit_logs</code> 表に書く。注文確定は <code>order.confirm</code>、決済 NG は <code>order.payment_failed</code>（<a class="ref" data-ref="apps/api/app/models/system.py::AuditLog">AuditLog</a>）。</dd>
+</dl>
+
+<h3 id="s12-ops">12.4 外部連携・運用・テスト</h3>
+
+<dl>
+<dt id="s12-stub">スタブとアダプタ</dt>
+<dd>スタブは、本物の代わりに決まった値を返す偽物。アダプタは、呼び出し側と外部サービスの間に置く、差し替え可能な窓口である。決済とメールは、Protocol で型を決めたアダプタの後ろにスタブを置いている（<a class="ref" data-ref="apps/api/app/adapters/payment.py::PaymentAdapter">PaymentAdapter</a>、<a class="ref" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter">StubPaymentAdapter</a>）。</dd>
+
+<dt id="s12-webhook">Webhook</dt>
+<dd>外部サービス（Stripe）が、支払いの完了などの出来事の後に、こちらの URL へ送ってくる通知。P2 の Stripe 接続で使う予定で、まだ実装していない。設計は<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L208-241">設計書 3.3.2</a>。</dd>
+
+<dt id="s12-appservice">App Service</dt>
+<dd>Azure のアプリ実行サービス。web と api を 1 つのプランに別々に載せ、Always On と HTTPS Only を設定している（<a class="ref" data-ref="scripts/azure-deploy/01-create.sh">01-create.sh</a>）。</dd>
+
+<dt id="s12-worker">ワーカー</dt>
+<dd>1 つのアプリを並列に処理するプロセス。api は <code>uvicorn --workers 2</code> で動かす（<a class="ref" data-ref="scripts/azure-deploy/config.sh#L51">config.sh L51</a>）。メモリはワーカー間で共有されないため、プロセス内メモリのレート制限はワーカーごとの集計になる。</dd>
+
+<dt id="s12-levels">UT・IT・ST・AT</dt>
+<dd>V 字モデルの右側にあたる 4 段階のテスト。単体（UT）、結合（IT）、システム（ST）、受け入れ（AT）で、ID はテスト設計書で決めている。要件からの対応は<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L868-885">設計書 10 章のトレーサビリティ表</a>にある。</dd>
+
+<dt id="s12-testtools">pytest と Vitest</dt>
+<dd>pytest は Python（api）、Vitest は TypeScript（web）のテストランナー。api は 300 件（unit 200・integration 100）、web は 228 件で、合計 528 件。api の結合テスト 100 件は、いまは CI でスキップされている（第 9 章 D3）。設定は <a class="ref" data-ref="apps/api/pyproject.toml#L36-40">pyproject.toml</a> と <a class="ref" data-ref="apps/web/vitest.config.mts">vitest.config.mts</a>。</dd>
+</dl>
+
+<h3 id="s12-docs">12.5 文書の用語</h3>
+
+<dl>
+<dt id="s12-adr">ADR（Architecture Decision Record）</dt>
+<dd>工程の分け方や環境の調達のような計画レベルの判断を、背景・代替案・理由つきで残す文書。設計レベルの判断は DS-DEC が受け持つ（役割分担は <a class="ref" data-ref="docs/00_計画/ADR/README.md">ADR の README</a>）。</dd>
+
+<dt id="s12-dsdec">DS-DEC</dt>
+<dd>設計仕様書 9.1 にある、設計判断の番号つきの一覧。決めた内容、理由、次善策が 1 行に入っている（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L806-830">設計書 9.1</a>）。</dd>
+
+<dt id="s12-dsid">DS-API・DS-TBL・DS-PRC・DS-SCR</dt>
+<dd>設計仕様書の設計 ID の接頭辞で、API・テーブル・処理・画面を指す。コードのコメントにこの ID が付いていて、設計書へたどれる。定義は<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L28">設計書 0 章</a>。</dd>
+
+<dt id="s12-reqid">REQ・F・SCR</dt>
+<dd>REQ は要求仕様書の要求 ID（REQ-FR-501 など）、F は要件定義書の機能 ID（F-013 など）、SCR は画面 ID。追跡は REQ から F、設計 ID、テスト ID の順につなぐ（対応表は<a class="ref" data-ref="docs/00_計画/実装フェーズ計画.md#L53-93">実装フェーズ計画 4 章</a>）。</dd>
+</dl>
+</section>

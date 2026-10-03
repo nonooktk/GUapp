@@ -1,0 +1,91 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUapp コードトレーサー</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+{{PARTIAL:tokens.css}}
+
+{{PARTIAL:tracer.css}}
+</style>
+
+<div class="app" id="app">
+  <header class="bar">
+    <div>
+      <span class="eyebrow">GUAPP ／ 画面の操作からコードを説明できるようになる</span>
+      <h1>GUapp コードトレーサー</h1>
+    </div>
+    <p class="howto" id="howto">左の画面で光っているところを押すと、右で処理の流れをたどれます。<kbd>←</kbd> <kbd>→</kbd> で進みます</p>
+    <div class="meta">
+      <span>対象コミット <a href="https://github.com/nonooktk/GUapp/commit/{{COMMIT_FULL}}" target="_blank" rel="noopener noreferrer"><code>{{COMMIT}}</code></a></span>
+      <span>作成 {{BUILD_DATE}}</span>
+      <span><a href="{{REVIEW_URL}}">レビュー回答ガイド</a></span>
+      <span><a href="{{GUIDE_URL}}">コード解説書</a></span>
+      <span><a href="{{MAP_URL}}">リポジトリ地図</a></span>
+    </div>
+  </header>
+
+  <section class="phone" aria-label="アプリの画面（写真）">
+    <div class="phone-head">
+      <div class="grow">
+        <span class="sname" id="sname"></span>
+        <span class="spath" id="spath"></span>
+      </div>
+      <button type="button" class="btn" id="btn-reset">最初から</button>
+    </div>
+    <p class="opline" id="opline" hidden></p>
+    <div class="phone-scroll" id="phone-scroll" tabindex="0" role="region" aria-label="画面の写真（縦にスクロールできます）">
+      <div class="shot" id="shot"></div>
+    </div>
+  </section>
+
+  <section class="ide" aria-label="コード">
+    <div class="layers" id="layers" role="list" aria-label="処理が通る層"></div>
+    <p class="linkline" id="linkline" aria-live="polite"></p>
+    <div class="ctrl">
+      <button type="button" class="btn" id="btn-prev" title="前へ（←）">◀ 前へ</button>
+      <button type="button" class="btn primary" id="btn-next" title="次へ（→ または F10）">次へ ▶</button>
+      <button type="button" class="btn" id="btn-play" aria-pressed="false" title="1 停留所 2.5 秒で自動で進めます">▶ 自動再生</button>
+      <span class="pos" id="pos" aria-live="polite"></span>
+      <button type="button" class="btn" id="btn-main" hidden>本筋に戻る</button>
+      <span class="grow"></span>
+      <label class="switch"><input type="checkbox" id="sw-tr" role="switch" checked><span>訳を表示</span></label>
+    </div>
+    <div class="work">
+      <details class="files" id="files-wrap" open>
+        <summary>ファイル一覧</summary>
+        <nav class="ft" id="filetree" aria-label="この流れに出てくるファイル"></nav>
+      </details>
+      <div class="editor">
+        <div class="tabs" id="tabs" role="tablist" aria-label="開いたファイル"></div>
+        <div class="crumb" id="crumb"></div>
+        <div class="code-scroll" id="code" tabindex="0" role="region" aria-label="コード（ファイル全体。この流れで通らない部分は畳んでいます）"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ptabs" role="tablist" aria-label="パネル">
+        <button type="button" class="ptab" role="tab" id="tab-explain" data-p="explain" aria-selected="true" aria-controls="p-explain">解説</button>
+        <button type="button" class="ptab" role="tab" id="tab-flow" data-p="flow" aria-selected="false" aria-controls="p-flow">流れ</button>
+        <button type="button" class="ptab" role="tab" id="tab-net" data-p="net" aria-selected="false" aria-controls="p-net">通信</button>
+        <button type="button" class="ptab" role="tab" id="tab-db" data-p="db" aria-selected="false" aria-controls="p-db" hidden>DB</button>
+      </div>
+      <div class="pbody exp" id="p-explain" role="tabpanel" aria-labelledby="tab-explain" tabindex="0"></div>
+      <div class="pbody" id="p-flow" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden></div>
+      <div class="pbody" id="p-net" role="tabpanel" aria-labelledby="tab-net" tabindex="0" hidden></div>
+      <div class="pbody" id="p-db" role="tabpanel" aria-labelledby="tab-db" tabindex="0" hidden></div>
+    </div>
+  </section>
+</div>
+<noscript><p class="noscript">このページは JavaScript で動きます。JavaScript を有効にして開いてください。</p></noscript>
+
+<script type="application/json" id="tracer-data">{{TRACER_JSON}}</script>
+{{TRACER_IMAGES}}
+{{TRACER_FILES}}
+<script id="hljs-script" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" async></script>
+<script>
+(function () {
+  'use strict';
+
+{{PARTIAL:tracer.js}}
+
+})();
+</script>
