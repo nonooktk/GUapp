@@ -16,7 +16,7 @@
     <p class="stop-say">お知らせと特集を、サーバー側でまとめて取りに行きます。<code>?kind=news</code> を付けると、お知らせだけになります。</p>
     <p class="stop-next">次へ: <code>getContents</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContents" data-focus="apiFetch&lt;ContentsResponse&gt;" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContents" data-focus="apiFetch&lt;ContentsResponse&gt;" data-layer="bff" data-link="関数の呼び出し（サーバー側）">
     <p class="stop-see"><code>getContents</code>。<code>kind</code> と <code>limit</code> のクエリを付けて <code>/contents</code> を呼ぶ。</p>
     <p class="stop-say">種類は <code>feature</code> と <code>news</code> の 2 つだけで、型もその 2 つに絞っています。</p>
     <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -26,7 +26,7 @@
     <p class="stop-say">FastAPI を呼ぶ共通の関数です。接続できなければ例外を投げます。ページ側はそれを受けて、「読み込めませんでした」と表示します。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/contents&quot;</code> を検索（<code>routers/content.py</code> を開く）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/content.py::list_contents" data-focus="content_service.list_contents" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/content.py::list_contents" data-focus="content_service.list_contents" data-layer="api" data-link="HTTP GET /api/v1/contents（内部トークン付き）">
     <p class="stop-see">ルーター <code>list_contents</code>（<code>GET /api/v1/contents</code>、DS-API-005）。<code>kind</code> は <code>Literal</code>、<code>limit</code> は 1〜20。</p>
     <p class="stop-say">ここが呼び出し先です。種類と件数の範囲の検査も、ここで行います。</p>
     <p class="stop-next">次へ: <code>list_contents</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -39,17 +39,17 @@
     <p class="stop-say">フッターの「FAQ」は <code>/contents/faq</code> へのリンクです。規約などの 4 つも、同じ形のリンクです。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/contents/[slug]/page.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="getContent(slug)" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="getContent(slug)" data-layer="screen" data-link="HTTP GET /contents/{slug}（画面遷移）">
     <p class="stop-see"><code>ContentDetailPage</code>。URL の <code>slug</code> で 1 件取る。接続できないときは <code>UpstreamUnavailableError</code> を受けて、「ページを読み込めませんでした」と表示する。</p>
     <p class="stop-say">どの slug も同じ画面で表示します。取得は Next.js のサーバー側で行います。</p>
     <p class="stop-next">次へ: <code>getContent</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContent" data-focus="apiFetch&lt;ContentDetail&gt;" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContent" data-focus="apiFetch&lt;ContentDetail&gt;" data-layer="bff" data-link="関数の呼び出し（サーバー側）">
     <p class="stop-see"><code>getContent</code>。<code>slug</code> を URL エンコードして <code>/contents/{slug}</code> を呼ぶ。</p>
     <p class="stop-say">slug をパスに入れて呼びます。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/contents/{slug}&quot;</code> を検索</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/content.py::get_content" data-focus="content_service.get_content_detail" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/content.py::get_content" data-focus="content_service.get_content_detail" data-layer="api" data-link="HTTP GET /api/v1/contents/{slug}（内部トークン付き）">
     <p class="stop-see">ルーター <code>get_content</code>（<code>GET /api/v1/contents/{slug}</code>、DS-API-006）。<code>slug</code> は <code>Path(pattern=…)</code> で検査する。</p>
     <p class="stop-say">ここが呼び出し先です。slug は、<code>^[a-z0-9-]{1,100}$</code> の形だけを受け付けます。</p>
     <p class="stop-next">次へ: <code>get_content_detail</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -58,12 +58,12 @@
 
 <h3 id="r09-s3">③ バックエンドの処理</h3>
 <ol class="route" data-title="順路：掲載期間の判定から SQL まで">
-  <li class="stop" data-ref="apps/api/app/services/content.py::list_contents" data-focus="contents_repo.list_by_kind" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/content.py::list_contents" data-focus="contents_repo.list_by_kind" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">サービス <code>list_contents</code>。現在時刻（UTC）を作り、リポジトリに渡す。</p>
     <p class="stop-say">時刻の比較は UTC で行います。日本時間にするのは、画面に出すときだけです（DS-DEC-40）。</p>
     <p class="stop-next">次へ: <code>list_by_kind</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/contents.py::list_by_kind" data-focus=".where(Content.kind == kind, _published_at(now))" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/contents.py::list_by_kind" data-focus=".where(Content.kind == kind, _published_at(now))" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>kind</code> と掲載期間で絞る SQL。お知らせは <code>publish_from</code> の新しい順、特集は <code>sort_order</code> の昇順。</p>
     <p class="stop-say">一覧は、掲載期間内の行だけを SQL の条件で絞り込んで取ります。</p>
     <p class="stop-next">次へ: <code>_published_at</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -73,7 +73,7 @@
     <p class="stop-say">終了日が空なら無期限です。境界ちょうどの日時も、掲載中として扱います。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>services/content.py</code> の <code>get_content_detail</code> へ（詳細の経路）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/content.py::get_content_detail" data-focus="is_within_publish_window(now, row.publish_from, row.publish_to)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/content.py::get_content_detail" data-focus="is_within_publish_window(now, row.publish_from, row.publish_to)" data-layer="service" data-link="関数の呼び出し（get_content ルーターから）">
     <p class="stop-see">詳細は、種別（<code>faq</code>・<code>static</code>）と slug で 1 行取ってから、サービスで掲載期間を判定する。</p>
     <p class="stop-say">詳細は一覧と違い、先に行を取ってから、関数で期間を判定します。行がない場合も期間外の場合も、同じ 404 にします。</p>
     <p class="stop-next">次へ: <code>is_within_publish_window</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -98,7 +98,7 @@
 
 <h3 id="r09-s4">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路：応答が FAQ ページとお知らせ一覧に出るまで">
-  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="if (!result.ok) {" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="if (!result.ok) {" data-layer="screen" data-link="応答の JSON（FastAPI から Next.js サーバーへ）">
     <p class="stop-see">応答が失敗だったときの分岐。404 なら <code>notFound()</code>。それ以外はログに残して、「読み込めませんでした」と表示する。</p>
     <p class="stop-say">404 のときは、存在しないページと同じ画面を出します。期間外かどうかは、利用者には分かりません。</p>
     <p class="stop-next">次へ: 同じ関数の下へスクロールして本文の描画を見る</p>

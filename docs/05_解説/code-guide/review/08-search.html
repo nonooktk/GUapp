@@ -27,7 +27,7 @@
     <p class="stop-say">ブラウザが話すのは Next.js だけです。FastAPI は直接呼びません。読み取りだけなので CSRF トークンは付けていません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/api/search/suggest/route.ts</code> を開く（URL 文字列なので F12 では飛べない）</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/search/suggest/route.ts::GET" data-focus="apiFetch&lt;SuggestResponse&gt;" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/search/suggest/route.ts::GET" data-focus="apiFetch&lt;SuggestResponse&gt;" data-layer="bff" data-link="HTTP GET /api/search/suggest">
     <p class="stop-see">BFF の <code>GET</code>。<code>q</code> だけを FastAPI の <code>/search/suggest</code> に渡す。</p>
     <p class="stop-say">Next.js が取り次ぎます。受け取るクエリは <code>q</code> だけです。</p>
     <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -37,7 +37,7 @@
     <p class="stop-say">FastAPI を呼ぶときは、BFF が内部トークンを付けます。ブラウザには見えません。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>/search/suggest</code> を検索（コード側のパスには <code>/api/v1</code> が付いていない）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/search.py::suggest" data-focus="search_service.suggest_products" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/search.py::suggest" data-focus="search_service.suggest_products" data-layer="api" data-link="HTTP GET /api/v1/search/suggest（内部トークン付き）">
     <p class="stop-see">FastAPI のルーター <code>suggest</code>（<code>GET /api/v1/search/suggest</code>、DS-API-004a）。サービスを呼ぶ行。</p>
     <p class="stop-say">ここからがバックエンドで、リクエストの届く先です。ルーターは受け取って返すだけで、判断はサービスに任せています。</p>
     <p class="stop-next">次へ: <code>suggest_products</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -50,17 +50,17 @@
     <p class="stop-say">Enter でも候補の選択でも、商品詳細ではなく検索結果ページに移ります。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/search/page.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/search/page.tsx::SearchPage" data-focus="getSearch({ q, page, per_page: 24 })" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/search/page.tsx::SearchPage" data-focus="getSearch({ q, page, per_page: 24 })" data-layer="screen" data-link="HTTP GET /search?q=…（画面遷移）">
     <p class="stop-see">Server Component の <code>SearchPage</code>。<code>q</code> は 100 文字で切り、空白だけなら API を呼ばない。</p>
     <p class="stop-say">結果ページは Next.js のサーバー側で FastAPI を呼びます。BFF を挟まないので、通信が 1 段少なくなります。</p>
     <p class="stop-next">次へ: <code>getSearch</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/search.ts::getSearch" data-focus="apiFetch&lt;SearchResponse&gt;" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/search.ts::getSearch" data-focus="apiFetch&lt;SearchResponse&gt;" data-layer="bff" data-link="関数の呼び出し（サーバー側）">
     <p class="stop-see"><code>getSearch</code>。<code>q・page・per_page</code> のクエリ文字列を作って <code>apiFetch</code> を呼ぶ。</p>
     <p class="stop-say">候補のときと同じ <code>apiFetch</code> を使います。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/search&quot;</code> を検索（<code>routers/search.py</code> を開く）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/search.py::search" data-focus="search_service.search_products" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/search.py::search" data-focus="search_service.search_products" data-layer="api" data-link="HTTP GET /api/v1/search（内部トークン付き）">
     <p class="stop-see">ルーター <code>search</code>（<code>GET /api/v1/search</code>、DS-API-004）。</p>
     <p class="stop-say">ここが検索 API の入口です。検索語の長さの制約もここで掛けています。</p>
     <p class="stop-next">次へ: <code>search_products</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -70,7 +70,7 @@
 
 <h3 id="r08-s3">③ バックエンドの処理</h3>
 <ol class="route" data-title="順路：検索語の整形から SQL まで">
-  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="term = _validate_query(q)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="term = _validate_query(q)" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">サービス <code>search_products</code> の先頭。検索語を検査して整える。</p>
     <p class="stop-say">最初に検索語を整えます。空なら 400 を返して、ここで終わります。</p>
     <p class="stop-next">次へ: <code>_validate_query</code> から <code>normalize_search_term</code> へ <kbd>F12</kbd> を 2 回</p>
@@ -80,7 +80,7 @@
     <p class="stop-say">この正規化は、一致判定のためのものではありません。目的は、空白の整理と長さの判定、それから言い換え辞書を引くときの表記そろえです。一致の判定はデータベースの照合順序に任せています（DS-DEC-34）。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>repositories/search.py</code> の <code>build_match_condition</code> へ（別ファイル）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/search.py::build_match_condition" data-focus="Product.name.contains(term, autoescape=True)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/search.py::build_match_condition" data-focus="Product.name.contains(term, autoescape=True)" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">商品名・説明・カテゴリ名の部分一致を OR でつなぐ条件。カテゴリ名は <code>product_categories</code> 経由のサブクエリ。</p>
     <p class="stop-say"><code>%</code> と <code>_</code> は SQLAlchemy の autoescape に任せ、自前のエスケープは書いていません。SQL は文字列連結で作っていません。</p>
     <p class="stop-next">次へ: <kbd>⇧F12</kbd> で呼び出し元（<code>search_published</code>）を見る</p>
@@ -90,7 +90,7 @@
     <p class="stop-say">公開商品に絞ったうえで、新着順に 24 件ずつ取ります。総件数は別の SQL で数えます。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>search_products</code> に戻り <code>total == 0</code> の分岐へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="if total == 0:" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="if total == 0:" data-layer="service" data-link="関数の戻り（呼び出し元の search_products に戻る）">
     <p class="stop-see">0 件のときだけ、類似キーワードとおすすめカテゴリを作る分岐。</p>
     <p class="stop-say">0 件のときだけ 2 つを添えます。言い換え辞書の候補は、実際に 1 件以上ヒットするものだけを残します。おすすめカテゴリは、商品数の多い子カテゴリの上位 3 件です。</p>
   </li>
@@ -113,7 +113,7 @@
 
 <h3 id="r08-s4">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路：応答が候補と結果ページに出るまで">
-  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="setItems(res.items)" data-layer="screen">
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="setItems(res.items)" data-layer="screen" data-link="応答の JSON（候補 API の戻り）">
     <p class="stop-see">候補の応答を受けたところ。<code>items</code> を state に入れ、1 件以上なら一覧を開く。</p>
     <p class="stop-say">BFF から戻った候補を state に入れます。0 件なら一覧は開きません。</p>
     <p class="stop-next">次へ: 同じファイルの下の <code>role="listbox"</code> へスクロール</p>

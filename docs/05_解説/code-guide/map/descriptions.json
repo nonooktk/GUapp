@@ -3342,6 +3342,16 @@
       "open_when": [
         "3 ページ共通の見た目や動きを直したいとき"
       ]
+    },
+    "docs/05_解説/code-guide/review": {
+      "role": "レビュー回答ガイドの本文",
+      "body_html": "<p>レビュー回答ガイドの各章（<code>00-intro.html</code>〜<code>10-basic-auth.html</code>）、コードの日本語訳（<code>translations/</code>）、用語集（<code>glossary.json</code>）、テンプレートが入っています。<code>build.py --review</code> で 1 枚の HTML にまとめます。</p>",
+      "open_when": [
+        "レビュー回答ガイドの説明や訳を直したいとき"
+      ],
+      "key_files": [
+        "docs/05_解説/code-guide/review/06-order-confirm.html"
+      ]
     }
   },
   "collapse": [

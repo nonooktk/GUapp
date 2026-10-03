@@ -23,7 +23,7 @@
     <p class="stop-say">カートを変える操作は、共通の mutate を通ります。Cookie の csrf_token と同じ値をヘッダーに載せて送ります。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/cart/items/route.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/cart/items/route.ts::POST" data-focus="const denied = verifyCsrf(request);" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/cart/items/route.ts::POST" data-focus="const denied = verifyCsrf(request);" data-layer="bff" data-link="HTTP POST /api/cart/items（CSRF トークン付き）">
     <p class="stop-see">BFF の <code>POST</code>。順に、① CSRF の検証 ② 本文の形（<code>variant_id</code> が整数、<code>quantity</code> が正の整数） ③ <code>proxyCartRequest</code> で FastAPI へ。①で外れると 403 <code>forbidden</code>、②で外れると 400 <code>validation_error</code>。どちらも FastAPI は呼ばない。</p>
     <p class="stop-say">BFF はまず CSRF を確かめ、次に送られた値の形を確かめます。ここで外れたものは、FastAPI まで届きません。</p>
     <p class="stop-next">次へ: <code>verifyCsrf</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -43,7 +43,7 @@
     <p class="stop-say">FastAPI の URL に、内部トークンのヘッダーを付けて呼びます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>add_item</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/cart.py::add_item" data-focus="cart_service.add_item(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::add_item" data-focus="cart_service.add_item(" data-layer="api" data-link="HTTP POST /api/v1/cart/items（内部トークン・カートトークン付き）">
     <p class="stop-see"><code>@router.post("/items")</code>。成功は 201。ヘッダー <code>X-Cart-Token</code> を <code>Header</code> で受け、本文は <code>CartItemIn</code> で受ける。これがバックエンド側の着地点。</p>
     <p class="stop-say">ここに届くのが FastAPI の POST /api/v1/cart/items で、routers/cart.py の add_item です。トークンはヘッダーで受けます。</p>
   </li>
@@ -55,17 +55,17 @@
     <p class="stop-say">初めてのときは Cookie が無いので、先にカートを取る GET を 1 回呼んで、BFF に Cookie を発行してもらいます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/api/cart/route.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/cart/route.ts::GET" data-focus="proxyCartRequest(request, &quot;/cart&quot;, { method: &quot;GET&quot; })" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/cart/route.ts::GET" data-focus="proxyCartRequest(request, &quot;/cart&quot;, { method: &quot;GET&quot; })" data-layer="bff" data-link="HTTP GET /api/cart（ブラウザから BFF へ。CSRF 検証なし）">
     <p class="stop-see"><code>GET</code> は CSRF の検証なし。<code>cart_token</code> が Cookie に無ければ、<code>X-Cart-Token</code> なしで FastAPI の <code>/cart</code> を呼ぶ。</p>
     <p class="stop-say">トークンが無い呼び出しも、そのまま FastAPI に渡します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>get_cart</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/cart.py::get_cart" data-focus="cart_service.get_cart(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::get_cart" data-focus="cart_service.get_cart(" data-layer="api" data-link="HTTP GET /api/v1/cart（内部トークン付き）">
     <p class="stop-see"><code>@router.get("")</code>（<code>GET /api/v1/cart</code>）。<code>X-Cart-Token</code> は任意（<code>None</code> 可）。</p>
     <p class="stop-say">ここもトークンが無くて構わない作りです。</p>
     <p class="stop-next">次へ: <code>cart_service.get_cart</code> を <kbd>F12</kbd> で開き、中の <code>resolve_cart</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart.py::resolve_cart" data-focus="new_token = token if (reuse_token and token is not None) else cart_rules.new_cart_token()" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::resolve_cart" data-focus="new_token = token if (reuse_token and token is not None) else cart_rules.new_cart_token()" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">ヘッダーが無い・形が違う・未知のとき、新しいトークンで <code>active</code> のカートを作る。注文済みのカートのトークンなら、旧カートから外して同じトークンで新しいカートを作る。</p>
     <p class="stop-say">トークンが無ければ、新しいカートを作って、新しいトークンを発行します。発行するのは FastAPI で、BFF ではありません。</p>
     <p class="stop-next">次へ: <code>new_cart_token</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -75,7 +75,7 @@
     <p class="stop-say">推測できない 43 文字の乱数です。この文字列を知っている人が、そのカートの持ち主として扱われます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/cart-proxy.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>proxyCartRequest</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="headers.append(&quot;Set-Cookie&quot;, buildCartTokenCookie(" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="headers.append(&quot;Set-Cookie&quot;, buildCartTokenCookie(" data-layer="bff" data-link="HTTP 応答の JSON（cart_token つき）">
     <p class="stop-see">応答の <code>cart_token</code> が Cookie と違う（または Cookie 無し）なら <code>Set-Cookie</code> で更新する。<code>csrf_token</code> が未発行なら <code>issueCsrfCookieIfMissing</code> で、こちらも発行する。</p>
     <p class="stop-say">応答に入っているトークンを、BFF が Cookie にして返します。CSRF 用の Cookie も、ここで一緒に発行します。</p>
     <p class="stop-next">次へ: <code>buildCartTokenCookie</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -112,12 +112,12 @@
     <p class="stop-say">ここでは形だけを確かめます。点数の上限は業務のルールなので、ここではなくサービスで判定します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>add_item</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart.py::add_item" data-focus="if variant.stock &lt;= 0:" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::add_item" data-focus="if variant.stock &lt;= 0:" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">判定の順は、① <code>resolve_cart</code> でカートを特定 ② 公開商品の variant が無ければ rollback して 404 ③ <code>stock &lt;= 0</code> なら rollback して 409 <code>out_of_stock</code>（<code>items</code> に variant_id） ④ 加算 ⑤ 加算後の数量で上限を検査し、超えたら rollback して 422 ⑥ commit して <code>build_cart_response</code>。</p>
     <p class="stop-say">サービスは、商品があるか、在庫があるか、加算して上限を超えないか、の順に確かめます。途中で外れたら加算を取り消して、エラーを返します。</p>
     <p class="stop-next">次へ: <code>get_variant_of_published_product</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/carts.py::get_variant_of_published_product" data-focus=".where(published_filter())" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::get_variant_of_published_product" data-focus=".where(published_filter())" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">variants と products を結合し、公開条件（<code>published_filter</code>）を付けて 1 件取る。無ければ <code>None</code>。非公開の商品と存在しない variant は、ここで区別されず 404 になる。</p>
     <p class="stop-say">非公開の商品の variant は、ここで「無いもの」として扱われます。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>upsert_item_add</code> へ</p>
@@ -127,7 +127,7 @@
     <p class="stop-say">同じ商品をもう一度入れると、行を増やさず、数量を足します。1 文で行うので、同時に 2 回押されても行は重複しません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/cart_rules.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>check_limits</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart_rules.py::check_limits" data-focus="raise AppError(422, &quot;limit_exceeded&quot;, field=&quot;quantity&quot;, limit=LINE_QUANTITY_LIMIT)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart_rules.py::check_limits" data-focus="raise AppError(422, &quot;limit_exceeded&quot;, field=&quot;quantity&quot;, limit=LINE_QUANTITY_LIMIT)" data-layer="service" data-link="サービスに戻って次の関数を呼ぶ">
     <p class="stop-see">加算後の数量で検査する。1 明細が 10 点を超えたら 422 <code>limit_exceeded</code>（<code>limit</code> は 10）、カート合計が 50 点を超えたら 422（<code>limit</code> は 50）。両方超えたときは 10 を先に返す。</p>
     <p class="stop-say">上限は、1 つの商品で 10 点、カート全体で 50 点です。足したあとの数で判定し、超えていたら足す前に戻します。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>stock_status</code> を見るか、<kbd>⌘P</kbd> で <code>services/cart.py</code> に戻り <code>build_cart_response</code> へ</p>
@@ -137,7 +137,7 @@
     <p class="stop-say">追加したあとのカート全体を作り直して返します。画面はこの応答だけで、明細も合計もバッジも更新できます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>CartItem</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/cart.py::CartItem" data-focus="UniqueConstraint(&quot;cart_id&quot;, &quot;variant_id&quot;)" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/cart.py::CartItem" data-focus="UniqueConstraint(&quot;cart_id&quot;, &quot;variant_id&quot;)" data-layer="db" data-link="SQL の INSERT（同じ行があれば UPDATE）">
     <p class="stop-see"><code>cart_items</code> テーブル。<code>(cart_id, variant_id)</code> が UNIQUE、<code>quantity &gt; 0</code> の CHECK。カート本体は <code>carts</code>（<code>anonymous_token</code> が UNIQUE、<code>status</code> は active／ordered／merged）。</p>
     <p class="stop-say">同じカートに同じバリエーションは 1 行だけ、という制約が DB にあります。同時に 2 回押されたとき、行の重複を最後に止めるのは、この制約です。</p>
   </li>
@@ -162,17 +162,17 @@
 <div class="note opinion"><p>意見（推測を含む）: 設計仕様書 4.5 は、DB を読まずに決まるなら 422、DB の今の状態に依存するなら 409 と線を引いています。ところが <code>add_item</code> の 422 は、加算後の数量（DB の値）で判定します。たとえば「すでに 10 点ある商品にもう 1 点」は DB の状態次第なので、4.5 の線引きなら 409 側になるように読めます。DS-PRC-011 が「上限超過は 422」と決めているので、実装は DS-PRC-011 に従っています。レビューで 422 と 409 の使い分けを聞かれるとしたら、この点だと思います。</p></div>
 <h3 id="r03-response">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路 A：成功したとき、応答からバッジ・トーストまで">
-  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartResponse" data-focus="item_count: int" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartResponse" data-focus="item_count: int" data-layer="api" data-link="DB の行を応答の形に詰める">
     <p class="stop-see">応答は <code>cart_token</code>・<code>items</code>・<code>item_count</code>（数量の合計）・<code>subtotal</code>・<code>shipping_fee</code>・<code>total</code>・<code>free_shipping_threshold</code>・<code>can_checkout</code>。<code>cart_id</code> は含めない。</p>
     <p class="stop-say">FastAPI が返す形は、この Pydantic のクラスで決まっています。バッジに使うのは item_count です。商品の種類の数ではなく、数量の合計です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/cart-proxy.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>proxyCartRequest</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(cart, { status: result.status, headers });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(cart, { status: result.status, headers });" data-layer="bff" data-link="HTTP 応答の JSON（FastAPI から）">
     <p class="stop-see">成功は、FastAPI のカート全体を、ステータス（追加は 201）ごとそのまま返す。<code>Cache-Control: no-store</code>。必要なら <code>Set-Cookie</code> も付く。</p>
     <p class="stop-say">BFF は、成功なら FastAPI の応答をそのまま返します。トークンが新しければ、このとき Cookie も付けます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/client/cart-api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>requestJson</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="const data = await parseJson&lt;T&gt;(res);" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="const data = await parseJson&lt;T&gt;(res);" data-layer="screen" data-link="HTTP 応答の JSON（BFF からブラウザへ）">
     <p class="stop-see">2xx なら JSON を <code>Cart</code> として返す。これが <code>await addCartItem(...)</code> の戻り値になる。本文が空なら <code>bad_response</code> を投げる。</p>
     <p class="stop-say">ブラウザ側では、成功なら JSON をそのまま Cart として受け取ります。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>PurchasePanel.tsx</code> に戻り、<code>applyCart(cart)</code> の行へ</p>
@@ -204,12 +204,12 @@
 </ol>
 <div class="note warn"><p>注意（既知の弱点 C3）: <code>CartProvider</code> には、<code>GET /api/cart</code> を呼び直す <code>refresh</code> がありますが、どこからも呼ばれていません。バッジの更新は、応答を <code>applyCart</code> に渡す経路だけです。</p></div>
 <ol class="route" data-title="順路 B：失敗したとき、エラーからトーストまで">
-  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(result.error, { status: result.status, headers });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(result.error, { status: result.status, headers });" data-layer="bff" data-link="HTTP 応答のエラー JSON（FastAPI から BFF へ）">
     <p class="stop-see">FastAPI のエラーは、<code>apiFetch</code> が <code>{code, field, limit, items…}</code> の許可した項目だけに絞り、同じステータスで返す。接続不可は 503 <code>upstream_unavailable</code>、想定外は 500 <code>internal_error</code>。</p>
     <p class="stop-say">BFF は、FastAPI のエラーを、code などの許可した項目だけにして、同じステータスで返します。内部の情報は出しません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/client/cart-api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>requestJson</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="throw new CartApiError(res.status, await parseJson&lt;ApiErrorBody&gt;(res));" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="throw new CartApiError(res.status, await parseJson&lt;ApiErrorBody&gt;(res));" data-layer="screen" data-link="HTTP 応答のエラー JSON（BFF からブラウザへ）">
     <p class="stop-see">2xx 以外は <code>CartApiError</code>（status と body）を投げる。</p>
     <p class="stop-say">ブラウザ側では、失敗なら status と本文を入れた例外にします。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>PurchasePanel.tsx</code> に戻り、<code>catch</code> の行へ</p>

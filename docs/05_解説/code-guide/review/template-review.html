@@ -11,6 +11,8 @@
 
 {{PARTIAL:guide-diagrams.css}}
 
+{{PARTIAL:review-aid.css}}
+
 /* ---------- レビュー回答ガイド固有の部品 ---------- */
 
 /* キー表記 <kbd>⌘P</kbd> */
@@ -83,6 +85,10 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
     <span>ファイルの場所は <a href="{{MAP_URL}}">リポジトリ地図</a></span>
   </div>
   <p class="howto">停留所の <code>ファイル:行</code> を IDE で開いて順にたどります。<span class="ref-demo">青い等幅の名前</span>を押すとコードも確認できます。</p>
+  <div class="bm-bar">
+    <label class="bm-switch"><input type="checkbox" id="bm-main" role="switch" checked><span>初心者モード</span></label>
+    <span class="bm-desc">オンのあいだ、コードの日本語訳・停留所の住所と注目行・つながり図・用語の説明（点線の下線の語）を出します。</span>
+  </div>
   <details class="toc-inline">
     <summary>目次</summary>
     {{TOC}}
@@ -102,6 +108,8 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
 </div>
 
 <script type="application/json" id="snippets-data">{{SNIPPETS_JSON}}</script>
+<script type="application/json" id="translations-data">{{TRANSLATIONS_JSON}}</script>
+<script type="application/json" id="glossary-data">{{GLOSSARY_JSON}}</script>
 {{SNIPPETS_CODE}}
 <script id="hljs-script" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" async></script>
 <script>
@@ -111,6 +119,8 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
 {{PARTIAL:drawer.js}}
 
 {{PARTIAL:guide-widgets.js}}
+
+{{PARTIAL:review-aid.js}}
 
   /* ---------------------------------------------------------------
      順路（ol.route）: 停留所のコピー・コードを見る・流れの再生
@@ -169,6 +179,7 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
       function stop() {
         playing = false; clearTimeout(timer); timer = null; idx = -1;
         stops.forEach(function (s) { s.classList.remove('is-active'); });
+        connActive(ol, -1);
         btn.textContent = '▶ 流れを再生';
         btn.setAttribute('aria-pressed', 'false');
         if (stopCurrent === stop) { stopCurrent = null; }
@@ -176,6 +187,7 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
       function go(i) {
         idx = i;
         stops.forEach(function (s, k) { s.classList.toggle('is-active', k === i); });
+        connActive(ol, i);
         var p = $('.stop-path', stops[i]);
         live.textContent = '停留所 ' + (i + 1) + '/' + stops.length + (p ? '：' + p.textContent : '');
         if (stops[i].scrollIntoView) { stops[i].scrollIntoView({ block: 'nearest', behavior: RM.matches ? 'auto' : 'smooth' }); }
@@ -210,6 +222,7 @@ table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weigh
     initRefEvents();
     initTip();
     initFlows();
+    initAid();
     initRoutes();
     initFilters();
     initToc();

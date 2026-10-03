@@ -55,7 +55,7 @@
     <p class="stop-say">注文番号はパスに、メールアドレスは本文に入れます。メールを URL に載せないのは、アクセスログなどに残らないようにするためです。</p>
     <p class="stop-next">次へ: URL は文字列なので <kbd>⌘P</kbd> で <code>orders/[orderNumber]/lookup/route</code> と入力して開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff" data-link="HTTP POST /api/orders/{番号}/lookup（CSRF トークン付き）">
     <p class="stop-see">最初に CSRF を検証。通らなければ 403 <code>forbidden</code> で FastAPI へは進まない。</p>
     <p class="stop-say">BFF は、最初に CSRF を検証します。</p>
     <p class="stop-next">次へ: 同じ関数の下へ進む</p>
@@ -142,17 +142,17 @@
     <p class="stop-say">本文のメールアドレスは、Pydantic で形を検査します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> に戻り、<code>lookup_order</code> の最後の行の <code>orders_service.lookup_order</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::lookup_order" data-focus="raise AppError(404" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::lookup_order" data-focus="raise AppError(404" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see"><code>get_by_number_and_email</code> が <code>None</code> なら 404 <code>not_found</code>。番号が無い場合とメールが違う場合を区別しない。見つかれば <code>build_order_response</code> で注文応答を作る。</p>
     <p class="stop-say">番号が無い場合も、メールが違う場合も、同じ 404 です。他人には、その番号の注文があるかどうかが分かりません。</p>
     <p class="stop-next">次へ: <code>get_by_number_and_email</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/orders.py::get_by_number_and_email" data-focus="Order.order_number == order_number, Order.guest_email == guest_email" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::get_by_number_and_email" data-focus="Order.order_number == order_number, Order.guest_email == guest_email" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">番号とメールの両方が一致する注文だけを 1 件返す SELECT。一致しなければ <code>None</code>。メールは小文字化も正規化もしない完全一致（コードを読んだ範囲。大文字小文字の違うメールで照会したときの挙動は、実行して確かめていない）。</p>
     <p class="stop-say">注文番号とメールアドレスが、両方とも一致した注文だけを返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/order.py</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="order_number: Mapped[str]" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="order_number: Mapped[str]" data-layer="db" data-link="SQL の SELECT（orders）">
     <p class="stop-see"><code>orders</code> テーブル。<code>order_number</code> は UNIQUE、<code>guest_email</code> は平文の列。明細は <code>order_items</code>（<code>list_items</code> が <code>order_id</code> で取る）。</p>
     <p class="stop-say">orders テーブルを番号とメールで検索し、明細は order_items から取ります。</p>
     <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開き、<code>OrderOut</code> へ</p>
@@ -232,17 +232,17 @@
     <p class="stop-say">照会の応答は、注文確定と同じ形です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<code>build_order_response</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="tax_included=calc_tax_included(order.total, order.tax_rate_at_order)," data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="tax_included=calc_tax_included(order.total, order.tax_rate_at_order)," data-layer="service" data-link="OrderOut を作る関数の呼び出し">
     <p class="stop-see">応答は DB の注文と明細から組み立てる。内税は注文時の税率（<code>tax_rate_at_order</code>）で求めるので、あとで税率が変わっても注文の内税は変わらない。明細は確定時の単価・商品名。</p>
     <p class="stop-say">照会の結果は、注文したときの単価と税率で組み立てます。あとから価格や税率を変えても、過去の注文の表示は変わりません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="result.status === 429" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="result.status === 429" data-layer="bff" data-link="HTTP 応答（JSON。429 なら Retry-After 付き）">
     <p class="stop-see">429 のときだけ、FastAPI の <code>Retry-After</code>（数字か HTTP 日付の形のものだけ）を応答ヘッダーに載せる。本文は <code>{"code":"rate_limited"}</code>。</p>
     <p class="stop-say">429 のときは、待つ秒数のヘッダーも画面側へ通します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="? Number(ra) : null" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="? Number(ra) : null" data-layer="screen" data-link="HTTP 応答（JSON）">
     <p class="stop-see"><code>Retry-After</code> が数字なら <code>retryAfterSec</code> として <code>OrderApiError</code> に入れて投げる。ただし画面側はこの値をどこでも使っておらず（grep で確認）、429 の文言に秒数は出ない。</p>
     <p class="stop-say">待つ秒数は、エラーに入れてあります。ただ、いまの画面は、その秒数を使っていません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderComplete.tsx</code> を開き、<code>LookupForm</code> の <code>catch</code> へ</p>

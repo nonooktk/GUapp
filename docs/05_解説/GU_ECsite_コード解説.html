@@ -36870,6 +36870,8 @@ asyncio_default_fixture_loop_scope = "function"
     var spacer = el('span', { 'class': 'spacer' });
     btnClose = el('button', { type: 'button', 'class': 'btn icon', 'aria-label': '閉じる' }, '×');
     [btnBack, linkGh, btnCopy, spacer, btnClose].forEach(function (n) { actions.appendChild(n); });
+    // レビュー回答ガイドだけが定義するフック（「訳を表示」のスイッチを足す）。他の出力では何もしない
+    if (typeof buildDrawerExtra === 'function') { buildDrawerExtra(actions, spacer); }
 
     head.appendChild(elPath); head.appendChild(row); head.appendChild(actions);
 
@@ -36919,6 +36921,8 @@ asyncio_default_fixture_loop_scope = "function"
   }
 
   function renderCode(sn, focus) {
+    // レビュー回答ガイドだけが定義するフック（コードの日本語訳つきの 3 列表示）。訳を出したら true
+    if (typeof renderCodeTr === 'function' && renderCodeTr(sn, focus)) { return; }
     var lines = highlightLines(sn);
     var html = '';
     for (var i = 0; i < lines.length; i++) {

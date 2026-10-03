@@ -70,7 +70,7 @@
     <p class="stop-say">POST なので CSRF トークンをヘッダーに載せます。トークンの検証は、このあと BFF で行います。</p>
     <p class="stop-next">次へ: URL は文字列なので <kbd>F12</kbd> では飛べません。<kbd>⌘P</kbd> で <code>api/checkout/prepare/route</code> と入力して開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/checkout/prepare/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/checkout/prepare/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff" data-link="HTTP POST /api/checkout/prepare（CSRF トークン付き）">
     <p class="stop-see">BFF の Route Handler。最初に CSRF を検証し、通らなければ 403 <code>forbidden</code> を返して FastAPI へは進まない。通れば <code>proxyOrderRequest</code> にパス <code>/checkout/prepare</code> を渡す。</p>
     <p class="stop-say">BFF の Route Handler です。最初に CSRF を検証して、通らなければ 403 で止めます。通ったら、取り次ぎ関数に FastAPI 側のパス /checkout/prepare を渡します。</p>
     <p class="stop-next">次へ: 検証の中身は <code>verifyCsrf</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -97,7 +97,7 @@
 <p>prepare は読み取りだけで、DB には何も書きません。カートの状態を確かめ、金額を計算し、冪等キーを作って返します。</p>
 
 <ol class="route" data-title="順路：FastAPI の prepare から金額計算まで">
-  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="Depends(verify_internal_token)" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="Depends(verify_internal_token)" data-layer="api" data-link="HTTP POST /api/v1/checkout/prepare（内部トークン付き）">
     <p class="stop-see"><code>/api/v1</code> 配下の全ルーターに <code>verify_internal_token</code> が掛かる。続けて <code>checkout.router</code>・<code>orders.router</code> を登録している。health だけは外（<code>create_app</code> 側）。</p>
     <p class="stop-say">FastAPI は、/api/v1 配下のすべてのルーターに内部トークンの検証を付けています。BFF 以外からは入れません。</p>
     <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -112,7 +112,7 @@
     <p class="stop-say">ルーターは薄く作ってあり、カートのトークンを受け取ってサービスに渡すだけです。</p>
     <p class="stop-next">次へ: <code>checkout_service.prepare</code> の <code>prepare</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/checkout.py::prepare" data-focus="if cart.status != CartStatus.active:" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/checkout.py::prepare" data-focus="if cart.status != CartStatus.active:" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see"><code>prepare</code> の順番。(1) カートを特定（404）(2) active でなければ 409 <code>already_ordered</code>（注文番号付き）(3) 設定を読む (4) 明細を取得、空なら 409 <code>empty_cart</code> (5) 在庫状態が <code>ok</code> でない明細があれば 409 <code>out_of_stock</code> (6) 金額計算 (7) 冪等キー発行。</p>
     <p class="stop-say">prepare は、まずカートを特定します。注文済みのカート、空のカート、在庫のない明細は 409 で弾きます。そのあとで金額を計算し、冪等キーを付けて返します。</p>
     <p class="stop-next">次へ: 1 つ目の <code>resolve_existing_cart</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -122,12 +122,12 @@
     <p class="stop-say">カートが見つからないときは 404 です。確認画面の段階で、新しいカートを勝手に作ることはしません。</p>
     <p class="stop-next">次へ: <code>services/checkout.py</code> の <code>prepare</code> に戻り、<code>carts_repo.fetch_lines</code> の <code>fetch_lines</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/carts.py::fetch_lines" data-focus=".join(Variant, Variant.id == CartItem.variant_id)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::fetch_lines" data-focus=".join(Variant, Variant.id == CartItem.variant_id)" data-layer="repo" data-link="関数の呼び出し（SQL の SELECT を実行）">
     <p class="stop-see">カート明細・バリエーション・商品を結合した 1 本の SELECT。単価は <code>products.price_incl_tax</code>（現在の値）、在庫は <code>variants.stock</code>、公開フラグ、最初の画像のパス。</p>
     <p class="stop-say">明細は 1 回の SELECT でまとめて読みます。単価は、その時点の商品マスタの値を使います。</p>
     <p class="stop-next">次へ: <code>services/checkout.py</code> に戻り、<code>calc_totals</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/pricing.py::calc_totals" data-focus="shipping_fee = calc_shipping_fee(" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/pricing.py::calc_totals" data-focus="shipping_fee = calc_shipping_fee(" data-layer="service" data-link="関数の呼び出し（prepare から）">
     <p class="stop-see">明細 0 件は 409 <code>empty_cart</code>。小計 → 送料（小計が閾値以上なら 0、未満なら設定値）→ 合計 → 内税（合計 × 10 ÷ 110 の円未満切り捨て）。税率・送料・閾値は <code>system_settings</code> の値。</p>
     <p class="stop-say">金額は、小計、送料、合計、内税の順にサーバーで計算します。送料の閾値と税率は、設定テーブルの値です。画面側では計算しません。</p>
     <p class="stop-next">次へ: <code>services/checkout.py</code> に戻り、<code>new_idempotency_key</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -137,7 +137,7 @@
     <p class="stop-say">冪等キーは、ここで 43 文字の乱数として作るだけで、DB には保存しません。注文を確定するときに、初めて orders テーブルに入ります。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/cart.py</code> を開く（読むテーブルの確認）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/cart.py::Cart" data-focus="status: Mapped[CartStatus]" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/cart.py::Cart" data-focus="status: Mapped[CartStatus]" data-layer="db" data-link="SQL の SELECT（読むテーブルの定義）">
     <p class="stop-see">prepare が読むのは <code>carts</code>（<code>status</code> は active か ordered）・<code>cart_items</code>・<code>variants</code>・<code>products</code>・<code>product_images</code>・<code>system_settings</code>。書き込みはしない。</p>
     <p class="stop-say">prepare はこれらのテーブルを読むだけで、何も書き込みません。</p>
     <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開く</p>
@@ -165,12 +165,12 @@
 <h3 id="r05-display">④ 応答から表示まで</h3>
 
 <ol class="route" data-title="順路：応答から確認画面の表示まで">
-  <li class="stop" data-ref="apps/api/app/schemas/order.py::PrepareOut" data-focus="idempotency_key: str = Field(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::PrepareOut" data-focus="idempotency_key: str = Field(" data-layer="api" data-link="応答の形に整えて返す">
     <p class="stop-see">応答の形（Pydantic の <code>PrepareOut</code>）。<code>idempotency_key</code>・<code>items</code>・<code>subtotal</code>・<code>shipping_fee</code>・<code>total</code>・<code>tax_included</code>・<code>tax_rate</code>（<code>"0.10"</code> の文字列）・<code>free_shipping_threshold</code>。<code>cart_id</code> は含まない。</p>
     <p class="stop-say">FastAPI は、明細、小計、送料、合計、内税、税率、送料無料の閾値、冪等キーを返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff" data-link="応答の JSON（FastAPI から BFF へ）">
     <p class="stop-see">成功は FastAPI の本文をそのまま返す（<code>Cache-Control: no-store</code>）。エラーは <code>result.error</code> を同じ status で返す。接続不可は 503、想定外の例外は 500。</p>
     <p class="stop-say">成功のときは、FastAPI の応答をそのまま画面に返します。エラーのときは、整形したコードだけを返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/api.ts</code> を開き、<code>sanitizeErrorBody</code> へ</p>
@@ -180,7 +180,7 @@
     <p class="stop-say">エラーの本文は、コードと、あらかじめ許可した詳細だけを通します。内部の情報が画面に漏れないようにするためです。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen" data-link="HTTP 応答の JSON（BFF からブラウザへ）">
     <p class="stop-see">失敗（<code>!res.ok</code>）は <code>OrderApiError(status, 本文, Retry-After の秒数)</code> を throw。成功は <code>{ status, data }</code> を返し、<code>prepareCheckout</code> は <code>data</code> だけを返す。</p>
     <p class="stop-say">クライアント関数は、成功なら応答の本文を返し、失敗なら status と本文を入れたエラーを投げます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/types.ts</code> を開き、<code>PrepareResponse</code> へ</p>

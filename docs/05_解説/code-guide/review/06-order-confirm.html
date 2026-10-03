@@ -70,7 +70,7 @@
     <p class="stop-say">CSRF トークンをヘッダーに載せて送ります。検証するのは BFF です。</p>
     <p class="stop-next">次へ: URL は文字列なので <kbd>⌘P</kbd> で <code>app/api/orders/route</code> と入力して開く（<code>[orderNumber]</code> の入ったフォルダではなく、<code>orders</code> 直下の <code>route.ts</code>）</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/orders/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff" data-link="HTTP POST /api/orders（CSRF トークン付き）">
     <p class="stop-see">最初に CSRF を検証。Cookie とヘッダーが一致しなければ 403 <code>{"code":"forbidden"}</code> で終わり、FastAPI は呼ばない（IT-BFF-02）。</p>
     <p class="stop-say">BFF は最初に CSRF を検証します。通らなければ 403 で止め、FastAPI には送りません。</p>
     <p class="stop-next">次へ: 同じ関数の下へ進む</p>
@@ -138,7 +138,7 @@
     <p class="stop-say">入力の形は Pydantic で検査します。桁数や文字数が違えば、サービスに入る前に 400 で返ります。受け取り方法と支払い方法は、形に問題がなければ通し、対応している値かどうかはサービスで判断します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>create_order</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::create_order" data-focus="return await _create_order_with_deadlock_retry(session, token, body, payment=payment, mail=mail)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::create_order" data-focus="return await _create_order_with_deadlock_retry(session, token, body, payment=payment, mail=mail)" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">注文確定のサービスの先頭。テストモードのときだけ同時処理数を数えるフックを挟み、本体は <code>_create_order_with_deadlock_retry</code>。戻り値は (HTTP ステータス, 注文応答)。</p>
     <p class="stop-say">サービスの入り口になる関数です。本体の処理を、デッドロック時の再試行つきで呼びます。</p>
     <p class="stop-next">次へ: <code>_create_order_with_deadlock_retry</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -158,17 +158,17 @@
     <p class="stop-say">手順 1 では、状態を決済待ちにして orders に INSERT します。冪等キーはこのテーブルの中で一意です。</p>
     <p class="stop-next">次へ: <code>insert_pending_order</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_pending_order" data-focus="raise DuplicateIdempotencyKey() from exc" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_pending_order" data-focus="raise DuplicateIdempotencyKey() from exc" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">INSERT は <code>begin_nested</code>（SAVEPOINT）の中。UNIQUE 違反が冪等キーの列なら <code>DuplicateIdempotencyKey</code>、注文番号の列なら番号を作り直して 1 回だけやり直し、2 回続けて衝突したら 500。注文番号は <code>generate_order_number</code>（<code>GU-YYMMDD-</code> ＋ 英大文字と数字 8 文字、日付は JST）。</p>
     <p class="stop-say">冪等キーが重複したら、専用の例外に変えて投げます。注文番号が衝突したときは、作り直すのは 1 回だけです。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/order.py</code> を開く（UNIQUE の定義）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)" data-layer="db" data-link="SQL の INSERT（orders）">
     <p class="stop-see"><code>orders.idempotency_key</code> が UNIQUE。同じキーの 2 本目の INSERT は、DB が必ず断る。これが二重注文を防ぐ本体で、<code>order_number</code> も UNIQUE。</p>
     <p class="stop-say">二重注文を防ぐ本体は、この UNIQUE 制約です。アプリ側の確認をすり抜けても、DB が 2 件目を断ります。</p>
     <p class="stop-next">次へ: <code>services/orders.py</code> の <code>_create_order</code> に戻り、<kbd>⌘⇧F</kbd> で <code>except DuplicateIdempotencyKey:</code> を検索して該当の行へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order" data-focus="except DuplicateIdempotencyKey:" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_create_order" data-focus="except DuplicateIdempotencyKey:" data-layer="service" data-link="UNIQUE 違反の例外が戻る（DuplicateIdempotencyKey）">
     <p class="stop-see">UNIQUE 違反のあと、rollback して既存の注文を SELECT する。見つからなければ（相手が rollback した）409 <code>already_ordered</code>（注文番号は null）、見つかれば <code>_existing_order_result</code> へ。</p>
     <p class="stop-say">冪等キーが重複したら、いったん rollback して既存の注文を探します。見つかれば、その注文を返します。</p>
     <p class="stop-next">次へ: <code>_existing_order_result</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -183,12 +183,12 @@
     <p class="stop-say">手順 2 で、カートを注文済みに切り替えます。冪等キーが違っても、同じカートを同時に 2 回は確定できません。</p>
     <p class="stop-next">次へ: <code>mark_cart_ordered</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered" data-focus="Cart.status == CartStatus.active" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered" data-focus="Cart.status == CartStatus.active" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>UPDATE carts SET status='ordered' WHERE id=? AND status='active'</code> の 1 文。SELECT してから UPDATE する二段にしていない。影響行数を返す。</p>
     <p class="stop-say">条件付きの UPDATE 1 文です。active のカートだけを切り替え、更新された行数で成功か失敗かを判断します。</p>
     <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 3 の <code>_recalculate_and_compare</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::_recalculate_and_compare" data-focus="if (d.subtotal, d.shipping_fee, d.total) != (" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::_recalculate_and_compare" data-focus="if (d.subtotal, d.shipping_fee, d.total) != (" data-layer="service" data-link="更新した行数が戻る">
     <p class="stop-see">手順 3。非公開商品が混じっていれば 409 <code>out_of_stock</code>。その時点の単価と設定で <code>calc_totals</code> を計算し、表示金額 <code>display</code> と 1 円でも違えば 409 <code>price_changed</code>（<code>amounts</code> に再計算後の金額）。引当より前に照合する。</p>
     <p class="stop-say">画面に出した金額は信用せず、サーバーで計算し直して照合します。1 円でも違えば、価格変更として 409 を返します。在庫を押さえる前に照合するのは、不一致のときに在庫の行をロックしないためです。</p>
     <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 4 の <code>_reserve_all</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -198,32 +198,32 @@
     <p class="stop-say">在庫は、バリエーション ID の昇順に 1 つずつ引き当てます。足りない明細が 1 つでもあれば、全体を rollback して、足りない明細の ID を返します。</p>
     <p class="stop-next">次へ: <code>reserve_stock</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-focus="Variant.stock &gt;= quantity" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-focus="Variant.stock &gt;= quantity" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock &gt;= :q</code> の 1 文。影響行数（0 か 1）を返す。0 なら在庫不足。</p>
     <p class="stop-say">在庫の引当は、条件付きの UPDATE 1 文です。在庫が足りるときだけ減らし、足りなければ更新は 0 行になります。2 つの注文が同時に来ても、後に処理された側が 0 行になります。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/catalog.py</code> を開き、<code>Variant</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock_non_negative" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock_non_negative" data-layer="db" data-link="SQL の UPDATE（variants.stock）">
     <p class="stop-see"><code>variants.stock</code> に <code>CHECK (stock &gt;= 0)</code> の制約。条件付き UPDATE が破れても、DB が負の在庫を断る二重の備え。</p>
     <p class="stop-say">在庫には、条件付き UPDATE に加えて、マイナスにならない CHECK 制約も付けています。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>adapters/payment.py</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter" data-focus="= result or" data-layer="infra">
+  <li class="stop" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter" data-focus="= result or" data-layer="infra" data-link="引当のあと、決済の部品の呼び出し（authorize）">
     <p class="stop-see">手順 5。決済スタブは、環境変数 <code>PAYMENT_STUB_RESULT</code>（<code>ok</code> か <code>ng</code>。未設定は <code>ok</code>）の値をそのまま返す。<code>get_payment_adapter</code> が設定から作り、テストでは差し替えられる。カード情報は扱わない。</p>
     <p class="stop-say">決済はスタブです。環境変数で決めた ok か ng を返すだけで、カード情報は扱いません。テストでは ng に差し替えて、失敗側の動きを確かめています。</p>
     <p class="stop-next">次へ: <code>services/orders.py</code> の <code>_confirm</code> に戻り、手順 6（<code>if result == "ok":</code> 以降）へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py#L213-246" data-focus="await orders_repo.insert_order_items(" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py#L213-246" data-focus="await orders_repo.insert_order_items(" data-layer="service" data-link="決済の結果 ok が戻る">
     <p class="stop-see">手順 6 の ok 側。状態遷移の表（<code>order_state.assert_transition</code>）を確かめて <code>accepted</code> に更新し、<code>order_items</code>（確定時の単価と商品名）・<code>payments</code>・<code>audit_logs</code>（<code>order.confirm</code>）を書いて commit。</p>
     <p class="stop-say">決済が ok なら、状態を受付済みに更新し、明細・決済・監査ログを書いて、まとめて commit します。明細には、注文した時点の単価と商品名を保存します。</p>
     <p class="stop-next">次へ: <code>insert_order_items</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_order_items" data-focus="unit_price_at_order=i.unit_price," data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::insert_order_items" data-focus="unit_price_at_order=i.unit_price," data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>order_items</code> に <code>unit_price_at_order</code>・<code>product_name_at_order</code> を保存する。あとで商品の価格や名前を変えても、注文の記録は変わらない（IT-014-08）。<code>payments</code> は provider と amount だけで、カード情報の列は無い。</p>
     <p class="stop-say">明細は、その時点の単価と商品名をコピーして保存します。商品マスタを後から変えても、過去の注文は変わりません。</p>
     <p class="stop-next">次へ: <code>_confirm</code> に戻り、手順 6 の ng 側へ。<kbd>⌘⇧F</kbd> で <code>payment_failed</code> を検索して <code>_confirm</code> の行へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py#L248-271" data-focus="await session.commit()" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py#L248-271" data-focus="await session.commit()" data-layer="service" data-link="決済の結果 ng のとき（別の分岐）">
     <p class="stop-see">手順 6 の ng 側。<code>payment_failed</code>・<code>payments</code>（ng）・<code>audit_logs</code>（<code>order.payment_failed</code>）を 1 回目の commit で保存する。そのあと別のトランザクションで <code>restore_stock</code> と <code>restore_cart_active</code> を実行して 2 回目の commit、最後に 409 <code>payment_failed</code>。<span class="tstat none">対応する自動テスト（2 回目の前に落とす）なし</span></p>
     <p class="stop-say">決済が ng のときは、注文を決済失敗の状態で残し、そのあとで在庫とカートを元に戻して、409 を返します。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>_create_order</code> を開き、手順 7 の <code>mail.send_order_confirmation</code> へ</p>
@@ -233,7 +233,7 @@
     <p class="stop-say">メールの送信に失敗しても、注文はすでに確定しているので、201 のまま返します。失敗は監査ログに残します。</p>
     <p class="stop-next">次へ: <code>send_order_confirmation</code> にカーソルを置いて <kbd>F12</kbd>（<code>mail</code> の実体は <code>OutboxMailAdapter</code>）</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter" data-focus="path.write_text(" data-layer="infra">
+  <li class="stop" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter" data-focus="path.write_text(" data-layer="infra" data-link="関数の呼び出し（メールの部品）">
     <p class="stop-see">メールは送らず、<code>apps/api/.mail-outbox/&lt;注文番号&gt;.txt</code> に本文を書く。宛先・氏名・住所・電話が平文で入る。ログには注文番号とマスクしたメールだけを出す。</p>
     <p class="stop-say">メールは実際には送らず、ファイルに書き出します。ログには個人情報を出さないようにしています。</p>
     <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開き、<code>OrderOut</code> へ</p>
@@ -273,17 +273,17 @@
     <p class="stop-say">応答には、注文番号、状態、明細、金額、お届け先、注文日時を入れます。内部の ID は出しません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<code>build_order_response</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="ordered_at=order.created_at.replace(tzinfo=UTC)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="ordered_at=order.created_at.replace(tzinfo=UTC)" data-layer="service" data-link="OrderOut を作る関数の呼び出し">
     <p class="stop-see">DB の行から応答を組み立てる。明細は <code>order_items</code> の確定時の単価・商品名。内税は <code>calc_tax_included</code> で注文時の税率から求める。注文日時は UTC として返し、表示のときに JST に直す。</p>
     <p class="stop-say">応答は、DB に保存した注文の内容から組み立てます。明細は、注文した時点の単価と商品名です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> を開き、<code>create_order</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/orders.py::create_order" data-focus="response.status_code = http_status" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/orders.py::create_order" data-focus="response.status_code = http_status" data-layer="api" data-link="関数の戻り値（注文応答）">
     <p class="stop-see">新規は 201（デコレータの既定）、同じ冪等キーの再送は 200 に、ここで切り替える。</p>
     <p class="stop-say">新規の注文は 201、同じキーの再送は 200 で返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff" data-link="HTTP 応答（JSON・201 または 200）">
     <p class="stop-see">成功は FastAPI の本文と status（201・200）をそのまま返す。エラーは <code>result.error</code> を同じ status で返す。<code>Cache-Control: no-store</code>。</p>
     <p class="stop-say">BFF は、成功なら応答をそのまま返し、エラーなら整形したコードだけを返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/api.ts</code> を開き、<code>sanitizeErrorBody</code> へ</p>
@@ -293,7 +293,7 @@
     <p class="stop-say">エラーの本文は、コードと、あらかじめ決めた詳細だけを通します。SQL やスタックトレースは画面に出しません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen" data-link="HTTP 応答（JSON）">
     <p class="stop-see">失敗は <code>OrderApiError(status, 本文, Retry-After の秒数)</code> を throw。成功は <code>{ status, data }</code>。</p>
     <p class="stop-say">クライアント関数は、成功なら応答を返し、失敗なら status と本文を入れたエラーを投げます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderConfirm.tsx</code> に戻り、<code>createOrder(body)</code> の次の行へ</p>
@@ -308,7 +308,7 @@
     <p class="stop-say">注文の応答は、完了画面に表示するために sessionStorage へ保存します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>app/orders/complete/page.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/orders/complete/page.tsx::OrderCompletePage" data-focus="isOrderNumber(raw) ? raw : null" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/orders/complete/page.tsx::OrderCompletePage" data-focus="isOrderNumber(raw) ? raw : null" data-layer="screen" data-link="画面遷移（GET /orders/complete?n=注文番号）">
     <p class="stop-see">URL の <code>?n=</code> は <code>isOrderNumber</code> で形を確かめ、外れれば <code>null</code> にする。Next.js 16 では <code>searchParams</code> が Promise。</p>
     <p class="stop-say">完了画面のページです。URL の注文番号は、形を確かめてから本体に渡します。</p>
     <p class="stop-next">次へ: <code>OrderComplete</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -341,7 +341,7 @@
     <p class="stop-say">金額が変わったり、決済に失敗したりしたときは、入力を残したまま注文手続きに戻します。古い冪等キーは捨てて、次に確認画面へ進むときに新しいキーを取り直します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>CheckoutForm.tsx</code> を開き、<code>CheckoutFormInner</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="session?.serverErrors" data-layer="screen">
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="session?.serverErrors" data-layer="screen" data-link="画面遷移（/checkout）">
     <p class="stop-see">戻ってきた入力欄の復元。<code>serverErrors</code>（400 の項目エラー）があれば、赤字の初期値にする。</p>
     <p class="stop-say">戻ってきたときは、保存しておいた入力と、サーバーが返した項目ごとのエラーを復元し、エラーは赤字で表示します。</p>
     <p class="stop-next">次へ: 同じ関数の <code>useEffect</code> へ</p>

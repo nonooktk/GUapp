@@ -5,6 +5,7 @@
     python3 docs/05_解説/code-guide/build.py [--commit SHA] [--check] [--include-sample]
     python3 docs/05_解説/code-guide/build.py --map [--map-data PATH] [--check] [--guide-url URL] [--map-url URL]
     python3 docs/05_解説/code-guide/build.py --review [--check] [--include-sample] [--guide-url URL] [--map-url URL] [--list-stops]
+        [--allow-missing-translations] [--dump-translation-scope PATH] [--translations-dir DIR] [--glossary PATH]
 
 - content/*.html をファイル名順に連結して template.html に差し込む
 - 本文中の data-ref を `git show <sha>:<path>` で読んだコードに解決し、JSON として埋め込む
@@ -13,7 +14,8 @@
   ツリーは `git ls-tree`、説明は map/descriptions.json、プレビューは `git show` から作る
 - `--review` を付けると、レビュー回答ガイド（review/template-review.html）を組み立てる。
   本文は review/*.html。順路（ol.route）の停留所・インラインの行番号（span.loc）・data-focus は、
-  実ファイルの行番号を組み立て時に自動で入れる
+  実ファイルの行番号を組み立て時に自動で入れる。あわせて、初心者向けの
+  コードの日本語訳（review/translations/*.json）・住所・つながり図・重なりの図・用語集（review/glossary.json）を組み込む
 
 data-ref の構文・descriptions.json のスキーマは README.md を参照。
 """
@@ -27,6 +29,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -49,6 +52,14 @@ LAYER_LABEL = {
     "db": "DB", "ci": "CI", "infra": "インフラ", "browser": "ブラウザ", "web": "Web",
 }
 REPO_URL = "https://github.com/nonooktk/GUapp"
+REVIEW_TRANSLATIONS_DIR = REVIEW_DIR / "translations"
+REVIEW_GLOSSARY = REVIEW_DIR / "glossary.json"
+REVIEW_GLOSSARY_SAMPLE = REVIEW_DIR / "glossary.sample.json"
+# つながり図のレーン順（左から）。ここに無い層・層の指定が無い停留所は末尾
+LAYER_ORDER = ["screen", "browser", "bff", "web", "api", "service", "repo", "db", "ci", "infra"]
+# 重なりの図の既定の列（購買 7 機能の章）。div.overlap-map の data-chapters="r01,r02" で差し替え可
+OVERLAP_CHAPTERS = [f"r0{i}" for i in range(1, 8)]
+OVERLAP_HOT = 3  # この章数以上で使うファイルの行を強調する
 
 LANG_BY_EXT = {
     "py": "python",
@@ -596,6 +607,7 @@ class ContentScanner(HTMLParser):
             self.problems.append((line, "data-focus-line は組み立て時に自動で付く（本文には書かない）"))
         if is_loc and "data-ref" not in a:
             self.problems.append((line, "span.loc には data-ref が必要"))
+        cur_sec = self._current_section["id"] if self._current_section else ""
         if (is_stop and in_route) or ("data-ref" in a and ("data-focus" in a or is_loc)):
             self.rewrites.append(
                 {
@@ -606,8 +618,28 @@ class ContentScanner(HTMLParser):
                     "attrs": a,
                     "kind": "stop" if is_stop else ("loc" if is_loc else "focus"),
                     "stop_no": self._stop_n if is_stop else 0,
+                    "route_no": self.route_count if is_stop else 0,
+                    "section": cur_sec,
                 }
             )
+        if tag == "ol" and "route" in classes:
+            # つながり図を直前に差し込む位置（--review のときだけ使う）
+            self.rewrites.append(
+                {
+                    "tag": tag, "line": line, "col": self.getpos()[1], "raw": self.get_starttag_text() or "",
+                    "attrs": a, "kind": "route", "route_no": self.route_count, "section": cur_sec,
+                }
+            )
+        if "overlap-map" in classes:
+            if tag != "div":
+                self.problems.append((line, "overlap-map は div 要素にする"))
+            else:
+                self.rewrites.append(
+                    {
+                        "tag": tag, "line": line, "col": self.getpos()[1], "raw": self.get_starttag_text() or "",
+                        "attrs": a, "kind": "overlap", "section": cur_sec,
+                    }
+                )
         if "data-ref" in a:
             self.refs.append((a["data-ref"].strip(), a.get("data-note", ""), line))
         if "id" in a:
@@ -765,7 +797,7 @@ def stop_loc_html(no: int, layer: str, path: str | None, line: int | None) -> st
             '<button type="button" class="btn stop-view">コードを見る</button>'
             "</span>"
         )
-    return f'<div class="stop-loc">{"".join(parts)}</div>'
+    return f'<div class="stop-loc" data-gen>{"".join(parts)}</div>'
 
 
 def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str]) -> str:
@@ -773,7 +805,8 @@ def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str
 
     - data-ref 付きで focus_line が決まったタグ: `data-focus-line="N"` を足す
     - span.loc: 中身を `path:N` にする
-    - li.stop: 直後に div.stop-loc を挿入する
+    - li.stop: 直後に div.stop-loc（と、--review では住所・注目行と訳）を挿入する
+    - ol.route: --review では直前につながり図を、div.overlap-map: 中に重なりの図を差し込む
     """
     starts = [0]
     for m in re.finditer("\n", text):
@@ -791,6 +824,19 @@ def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str
         if has_line:
             attr = f' data-focus-line="{rw["focus_line"]}"'
             new_tag = raw[:-2] + attr + "/>" if raw.endswith("/>") else raw[:-1] + attr + ">"
+        if rw["kind"] == "route":
+            if rw.get("gen_html"):
+                edits.append((off, off, rw["gen_html"]))  # つながり図は ol の直前に差し込む
+            continue
+        if rw["kind"] == "overlap":
+            if not rw.get("gen_html"):
+                continue
+            close = text.find("</div>", end)
+            if close < 0 or text[end:close].strip():
+                errors.append(f"{where}:{rw['line']}: div.overlap-map の中身は空にする（表は自動で入る）")
+                continue
+            edits.append((end, close, rw["gen_html"]))
+            continue
         if rw["kind"] == "stop":
             layer = rw["attrs"].get("data-layer", "")
             if layer and layer not in LAYER_LABEL:
@@ -798,6 +844,7 @@ def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str
             new_tag += stop_loc_html(
                 rw["stop_no"], layer, rw.get("path") if has_line else None, rw["focus_line"] if has_line else None
             )
+            new_tag += rw.get("aid_html", "")
             edits.append((off, end, new_tag))
         elif rw["kind"] == "loc":
             if rw["tag"] != "span":
@@ -818,8 +865,679 @@ def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str
 
 
 # ---------------------------------------------------------------------------
+# 初心者向けの補助（--review）: 訳・住所・つながり図・重なりの図・用語集
+# ---------------------------------------------------------------------------
+
+
+def _esc(text: str) -> str:
+    return html.escape(text, quote=True)
+
+
+def _wbr(text: str) -> str:
+    """狭い箱の中で、関数名・パスを区切りのよい所（_ / . - と小文字→大文字）で折り返せるよう <wbr> を入れる。"""
+    t = html.escape(text, quote=True)
+    t = re.sub(r"([_/.\-])(?=[^<\s])", r"\1<wbr>", t)
+    return re.sub(r"([a-z0-9])(?=[A-Z])", r"\1<wbr>", t)
+
+
+def _ranges_from_lines(nums: list[int]) -> list[list[int]]:
+    """昇順の行番号の並びを、連続する範囲 [[a, b], ...] にまとめる。"""
+    out: list[list[int]] = []
+    for n in nums:
+        if out and n == out[-1][1] + 1:
+            out[-1][1] = n
+        else:
+            out.append([n, n])
+    return out
+
+
+def _merge_ranges(ranges: list[tuple[int, int]]) -> list[list[int]]:
+    """重なり・隣接する範囲を結合する。"""
+    out: list[list[int]] = []
+    for a, b in sorted(ranges):
+        if out and a <= out[-1][1] + 1:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
+def _fmt_ranges(ranges: list[list[int]]) -> str:
+    return ", ".join(f"L{a}" if a == b else f"L{a}-L{b}" for a, b in ranges)
+
+
+def _subtract(a: int, b: int, ranges: list[list[int]]) -> list[list[int]]:
+    """[a, b] から ranges（結合済み・昇順）に含まれる部分を引いた残りの範囲。"""
+    rest: list[list[int]] = []
+    cur = a
+    for ra, rb in ranges:
+        if rb < cur:
+            continue
+        if ra > b:
+            break
+        if ra > cur:
+            rest.append([cur, ra - 1])
+        cur = max(cur, rb + 1)
+        if cur > b:
+            break
+    if cur <= b:
+        rest.append([cur, b])
+    return rest
+
+
+class StopInfo:
+    """順路の停留所 1 つぶんの、図・住所の表示に使う情報。"""
+
+    def __init__(self, rw: dict, entry: dict | None) -> None:
+        self.rw = rw
+        self.no: int = rw["stop_no"]
+        self.layer: str = rw["attrs"].get("data-layer", "")
+        self.ref: str = rw["attrs"].get("data-ref", "").strip()
+        self.link: str = rw["attrs"].get("data-link", "").strip()
+        self.section: str = rw.get("section", "")
+        self.sn = entry
+        self.path: str = entry["path"] if entry else ""
+        self.focus: int = rw.get("focus_line", 0) if entry else 0
+        self.has_focus_attr = bool(rw["attrs"].get("data-focus", ""))
+
+    @property
+    def is_whole_file(self) -> bool:
+        return bool(self.sn) and "::" not in self.ref and not _RANGE_RE.match(self.ref)
+
+    @property
+    def kind(self) -> str:
+        return symbol_kind(self.sn) if self.sn and self.sn["symbol"] else ("range" if self.sn and not self.is_whole_file else "file")
+
+    @property
+    def label(self) -> str:
+        """図・表に出す関数名。シンボル無しは L10-40、ファイル全体はそのとおり。"""
+        if not self.sn:
+            return f"停留所 {self.no}"
+        if self.sn["symbol"]:
+            return self.sn["symbol"] + ("()" if self.kind == "func" else "")
+        if self.is_whole_file:
+            return "ファイル全体"
+        return f'L{self.sn["start"]}-{self.sn["end"]}'
+
+
+def symbol_kind(sn: dict) -> str:
+    """スニペットの先頭の宣言から種別を推定する: func（関数・メソッド）/ type（クラス・型）/ const（定数）。"""
+    lines = [ln for ln in sn["code"].split("\n")[:12] if ln.strip() and not ln.lstrip().startswith(("@", "//", "/*", "*", "#"))]
+    head = lines[0].strip() if lines else ""
+    sym = sn["symbol"].split(".")[-1]
+    if re.match(r"^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:class|interface|type|enum)\b", head) or re.match(r"^class\s", head):
+        return "type"
+    if re.match(r"^(?:async\s+)?def\s", head) or re.search(r"\bfunction\b", head):
+        return "func"
+    if sn["path"].endswith(".py"):
+        return "const"
+    first3 = "\n".join(lines[:3])
+    if "=>" in first3 or re.search(rf"\b{re.escape(sym)}\s*=\s*(?:async\s*)?\(", first3):
+        return "func"
+    return "const"
+
+
+def _addr_segments(path: str, info: StopInfo | None, with_fn: bool = True) -> tuple[str, str]:
+    """住所の HTML と、読み上げ用の平文を返す。フォルダ › ファイル › 関数。"""
+    parts = path.split("/")
+    segs: list[str] = []
+    plain: list[str] = []
+    for d in parts[:-1]:
+        segs.append(f'<span class="addr-seg addr-dir">{_esc(d)}</span>')
+        plain.append(d)
+    ext = file_ext(path)
+    ext_html = f'<span class="addr-ext">{_esc(ext.upper())}</span>' if ext else ""
+    segs.append(f'<span class="addr-seg addr-file">{ext_html}{_esc(parts[-1])}</span>')
+    plain.append(parts[-1])
+    if with_fn and info is not None and info.sn:
+        sn = info.sn
+        if sn["symbol"]:
+            names = sn["symbol"].split(".")
+            for i, nm in enumerate(names):
+                last = i == len(names) - 1
+                kind = info.kind if last else "type"
+                text = nm + ("()" if kind == "func" else "")
+                segs.append(f'<span class="addr-seg addr-fn k-{kind}">{_esc(text)}</span>')
+                plain.append(text)
+        elif not info.is_whole_file:
+            text = f'L{sn["start"]}-{sn["end"]}'
+            segs.append(f'<span class="addr-seg addr-fn k-range">{text}</span>')
+            plain.append(text)
+    sep = '<span class="addr-sep" aria-hidden="true">›</span>'
+    return sep.join(segs), " › ".join(plain)
+
+
+def stop_addr_html(info: StopInfo) -> str:
+    segs, plain = _addr_segments(info.path, info)
+    return f'<div class="stop-addr" data-gen role="group" aria-label="{_esc("住所: " + plain)}">{segs}</div>'
+
+
+def pick_block(blocks: list[tuple[int, int, str]], line: int, start: int, end: int, exact: bool) -> tuple[int, int, str] | None:
+    """line を含むブロック。exact=False（data-focus が無い）で見つからなければ、範囲 [start, end] で最初のブロック。"""
+    for b in blocks:
+        if b[0] <= line <= b[1]:
+            return b
+    if not exact:
+        for b in blocks:
+            if b[1] >= start and b[0] <= end:
+                return b
+    return None
+
+
+def stop_aid_html(info: StopInfo, blocks: list[tuple[int, int, str]]) -> str:
+    """注目行（コードは JS が埋める）と、その行を含むブロックの訳。"""
+    sn = info.sn
+    assert sn is not None
+    block = pick_block(blocks, info.focus, sn["start"], sn["end"], info.has_focus_attr)
+    line = info.focus
+    code_lines = sn["code"].split("\n")
+    if block and not code_lines[line - sn["start"]].strip():
+        # 先頭が空行なら、ブロックの最初の空でない行を注目行にする
+        for n in range(max(block[0], sn["start"]), min(block[1], sn["end"]) + 1):
+            if code_lines[n - sn["start"]].strip():
+                line = n
+                break
+    if block:
+        tr = f'<div class="aid-tr"><span class="aid-tag">訳</span><span class="aid-ja">{_esc(block[2])}</span></div>'
+    else:
+        tr = '<div class="aid-tr is-missing"><span class="aid-tag">訳</span><span class="aid-ja">（この行の訳は未作成）</span></div>'
+    return (
+        f'<div class="stop-aid" data-gen data-ln="{line}">'
+        f'<div class="aid-code"><span class="aid-ln">L{line}</span><code class="aid-line"></code></div>{tr}</div>'
+    )
+
+
+def default_link(prev: StopInfo, cur: StopInfo) -> str:
+    """前の停留所からこの停留所へのつながり方の既定の文言。"""
+    pl, cl = prev.layer, cur.layer
+    if pl != cl:
+        if pl == "screen" and cl == "bff":
+            return "HTTP（fetch）"
+        if pl == "bff" and cl == "api":
+            return "HTTP（内部トークン付き）"
+        if (pl, cl) in (("api", "service"), ("service", "repo")):
+            return "関数の呼び出し"
+        if pl == "repo" and cl == "db":
+            return "SQL"
+    if prev.path and prev.path == cur.path:
+        return "同じファイル内"
+    return "呼び出し"
+
+
+def _layer_idx(layer: str) -> int:
+    return LAYER_ORDER.index(layer) if layer in LAYER_ORDER else len(LAYER_ORDER)
+
+
+def _layer_label(layer: str) -> str:
+    return LAYER_LABEL.get(layer, layer) if layer else "その他"
+
+
+def conn_map_html(title: str, stops: list[StopInfo]) -> str:
+    """順路 1 本ぶんのつながり図（入れ子の箱）。矢印は JS が SVG で描く。"""
+    groups: list[dict] = []  # 連続する同じ層の停留所のまとまり
+    for info in stops:
+        if not groups or groups[-1]["layer"] != info.layer:
+            groups.append({"layer": info.layer, "dirs": []})
+        g = groups[-1]
+        d = info.path.rsplit("/", 1)[0] if "/" in info.path else ("." if info.path else "")
+        if not g["dirs"] or g["dirs"][-1]["dir"] != d:
+            g["dirs"].append({"dir": d, "files": []})
+        files = g["dirs"][-1]["files"]
+        if not files or files[-1]["path"] != info.path:
+            files.append({"path": info.path, "fns": []})
+        files[-1]["fns"].append(info)
+
+    lanes = sorted({g["layer"] for g in groups}, key=lambda l: (_layer_idx(l), l))
+    lane_no = {l: i + 1 for i, l in enumerate(lanes)}
+    out: list[str] = []
+    for l in lanes:
+        attr = f' data-layer="{_esc(l)}"' if l else ""
+        out.append(f'<div class="conn-lane-bg"{attr} style="--c:{lane_no[l]}" data-label="{_esc(_layer_label(l))}" aria-hidden="true"></div>')
+    idx = 0
+    for gi, g in enumerate(groups):
+        l = g["layer"]
+        attr = f' data-layer="{_esc(l)}"' if l else ""
+        box = [f'<div class="conn-layer"{attr} style="--c:{lane_no[l]};--r:{gi + 1}"><div class="conn-layer-name">{_esc(_layer_label(l))}</div>']
+        for dd in g["dirs"]:
+            if dd["dir"]:
+                box.append(f'<div class="conn-dir"><div class="conn-dir-name">{_wbr(dd["dir"])}</div>')
+            for ff in dd["files"]:
+                if ff["path"]:
+                    name = ff["path"].rsplit("/", 1)[-1]
+                    ext = file_ext(ff["path"])
+                    ext_html = f'<span class="addr-ext">{_esc(ext.upper())}</span>' if ext else ""
+                    box.append(f'<div class="conn-file"><div class="conn-file-name">{ext_html}{_wbr(name)}</div>')
+                for info in ff["fns"]:
+                    prev = stops[idx - 1] if idx > 0 else None
+                    link = (info.link or default_link(prev, info)) if prev else ""
+                    where = f"{info.path}:{info.focus}" if info.sn else ""
+                    sr = f"停留所 {info.no}、{info.label}" + (f"、{where}" if where else "") + (f"。前の停留所から: {link}" if link else "") + "。押すとこの停留所へ移動します"
+                    lattr = f' data-layer="{_esc(info.layer)}"' if info.layer else ""
+                    box.append(
+                        f'<button type="button" class="conn-fn" data-i="{idx}"{lattr} data-link="{_esc(link)}" '
+                        f'title="{_esc(where)}" aria-label="{_esc(sr)}">'
+                        f'<span class="conn-no" aria-hidden="true">{info.no}</span>'
+                        f'<span class="conn-fn-name">{_wbr(info.label)}</span></button>'
+                    )
+                    idx += 1
+                if ff["path"]:
+                    box.append("</div>")
+            if dd["dir"]:
+                box.append("</div>")
+        box.append("</div>")
+        out.append("".join(box))
+    return (
+        f'<div class="conn-map" data-gen role="group" aria-label="{_esc("つながり図: " + (title or "順路"))}" '
+        f'data-stops="{len(stops)}"><div class="conn-head"><span class="conn-title">つながり図</span>'
+        f'<span class="conn-sub">{_esc(title)}</span>'
+        f'<span class="conn-hint">箱を押すと、その停留所へ移ってコードを開きます</span></div>'
+        f'<div class="conn-scroll"><div class="conn-grid" style="--lanes:{len(lanes)};--rows:{len(groups)}">'
+        + "".join(out)
+        + "</div></div></div>\n"
+    )
+
+
+def short_title(title: str) -> str:
+    t = re.sub(r"[（(][^）)]*[）)]", "", title).strip()
+    return t if len(t) <= 12 else t[:12] + "…"
+
+
+def overlap_html(chapters: list[dict], infos: list[StopInfo], title: str) -> str:
+    """章 × ファイルの表。セルはその章の停留所で使う関数名（押すとコードが開く）。"""
+    ch_ids = [c["id"] for c in chapters]
+    rows: dict[str, dict] = {}
+    for info in infos:
+        if not info.sn or info.section not in ch_ids:
+            continue
+        r = rows.setdefault(info.path, {"layers": Counter(), "ch": {}})
+        r["layers"][info.layer] += 1
+        cell = r["ch"].setdefault(info.section, [])
+        if not any(c.label == info.label for c in cell):
+            cell.append(info)
+    ordered = sorted(
+        rows.items(),
+        key=lambda kv: (
+            _layer_idx(kv[1]["layers"].most_common(1)[0][0]),
+            kv[0].rsplit("/", 1)[0] if "/" in kv[0] else "",
+            kv[0],
+        ),
+    )
+    head = "".join(
+        f'<th scope="col" title="{_esc(c["title"])}"><a href="#{_esc(c["id"])}">{_esc(c["id"])}</a><span class="ov-ch">{_esc(short_title(c["title"]))}</span></th>'
+        for c in chapters
+    )
+    body: list[str] = []
+    for path, r in ordered:
+        layer = r["layers"].most_common(1)[0][0]
+        n = len(r["ch"])
+        hot = n >= OVERLAP_HOT
+        segs, plain = _addr_segments(path, None, with_fn=False)
+        lattr = f' data-layer="{_esc(layer)}"' if layer else ""
+        tag = '<span class="ov-hot">共通</span>' if hot else ""
+        cells = []
+        for c in chapters:
+            fns = r["ch"].get(c["id"], [])
+            if not fns:
+                cells.append('<td class="ov-empty" aria-label="なし">–</td>')
+                continue
+            btns = "".join(
+                f'<button type="button" class="ov-fn" data-ref="{_esc(i.ref)}" data-focus-line="{i.focus}" title="{_esc(i.path)}:{i.focus}">{_wbr(i.label)}</button>'
+                for i in fns
+            )
+            cells.append(f"<td>{btns}</td>")
+        body.append(
+            f'<tr class="{"hot" if hot else ""}"{lattr}><th scope="row"><span class="layer"{lattr}>{_esc(_layer_label(layer))}</span> '
+            f'<span class="stop-addr addr-sm" role="group" aria-label="{_esc("住所: " + plain)}">{segs}</span>{tag}</th>'
+            f'{"".join(cells)}<td class="num">{n} 章</td></tr>'
+        )
+    return (
+        f'<div class="overlap-gen" data-gen><div class="overlap-head">{_esc(title)}</div>'
+        f'<p class="overlap-note">行は停留所に出てくるファイル（層 → フォルダの順）、列は章、セルはその章の停留所で使う関数です。'
+        f'{OVERLAP_HOT} 章以上で使うファイルの行は「共通」の印と色で強調しています。関数名を押すとコードが開きます。</p>'
+        f'<div class="table-wrap"><table class="overlap-table"><thead><tr><th scope="col">ファイル</th>{head}<th scope="col">章数</th></tr></thead>'
+        f'<tbody>{"".join(body)}</tbody></table></div></div>'
+    )
+
+
+# ---------------------------------------------------------------------------
+# 訳（review/translations/*.json）
+# ---------------------------------------------------------------------------
+
+
+def load_translations(tdir: Path, label_of, errors: list[str]) -> tuple[dict[str, list[tuple[int, int, str, str]]], list[str], bool]:
+    """訳の JSON を読んでマージする。(path → [(a, b, ja, ファイル名)], 読んだファイル名, sample を使ったか)。"""
+    files = sorted((p for p in tdir.glob("*.json") if p.name != "sample.json"), key=lambda p: p.name) if tdir.is_dir() else []
+    used_sample = False
+    if not files and (tdir / "sample.json").is_file():
+        files = [tdir / "sample.json"]
+        used_sample = True
+    blocks: dict[str, list[tuple[int, int, str, str]]] = {}
+    for p in files:
+        label = label_of(p)
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{label}: JSON として読めない: {exc}")
+            continue
+        if not isinstance(data, dict):
+            errors.append(f"{label}: 最上位はオブジェクト（キー = パス）にする")
+            continue
+        for path, items in data.items():
+            if not isinstance(items, list):
+                errors.append(f'{label}: "{path}" の値は配列にする')
+                continue
+            for k, it in enumerate(items):
+                where = f'{label}: "{path}"[{k}]'
+                if not isinstance(it, dict):
+                    errors.append(f"{where}: オブジェクト {{lines, ja}} にする")
+                    continue
+                extra = set(it) - {"lines", "ja"}
+                if extra:
+                    errors.append(f"{where}: 未知のキー {sorted(extra)}（lines と ja だけ）")
+                ln, ja = it.get("lines"), it.get("ja")
+                if not (isinstance(ln, list) and len(ln) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in ln) and 1 <= ln[0] <= ln[1]):
+                    errors.append(f"{where}: lines は [開始行, 終了行]（1 以上の整数、開始 <= 終了）にする: {ln!r}")
+                    continue
+                if not isinstance(ja, str) or not ja.strip():
+                    errors.append(f"{where}: ja は空でない文字列にする")
+                    continue
+                blocks.setdefault(path, []).append((ln[0], ln[1], ja.strip(), p.name))
+    return blocks, [p.name for p in files], used_sample
+
+
+def compute_scope(infos: list[StopInfo]) -> dict[str, list[list[int]]]:
+    """全停留所の data-ref の解決範囲を、ファイルごとに和集合（隣接・重複は結合）にする。"""
+    raw: dict[str, list[tuple[int, int]]] = {}
+    for info in infos:
+        if info.sn:
+            raw.setdefault(info.path, []).append((info.sn["start"], info.sn["end"]))
+    return {p: _merge_ranges(r) for p, r in sorted(raw.items())}
+
+
+def check_translations(
+    blocks: dict[str, list[tuple[int, int, str, str]]],
+    scope: dict[str, list[list[int]]],
+    git: GitFiles,
+    errors: list[str],
+) -> list[tuple[str, list[list[int]], int]]:
+    """網羅の検査。形式の誤り・はみ出し・重なりは errors に、訳の無い行は戻り値（path, 範囲, 行数）に返す。"""
+    for path in sorted(blocks):
+        if path not in scope:
+            try:
+                git.lines(path)
+            except ResolveError:
+                errors.append(f"訳 {path}: ファイルが存在しない（コミット {git.sha[:7]}）")
+            else:
+                errors.append(f"訳 {path}: 停留所の行範囲に含まれないファイル（ブロック {len(blocks[path])} 件。--dump-translation-scope で対象を確認する）")
+    missing: list[tuple[str, list[list[int]], int]] = []
+    for path, ranges in scope.items():
+        lines = git.lines(path)
+        bl = sorted(blocks.get(path, []), key=lambda b: (b[0], b[1]))
+        out_of: list[str] = []
+        for a, b, _ja, src in bl:
+            rest = _subtract(a, b, ranges)
+            if rest:
+                out_of.append(f"{_fmt_ranges(rest)}（{src} の L{a}-L{b} のうち）")
+        if out_of:
+            errors.append(f"訳 {path}: 停留所の行範囲（{_fmt_ranges(ranges)}）の外にはみ出している: " + "、".join(out_of))
+        overlaps: list[str] = []
+        reach_b, reach_src, reach_a = 0, "", 0
+        for a, b, _ja, src in bl:
+            if a <= reach_b:
+                overlaps.append(f"{reach_src} の L{reach_a}-L{reach_b} と {src} の L{a}-L{b}")
+            if b > reach_b:
+                reach_a, reach_b, reach_src = a, b, src
+        if overlaps:
+            errors.append(f"訳 {path}: ブロックが重なっている: " + "、".join(overlaps))
+        covered: set[int] = set()
+        for a, b, _ja, _src in bl:
+            covered.update(range(a, b + 1))
+        miss = [n for ra, rb in ranges for n in range(ra, rb + 1) if n - 1 < len(lines) and lines[n - 1].strip() and n not in covered]
+        if miss:
+            missing.append((path, _ranges_from_lines(miss), len(miss)))
+    return missing
+
+
+def scope_dump(scope: dict[str, list[list[int]]], git: GitFiles) -> dict:
+    out = {}
+    for path, ranges in scope.items():
+        lines = git.lines(path)
+        total = sum(b - a + 1 for a, b in ranges)
+        nonblank = sum(1 for a, b in ranges for n in range(a, b + 1) if lines[n - 1].strip())
+        out[path] = {"ranges": ranges, "lines": total, "nonblank": nonblank}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 用語集（review/glossary.json）
+# ---------------------------------------------------------------------------
+
+
+def load_glossary(path: Path, label: str, git: GitFiles, errors: list[str], snippets: dict[str, dict]) -> list[dict]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"{label}: JSON として読めない: {exc}")
+        return []
+    if not isinstance(data, list):
+        errors.append(f"{label}: 最上位は配列にする")
+        return []
+    out: list[dict] = []
+    seen: dict[str, int] = {}
+    for i, e in enumerate(data):
+        where = f"{label}[{i}]"
+        if not isinstance(e, dict):
+            errors.append(f"{where}: オブジェクトにする")
+            continue
+        extra = set(e) - {"term", "aliases", "short", "analogy", "ref"}
+        if extra:
+            errors.append(f"{where}: 未知のキー {sorted(extra)}")
+        term, short = e.get("term"), e.get("short")
+        if not isinstance(term, str) or not term.strip():
+            errors.append(f"{where}: term は空でない文字列にする")
+            continue
+        if not isinstance(short, str) or not short.strip():
+            errors.append(f'{where}（{term}）: short は空でない文字列にする')
+            continue
+        aliases = e.get("aliases", [])
+        if aliases is None:
+            aliases = []
+        if not isinstance(aliases, list) or not all(isinstance(a, str) and a.strip() for a in aliases):
+            errors.append(f"{where}（{term}）: aliases は文字列の配列にする")
+            aliases = []
+        analogy = e.get("analogy") or ""
+        if not isinstance(analogy, str):
+            errors.append(f"{where}（{term}）: analogy は文字列にする")
+            analogy = ""
+        ref = e.get("ref") or ""
+        if not isinstance(ref, str):
+            errors.append(f"{where}（{term}）: ref は文字列にする")
+            ref = ""
+        names = [term.strip()] + [a.strip() for a in aliases]
+        for nm in names:
+            if nm in seen:
+                errors.append(f'{where}（{term}）: 「{nm}」が [{seen[nm]}] と重複している')
+            seen[nm] = i
+        if ref:
+            ref = ref.strip()
+            if ref not in snippets:
+                try:
+                    snippets[ref] = resolve_ref(ref, git)
+                except ResolveError as exc:
+                    snippets[ref] = {"error": str(exc)}
+            if "error" in snippets[ref]:
+                errors.append(f"{where}（{term}）: ref {ref} → {snippets[ref]['error']}")
+        item = {"term": term.strip(), "aliases": [a.strip() for a in aliases], "short": short.strip()}
+        if analogy.strip():
+            item["analogy"] = analogy.strip()
+        if ref:
+            item["ref"] = ref
+        out.append(item)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 原文の保護の検査
+# ---------------------------------------------------------------------------
+
+
+class _TextCollector(HTMLParser):
+    """HTML のテキストを集める。data-gen の付いた要素（組み立てで挿入したもの）と span.loc の中身は除く。"""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_tag = ""
+        self._depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._skip_tag:
+            if tag == self._skip_tag:
+                self._depth += 1
+            return
+        a = dict(attrs)
+        if "data-gen" in a or (tag == "span" and "loc" in (a.get("class") or "").split()):
+            self._skip_tag, self._depth = tag, 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._skip_tag and tag == self._skip_tag:
+            self._depth -= 1
+            if self._depth == 0:
+                self._skip_tag = ""
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_tag:
+            self.parts.append(data)
+
+
+def collected_text(source: str) -> str:
+    c = _TextCollector()
+    c.feed(source)
+    c.close()
+    return re.sub(r"\s+", "", "".join(c.parts))
+
+
+def check_original_text(original: str, built: str) -> str | None:
+    """一致しなければ、最初に食い違う位置の前後を返す。"""
+    a, b = collected_text(original), collected_text(built)
+    if a == b:
+        return None
+    i = 0
+    n = min(len(a), len(b))
+    while i < n and a[i] == b[i]:
+        i += 1
+    return f"原文 …{a[max(0, i - 20):i + 30]}… ／ 出力 …{b[max(0, i - 20):i + 30]}…（{i} 文字目）"
+
+
+# ---------------------------------------------------------------------------
 # 解説書・レビュー回答ガイドの組み立て
 # ---------------------------------------------------------------------------
+
+
+def prepare_review_aids(
+    args: argparse.Namespace,
+    root: Path,
+    git: GitFiles,
+    docs: list[tuple[Path, str, "ContentScanner"]],
+    sections: list[dict],
+    snippets: dict[str, dict],
+    errors: list[str],
+    warnings: list[str],
+) -> dict:
+    """--review の補助（訳・住所・つながり図・重なりの図・用語集）を作り、各 rewrite に差し込む HTML を持たせる。"""
+
+    def label_of(p: Path) -> str:
+        try:
+            return str(p.relative_to(root))
+        except ValueError:
+            return str(p)
+
+    # 停留所の情報（順路ごと）
+    infos: list[StopInfo] = []
+    routes: dict[tuple[int, int], list[StopInfo]] = {}
+    route_rw: dict[tuple[int, int], dict] = {}
+    for di, (_path, _text, scanner) in enumerate(docs):
+        for rw in scanner.rewrites:
+            if rw["kind"] == "route":
+                route_rw[(di, rw["route_no"])] = rw
+            elif rw["kind"] == "stop":
+                ref = rw["attrs"].get("data-ref", "").strip()
+                entry = snippets.get(ref) if ref else None
+                if entry is not None and ("error" in entry or "focus_line" not in rw):
+                    entry = None
+                info = StopInfo(rw, entry)
+                infos.append(info)
+                routes.setdefault((di, rw["route_no"]), []).append(info)
+
+    scope = compute_scope(infos)
+    if args.dump_translation_scope:
+        dump = scope_dump(scope, git)
+        Path(args.dump_translation_scope).write_text(json.dumps(dump, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+    # 訳
+    tdir = Path(args.translations_dir).resolve()
+    blocks, tr_files, used_sample = load_translations(tdir, label_of, errors)
+    missing = check_translations(blocks, scope, git, errors)
+    miss_lines = sum(m[2] for m in missing)
+    if used_sample:
+        warnings.append(f"本番の訳（{label_of(tdir)}/*.json）が無いため、sample.json を使う")
+    if missing:
+        detail = [f"    {p}: {_fmt_ranges(r)}（{n} 行）" for p, r, n in missing]
+        head = f"訳の無い行: {len(missing)} ファイル・{miss_lines} 行（空行を除く）"
+        if args.allow_missing_translations:
+            warnings.append(head + "（--allow-missing-translations のため警告）")
+            warnings.extend(d.replace("    ", "  - ", 1) for d in detail)
+        else:
+            errors.append(head + "。すべての行に訳が要る（データ作成中の確認は --allow-missing-translations）")
+            errors.extend(detail)
+    merged: dict[str, list[tuple[int, int, str]]] = {
+        p: sorted((a, b, ja) for a, b, ja, _ in v) for p, v in blocks.items() if p in scope
+    }
+
+    # 用語集
+    gl_path = Path(args.glossary).resolve()
+    glossary: list[dict] = []
+    gl_used = ""
+    if gl_path.is_file():
+        gl_used = label_of(gl_path)
+    elif REVIEW_GLOSSARY_SAMPLE.is_file() and gl_path == REVIEW_GLOSSARY.resolve():
+        gl_path = REVIEW_GLOSSARY_SAMPLE
+        gl_used = label_of(gl_path)
+        warnings.append("本番の用語集（review/glossary.json）が無いため、glossary.sample.json を使う")
+    if gl_used:
+        glossary = load_glossary(gl_path, gl_used, git, errors, snippets)
+    else:
+        warnings.append("用語集が無い（review/glossary.json）。用語ポップアップは出ない")
+
+    # 図・住所・重なりの差し込み
+    for key, stops in routes.items():
+        rw = route_rw.get(key)
+        if rw is not None:
+            rw["gen_html"] = conn_map_html(rw["attrs"].get("data-title", ""), stops)
+    for info in infos:
+        if info.sn and info.focus:
+            info.rw["aid_html"] = stop_addr_html(info) + stop_aid_html(info, merged.get(info.path, []))
+    by_id = {sec["id"]: sec for sec in sections}
+    for _path, _text, scanner in docs:
+        for rw in scanner.rewrites:
+            if rw["kind"] != "overlap":
+                continue
+            ids = [x.strip() for x in rw["attrs"].get("data-chapters", "").split(",") if x.strip()] or OVERLAP_CHAPTERS
+            chapters = [by_id[i] for i in ids if i in by_id]
+            if not chapters:
+                errors.append(f"{rw['line']}: div.overlap-map の対象の章（{', '.join(ids)}）が本文に無い")
+                continue
+            rw["gen_html"] = overlap_html(chapters, infos, rw["attrs"].get("data-title", "") or "章 × ファイル")
+
+    n_blocks = sum(len(v) for v in merged.values())
+    nonblank = sum(v["nonblank"] for v in scope_dump(scope, git).values())
+    summary = [
+        f"訳の対象: {len(scope)} ファイル・{nonblank} 行（空行を除く）／訳のブロック {n_blocks}"
+        + (f"（{', '.join(tr_files)}）" if tr_files else "（訳データなし）"),
+        f"用語集: {len(glossary)} 語" + (f"（{gl_used}）" if gl_used else ""),
+    ]
+    tr_json = {p: [[a, b, ja] for a, b, ja in v] for p, v in sorted(merged.items())}
+    return {"tr_json": tr_json, "glossary": glossary, "summary": summary}
 
 
 def build_guide(args: argparse.Namespace) -> int:
@@ -920,17 +1638,28 @@ def build_guide(args: argparse.Namespace) -> int:
                 f = rw["attrs"].get("data-focus", "")
                 stop_list.append(f"  {path.name}:{rw['line']}  停留所 {rw['stop_no']}  {entry['path']}:{rw['focus_line']}" + (f"  （focus: {f}）" if f else ""))
 
+    review_info: dict = {}
+    if review:
+        review_info = prepare_review_aids(args, root, git, docs, sections, snippets, errors, warnings)
+
     chunks: list[str] = []
     for path, text, scanner in docs:
         chunks.append(apply_rewrites(text, scanner.rewrites, f"{label}/{path.name}", errors).rstrip("\n"))
+
+    if review and not errors:
+        # 原文の保護: 組み立てで挿入した要素を除くと、本文の原文と一致すること
+        mismatch = check_original_text("\n".join(t for _, t, _ in docs), "\n".join(chunks))
+        if mismatch:
+            errors.append(f"原文の保護: 組み立てで本文のテキストが変わっている: {mismatch}")
 
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
 
     if errors:
-        print(f"エラー: {len(errors)} 件（解決できない参照・構造の不備）", file=sys.stderr)
+        # 先頭が空白の行は、直前のエラーの詳細（箇条書きにしない）
+        print(f"エラー: {sum(1 for e in errors if not e.startswith(' '))} 件（解決できない参照・構造の不備）", file=sys.stderr)
         for e in errors:
-            print(f"  - {e}", file=sys.stderr)
+            print(e if e.startswith(" ") else f"  - {e}", file=sys.stderr)
         return 1
 
     unique = {k: v for k, v in snippets.items() if "error" not in v}
@@ -949,6 +1678,9 @@ def build_guide(args: argparse.Namespace) -> int:
         "MAP_URL": html.escape(args.map_url, quote=True),
         "GUIDE_URL": html.escape(args.guide_url, quote=True),
     }
+    if review:
+        values["TRANSLATIONS_JSON"] = escape_json_for_script(review_info["tr_json"], per_line=True)
+        values["GLOSSARY_JSON"] = escape_json_for_script(review_info["glossary"])
     output = render_template(REVIEW_TEMPLATE if review else TEMPLATE, values)
 
     default_name = REVIEW_OUTPUT_NAME if review else OUTPUT_NAME
@@ -965,6 +1697,9 @@ def build_guide(args: argparse.Namespace) -> int:
         n_routes = sum(sc.route_count for _, _, sc in docs)
         n_stops = sum(1 for _, _, sc in docs for rw in sc.rewrites if rw["kind"] == "stop")
         print(f"順路数: {n_routes}／停留所数: {n_stops}／行番号を自動で入れた箇所: {focus_total}")
+    if review:
+        for line in review_info["summary"]:
+            print(line)
     if getattr(args, "list_stops", False):
         print("停留所の一覧（ファイル:行 は実ファイルの行番号）:")
         for line in stop_list:
@@ -1444,6 +2179,10 @@ def main() -> int:
     parser.add_argument("--map", action="store_true", help="解説書ではなくリポジトリ地図を組み立てる")
     parser.add_argument("--review", action="store_true", help="解説書ではなくレビュー回答ガイドを組み立てる（本文は code-guide/review/*.html）")
     parser.add_argument("--list-stops", action="store_true", help="--review で、停留所ごとの path:行 を標準出力に一覧する")
+    parser.add_argument("--allow-missing-translations", action="store_true", help="--review で、訳の無い行を警告に落とす（データ作成中の確認用。既定はエラー）")
+    parser.add_argument("--dump-translation-scope", default="", metavar="PATH", help="--review で、訳の対象（停留所の data-ref の和集合: ファイル別の行範囲と行数）を JSON で書き出す")
+    parser.add_argument("--translations-dir", default=None, help="--review の訳の JSON ディレクトリ（既定: code-guide/review/translations。sample.json 以外をすべて読む。無ければ sample.json）")
+    parser.add_argument("--glossary", default=None, help="--review の用語集 JSON（既定: code-guide/review/glossary.json。無ければ glossary.sample.json）")
     parser.add_argument("--map-data", default=str(MAP_DATA_DEFAULT), help="地図の説明データ（既定: code-guide/map/descriptions.json）")
     parser.add_argument("--tree-commit", default="HEAD", help="地図のツリーを作るコミット（既定: HEAD）。プレビューのコードは --commit から読み、無いファイルだけここから読む")
     parser.add_argument("--guide-url", default=OUTPUT_NAME, help="地図・レビュー回答ガイドから解説書へのリンク先（既定: GU_ECsite_コード解説.html）")
@@ -1453,6 +2192,12 @@ def main() -> int:
         parser.error("--map と --review は同時に指定できない")
     if args.content_dir is None:
         args.content_dir = str(REVIEW_DIR if args.review else CONTENT_DIR)
+    if args.translations_dir is None:
+        args.translations_dir = str(REVIEW_TRANSLATIONS_DIR)
+    if args.glossary is None:
+        args.glossary = str(REVIEW_GLOSSARY)
+    if not args.review and (args.allow_missing_translations or args.dump_translation_scope):
+        parser.error("--allow-missing-translations と --dump-translation-scope は --review と一緒に使う")
     return build_map(args) if args.map else build_guide(args)
 
 

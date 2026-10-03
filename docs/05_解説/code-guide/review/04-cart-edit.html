@@ -23,27 +23,27 @@
     <p class="stop-say">カート画面を最初に開くときは、サーバー側のページが、Cookie にあるトークンでカートを取って描画します。Cookie が無い人には、カートを作らずに空のカートを出します。</p>
     <p class="stop-next">次へ: <code>getCartFromCookie</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getCartFromCookie" data-focus="return apiFetch&lt;Cart&gt;(&quot;/cart&quot;, { headers: cartTokenHeaders(token) });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getCartFromCookie" data-focus="return apiFetch&lt;Cart&gt;(&quot;/cart&quot;, { headers: cartTokenHeaders(token) });" data-layer="bff" data-link="関数の呼び出し（Server Component から）">
     <p class="stop-see"><code>cookies()</code> から <code>cart_token</code> を読み、<code>X-Cart-Token</code> に載せて FastAPI の <code>GET /cart</code> を直接呼ぶ。Cookie が無ければ呼ばない（描画中は Cookie を発行できないため）。BFF の Route Handler は通らない。</p>
     <p class="stop-say">ここも BFF は通りません。サーバーの中から、カートのトークンをヘッダーに載せて FastAPI を呼びます。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>get_cart</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/cart.py::get_cart" data-focus="cart_service.get_cart(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::get_cart" data-focus="cart_service.get_cart(" data-layer="api" data-link="HTTP GET /api/v1/cart（内部トークン・カートトークン付き。BFF は通らない）">
     <p class="stop-see"><code>GET /api/v1/cart</code>。<code>X-Cart-Token</code> を受け、サービスを呼ぶ。これがカート画面のリクエスト先。</p>
     <p class="stop-say">リクエスト先は FastAPI の GET /api/v1/cart です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/cart/page.tsx</code> に戻り、設定を取る行（<code>getPublicSettings</code>）へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/cart/page.tsx::CartPage" data-focus="loadOrNull(getPublicSettings(), &quot;settings/public&quot;)" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/cart/page.tsx::CartPage" data-focus="loadOrNull(getPublicSettings(), &quot;settings/public&quot;)" data-layer="screen" data-link="HTTP 応答の JSON が戻り、続けて設定を取る">
     <p class="stop-see">送料無料の閾値を <code>GET /settings/public</code>（DS-API-020）から取る。取れなければ予備値 <code>FALLBACK_FREE_SHIPPING_THRESHOLD = 4990</code> を使う。</p>
     <p class="stop-say">カートの応答にも閾値は入っています。ただ、空のカートの表示に使うため、公開設定からも取っています。取れなかったときは、予備の 4,990 円を使います。</p>
     <p class="stop-next">次へ: <code>getPublicSettings</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getPublicSettings" data-focus="apiFetch&lt;PublicSettings&gt;(&quot;/settings/public&quot;)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getPublicSettings" data-focus="apiFetch&lt;PublicSettings&gt;(&quot;/settings/public&quot;)" data-layer="bff" data-link="関数の呼び出し（Server Component から）">
     <p class="stop-see"><code>apiFetch</code> で <code>/settings/public</code> を直接呼ぶ。税率・送料・閾値の 3 つが返る。</p>
     <p class="stop-say">公開設定も、サーバーの中から直接呼びます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/settings.py</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/settings.py::public_settings" data-focus="get_public_settings(session)" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/settings.py::public_settings" data-focus="get_public_settings(session)" data-layer="api" data-link="HTTP GET /api/v1/settings/public（内部トークン付き。BFF は通らない）">
     <p class="stop-see"><code>GET /api/v1/settings/public</code>。<code>system_settings</code> の 3 キー（<code>tax_rate</code>・<code>shipping_fee</code>・<code>free_shipping_threshold</code>）だけを返す。</p>
     <p class="stop-say">送料の閾値と送料は、DB の system_settings にある値で、この API が返します。</p>
   </li>
@@ -65,7 +65,7 @@
     <p class="stop-say">送り先は、同じ Next.js の /api/cart/items/明細の ID です。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/cart/items/[id]/route.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>PATCH</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::PATCH" data-focus="const denied = verifyCsrf(request);" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::PATCH" data-focus="const denied = verifyCsrf(request);" data-layer="bff" data-link="HTTP PATCH /api/cart/items/{id}（CSRF トークン付き）">
     <p class="stop-see">順に、① CSRF の検証（通らなければ 403） ② <code>[id]</code> が正の整数か（違えば 404 <code>not_found</code>） ③ <code>quantity</code> が正の整数か（違えば 400 <code>validation_error</code>） ④ <code>proxyCartRequest</code> で FastAPI の <code>PATCH /cart/items/{id}</code>。</p>
     <p class="stop-say">BFF は、CSRF、明細の ID の形、数量の形の順に確かめて、通ったものだけを FastAPI に渡します。</p>
     <p class="stop-next">次へ: <code>proxyCartRequest</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -75,7 +75,7 @@
     <p class="stop-say">カートの追加と同じ関数を使います。Cookie のトークンをヘッダーに載せ替えて、FastAPI を呼びます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>update_item</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/cart.py::update_item" data-focus="cart_service.update_item(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::update_item" data-focus="cart_service.update_item(" data-layer="api" data-link="HTTP PATCH /api/v1/cart/items/{id}（内部トークン・カートトークン付き）">
     <p class="stop-see"><code>@router.patch("/items/{item_id}")</code>。<code>item_id</code> はパス、本文は <code>CartItemPatchIn</code>、トークンはヘッダー。これがリクエスト先のバックエンド。</p>
     <p class="stop-say">リクエスト先は FastAPI の PATCH /api/v1/cart/items/明細の ID で、routers/cart.py の update_item です。</p>
   </li>
@@ -96,12 +96,12 @@
     <p class="stop-say">送り先は、数量変更と同じ URL で、メソッドだけが DELETE です。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/cart/items/[id]/route.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>DELETE</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::DELETE" data-focus="{ method: &quot;DELETE&quot; }" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::DELETE" data-focus="{ method: &quot;DELETE&quot; }" data-layer="bff" data-link="HTTP DELETE /api/cart/items/{id}（CSRF トークン付き）">
     <p class="stop-see">PATCH と同じく、CSRF の検証と <code>[id]</code> の形の確認のあと、<code>proxyCartRequest</code> で FastAPI の <code>DELETE /cart/items/{id}</code>。取り次ぎの中身は順路 B の stop 5 と同じ。</p>
     <p class="stop-say">削除も、CSRF と ID の形を検証してから、同じ取り次ぎの関数で FastAPI に渡します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>remove_item</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/cart.py::remove_item" data-focus="cart_service.remove_item(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::remove_item" data-focus="cart_service.remove_item(" data-layer="api" data-link="HTTP DELETE /api/v1/cart/items/{id}（内部トークン・カートトークン付き）">
     <p class="stop-see"><code>@router.delete("/items/{item_id}")</code>。これがリクエスト先のバックエンド。応答は、削除後のカート全体。</p>
     <p class="stop-say">リクエスト先は FastAPI の DELETE /api/v1/cart/items/明細の ID で、routers/cart.py の remove_item です。</p>
   </li>
@@ -128,17 +128,17 @@
     <p class="stop-say">数量は、0 より大きい整数であることだけを、ここで確かめます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>update_item</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="item = await carts_repo.get_item(session, cart.id, item_id)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="item = await carts_repo.get_item(session, cart.id, item_id)" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">順に、① <code>resolve_cart</code> で自分のカートを特定 ② <code>get_item</code> で自分のカートの明細だけを探す（他人のもの・存在しないものは rollback して 404 <code>not_found</code>） ③ <code>check_limits</code> で上限を検査（超えたら rollback して 422） ④ <code>set_item_quantity</code> と commit ⑤ <code>build_cart_response</code>。<strong>在庫の検査はしない</strong>。</p>
     <p class="stop-say">サービスは、まず自分のカートの明細かどうか、次に上限を超えないかを調べて、数量を更新します。在庫はここでは見ません。</p>
     <p class="stop-next">次へ: <code>get_item</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/carts.py::get_item" data-focus="CartItem.id == item_id, CartItem.cart_id == cart_id" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::get_item" data-focus="CartItem.id == item_id, CartItem.cart_id == cart_id" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">条件に <code>cart_id</code> も入れるので、他人の <code>item_id</code> を送っても見つからない（IDOR の対策。設計仕様書 7.5）。見つからなければ <code>None</code>。</p>
     <p class="stop-say">明細の ID に加えて、自分のカートであることも条件にしています。他人のカートの明細は見つからないので、触れません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/cart.py</code> に戻り、<code>others</code> の行へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="others = await carts_repo.get_total_quantity(session, cart.id) - item.quantity" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="others = await carts_repo.get_total_quantity(session, cart.id) - item.quantity" data-layer="service" data-link="サービスに戻って次の関数を呼ぶ">
     <p class="stop-see">上限の検査は、「他の明細の合計 + 新しい数量」で行う。</p>
     <p class="stop-say">合計 50 点の上限は、この明細を直したあとの合計で判定します。</p>
     <p class="stop-next">次へ: <code>check_limits</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -148,28 +148,28 @@
     <p class="stop-say">上限を超えるときは 422 を返して、更新はしません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/repositories/carts.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>set_item_quantity</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/carts.py::set_item_quantity" data-focus=".values(quantity=quantity)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::set_item_quantity" data-focus=".values(quantity=quantity)" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>UPDATE cart_items SET quantity = … WHERE id = …</code>。</p>
     <p class="stop-say">数量を更新する SQL です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>CartItem</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/cart.py::CartItem" data-focus="quantity: Mapped[int]" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/cart.py::CartItem" data-focus="quantity: Mapped[int]" data-layer="db" data-link="SQL の UPDATE">
     <p class="stop-see"><code>cart_items.quantity</code>（<code>quantity &gt; 0</code> の CHECK）。<code>(cart_id, variant_id)</code> は UNIQUE。</p>
     <p class="stop-say">数量は cart_items テーブルの quantity 列で、0 以下は DB の制約でも入りません。</p>
   </li>
 </ol>
 <ol class="route" data-title="順路 B：削除と、金額（小計・送料・合計）の組み立て">
-  <li class="stop" data-ref="apps/api/app/services/cart.py::remove_item" data-focus="await carts_repo.delete_item(session, item.id)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::remove_item" data-focus="await carts_repo.delete_item(session, item.id)" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see"><code>get_item</code> が <code>None</code> なら rollback して 404 <code>not_found</code>。あれば削除して commit し、<code>build_cart_response</code>。最後の 1 件を消すと <code>items</code> が空になり、金額は 0。</p>
     <p class="stop-say">削除も、自分のカートの明細だと確認してから、行を消します。</p>
     <p class="stop-next">次へ: <code>delete_item</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/carts.py::delete_item" data-focus="delete(CartItem).where(CartItem.id == item_id)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::delete_item" data-focus="delete(CartItem).where(CartItem.id == item_id)" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>DELETE FROM cart_items WHERE id = …</code>。</p>
     <p class="stop-say">行を消す SQL です。カートそのものは残ります。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>build_cart_response</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/cart.py::build_cart_response" data-focus="totals = calc_totals(" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::build_cart_response" data-focus="totals = calc_totals(" data-layer="service" data-link="サービスに戻って次の関数を呼ぶ">
     <p class="stop-see">明細は <code>fetch_lines</code> で 1 クエリ。<code>line_total = unit_price * quantity</code>。金額は <code>calc_totals</code>。空のカートは金額 0（<code>empty_cart</code> の 409 は出さない）。<code>item_count</code> は数量の合計。</p>
     <p class="stop-say">数量変更でも削除でも、最後にカート全体を作り直して返します。金額の計算はここで行い、画面側ではしません。</p>
     <p class="stop-next">次へ: <code>calc_totals</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -211,17 +211,17 @@
 </div>
 <h3 id="r04-response">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路 A：応答から画面の更新まで（数量変更・削除で共通）">
-  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartResponse" data-focus="can_checkout: bool" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartResponse" data-focus="can_checkout: bool" data-layer="api" data-link="関数の戻り値（CartResponse）">
     <p class="stop-see">応答は、明細（<code>items</code>）・<code>item_count</code>・<code>subtotal</code>・<code>shipping_fee</code>・<code>total</code>・<code>free_shipping_threshold</code>・<code>can_checkout</code>。明細の 1 件は <code>CartLineOut</code>（<code>stock_status</code>・<code>line_total</code> を含む）。</p>
     <p class="stop-say">画面で使う値は、すべてこの応答に入っています。画面側で、金額や在庫の判定を計算し直すことはありません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/cart-proxy.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>proxyCartRequest</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(cart, { status: result.status, headers });" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(cart, { status: result.status, headers });" data-layer="bff" data-link="HTTP 応答の JSON（FastAPI から）">
     <p class="stop-see">成功は、FastAPI のカート全体を、そのまま 200 で返す（<code>Cache-Control: no-store</code>）。</p>
     <p class="stop-say">BFF は、成功なら FastAPI の応答を、そのまま返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/CartView.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="setCart(next);" data-layer="screen">
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="setCart(next);" data-layer="screen" data-link="HTTP 応答の JSON（BFF からブラウザへ）">
     <p class="stop-see"><code>apply</code> が、<code>setCart</code>（画面全体）と <code>applyCart</code>（ヘッダーのバッジ。3 章の順路 A と同じ経路）の 2 つを呼ぶ。明細・小計・送料・合計・<code>can_checkout</code> は、応答のカートから描き直される。</p>
     <p class="stop-say">返ってきたカートで、画面全体を置き換えます。同じ応答で、ヘッダーのバッジも更新します。</p>
     <p class="stop-next">次へ: 同じ関数の下の、明細を描く <code>items.map</code> へ</p>

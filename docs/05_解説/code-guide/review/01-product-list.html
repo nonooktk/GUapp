@@ -29,7 +29,7 @@
     <p class="stop-say">/products のページは、サーバー側で動く Server Component です。URL の gender・category・page を整えて、getProducts という関数で商品を取ります。ブラウザから API を呼ぶ処理は、この初回表示にはありません。</p>
     <p class="stop-next">次へ: <code>getProducts</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProducts" data-focus="buildProductsQuery(q)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProducts" data-focus="buildProductsQuery(q)" data-layer="bff" data-link="関数の呼び出し（Server Component から）">
     <p class="stop-see"><code>/products?gender=…&amp;category=…&amp;page=…&amp;per_page=…</code> のクエリ文字列を <code>buildProductsQuery</code> で組み立て、<code>apiFetch</code> に渡す。BFF を通らない理由は、ファイル冒頭のコメント（<span class="loc" data-ref="apps/web/lib/server/catalog.ts#L1-30" data-focus="BFF を経由しなくてよい"></span>）に書いてある。</p>
     <p class="stop-say">サーバー側のページから FastAPI へ向かう関数がここです。BFF の Route Handler は経由せず、同じ Next.js のサーバーの中から apiFetch で FastAPI を呼びます。</p>
     <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -39,7 +39,7 @@
     <p class="stop-say">FastAPI の URL に内部トークンのヘッダーを付けて呼びます。BFF の Route Handler も、この同じ関数を使います。ここから先は URL の文字列でつながっているので、IDE のジャンプではなく全体検索で FastAPI 側を探します。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>@router.get("/products"</code> を検索し、<code>apps/api/app/routers/catalog.py</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api" data-link="HTTP GET /api/v1/products（内部トークン付き。BFF は通らない）">
     <p class="stop-see"><code>@router.get("/products")</code>。これがリクエスト先のバックエンド。<code>gender</code>・<code>category</code>・<code>page</code>・<code>per_page</code> を受け取り、サービスを呼ぶだけの関数。</p>
     <p class="stop-say">リクエスト先は FastAPI の GET /api/v1/products で、routers/catalog.py の list_products です。ここは入力を受け取って、サービスに渡すだけの場所です。</p>
   </li>
@@ -55,12 +55,12 @@
     <p class="stop-say">ブラウザが呼ぶのは同じ Next.js の /api/products で、FastAPI の URL はブラウザには出ません。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/products/route.ts</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="await apiFetch&lt;ProductListResponse&gt;(" data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="await apiFetch&lt;ProductListResponse&gt;(" data-layer="bff" data-link="HTTP GET /api/products（ブラウザから BFF へ。CSRF 検証なし）">
     <p class="stop-see">BFF の <code>GET</code>。<code>gender</code>・<code>category</code> は slug の形だけ通し、<code>page</code> は 1〜999、<code>per_page</code> は 1〜24 に丸める。そのあと <code>buildProductsQuery</code> と <code>apiFetch</code>（経路 A と同じ 2 関数）で FastAPI を呼ぶ。読み取りなので CSRF の検証は無い。</p>
     <p class="stop-say">BFF は、受け取った条件を決まった範囲に丸めて、FastAPI に取り次ぎます。商品一覧は読むだけの操作なので、CSRF の検証はありません。</p>
     <p class="stop-next">次へ: <code>apiFetch</code> の中身は経路 A の stop 4 と同じ。FastAPI 側は <kbd>⌘⇧F</kbd> で <code>@router.get("/products"</code> を検索</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api" data-link="HTTP GET /api/v1/products（内部トークン付き）">
     <p class="stop-see">経路 A の stop 5 と同じルーターに着く。</p>
     <p class="stop-say">初回表示と同じエンドポイントです。FastAPI から先の処理は、2 つの経路で共通です。</p>
   </li>
@@ -83,12 +83,12 @@
     <p class="stop-say">入力の形はここで確かめます。たとえば page が 0 だと、400 の validation_error で返ります。</p>
     <p class="stop-next">次へ: <code>catalog_service.list_products</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/catalog.py::list_products" data-focus="products_repo.list_published(" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/catalog.py::list_products" data-focus="products_repo.list_published(" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">リポジトリで一覧と総件数を取り、続けて色をまとめて取る。<code>has_more</code> は <code>page * per_page &lt; total</code>。</p>
     <p class="stop-say">サービスは、一覧と総件数を取り、色の一覧を足して、次のページがあるかどうかを計算します。</p>
     <p class="stop-next">次へ: <code>list_published</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/products.py::list_published" data-focus="summary_select().offset((page - 1) * per_page).limit(per_page)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::list_published" data-focus="summary_select().offset((page - 1) * per_page).limit(per_page)" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see">件数用の <code>count</code> と本体の SELECT の 2 本。性別・カテゴリの絞り込みは <code>_category_scope</code>（サブクエリ）。ページ送りは offset と limit。</p>
     <p class="stop-say">ここで SQL を組み立てます。先に件数、次に該当ページの分を取ります。</p>
     <p class="stop-next">次へ: <code>summary_select</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -103,7 +103,7 @@
     <p class="stop-say">24 件分の色は、1 回の問い合わせでまとめて取っています。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>Product</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/catalog.py::Product" data-focus="published: Mapped[bool]" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Product" data-focus="published: Mapped[bool]" data-layer="db" data-link="SQL の SELECT">
     <p class="stop-see"><code>products</code> テーブル（公開フラグ <code>published</code>、税込価格 <code>price_incl_tax</code>）。ほかに画像は <code>product_images</code>、色と在庫は <code>variants</code>、絞り込みは <code>product_categories</code> と <code>categories</code>。</p>
     <p class="stop-say">読むテーブルの中心は products です。画像、色と在庫、カテゴリの対応表をつないで一覧を作ります。</p>
   </li>
@@ -123,12 +123,12 @@
 <p>404 はありません。一覧には「対象の ID」が無いためです。</p>
 <h3 id="r01-response">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路 A：初回表示（Server Component）で、応答から商品カードまで">
-  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductListResponse" data-focus="has_more: bool" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductListResponse" data-focus="has_more: bool" data-layer="api" data-link="DB の行を応答の形に詰める">
     <p class="stop-see">応答は <code>items</code>・<code>page</code>・<code>per_page</code>・<code>total</code>・<code>has_more</code>。<code>items</code> の 1 件は <code>ProductListItemOut</code>（id・name・price_incl_tax・image_path・colors・sold_out）。</p>
     <p class="stop-say">FastAPI が返す形は、この Pydantic のクラスで決まっています。大事なのは、商品の配列、総件数、次のページがあるかどうかの 3 点です。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>apiFetch</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="return { ok: true, status: res.status, data: body as T };" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="return { ok: true, status: res.status, data: body as T };" data-layer="bff" data-link="HTTP 応答の JSON（FastAPI から）">
     <p class="stop-see">2xx なら本文の JSON をそのまま <code>data</code> に入れて返す（整形はしない）。非 2xx は <code>sanitizeErrorBody</code> で <code>{code, …}</code> だけに絞る。</p>
     <p class="stop-say">FastAPI の応答は、成功ならそのまま data に入って返ります。初回表示の経路では、BFF による整形はありません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/catalog.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>loadOrNull</code> へ</p>
@@ -138,7 +138,7 @@
     <p class="stop-say">失敗したときは null を返す取り決めになっていて、ページ側は null なら「読み込めませんでした」を出します。FastAPI が止まっていても、画面は崩れません。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/products/page.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/products/page.tsx::ProductsPage" data-focus="list === null ? (" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/products/page.tsx::ProductsPage" data-focus="list === null ? (" data-layer="screen" data-link="関数の戻り値（loadOrNull の結果）">
     <p class="stop-see"><code>list === null</code> なら <code>LoadError</code>。そうでなければ <code>ProductsGrid</code> に <code>initialItems</code>・<code>initialPage</code>・<code>hasMore</code>・<code>total</code> を渡す。見出し横の件数は <code>list.total</code>。</p>
     <p class="stop-say">取得に失敗していれば LoadError を出し、成功なら、取れた商品と総件数を ProductsGrid に渡します。</p>
     <p class="stop-next">次へ: <code>ProductsGrid</code> にカーソルを置いて <kbd>F12</kbd></p>
@@ -154,12 +154,12 @@
   </li>
 </ol>
 <ol class="route" data-title="順路 B：「もっと見る」で、応答から追加表示まで">
-  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="return Response.json(result.data, { status: 200," data-layer="bff">
+  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="return Response.json(result.data, { status: 200," data-layer="bff" data-link="HTTP 応答の JSON（FastAPI から BFF へ）">
     <p class="stop-see">成功は FastAPI の本文をそのまま 200 で返す（<code>Cache-Control: no-store</code>）。失敗は <code>result.error</code> を元のステータスで返す。接続不可は 503 <code>upstream_unavailable</code>、想定外は 500 <code>internal_error</code>。</p>
     <p class="stop-say">BFF は、成功なら FastAPI の応答をそのまま返し、失敗ならエラーの code だけを返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/client/cart-api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>requestJson</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="throw new CartApiError(res.status, await parseJson&lt;ApiErrorBody&gt;(res));" data-layer="screen">
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="throw new CartApiError(res.status, await parseJson&lt;ApiErrorBody&gt;(res));" data-layer="screen" data-link="HTTP 応答の JSON（BFF からブラウザへ）">
     <p class="stop-see">2xx 以外は <code>CartApiError</code>（status と body）を投げる。2xx は JSON を返す（本文が空なら <code>bad_response</code>）。<code>fetchProductsPage</code> の戻り値は <code>ProductListResponse</code>。</p>
     <p class="stop-say">ブラウザ側の fetch は、失敗なら例外、成功なら JSON を返します。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/ProductsGrid.tsx</code> を開き、<code>loadMore</code> の続きを見る</p>

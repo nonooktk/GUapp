@@ -18,12 +18,12 @@
     <p class="stop-say">詳細のページも、サーバー側で動く Server Component です。getProduct を呼んで商品を取ります。id が数字でなければ、API は呼ばずに 404 の画面にします。</p>
     <p class="stop-next">次へ: <code>getProduct</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProduct" data-focus="encodeURIComponent(id)" data-layer="bff">
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProduct" data-focus="encodeURIComponent(id)" data-layer="bff" data-link="関数の呼び出し（Server Component から）">
     <p class="stop-see"><code>/products/{id}</code> を組み立て、<code>apiFetch</code>（一覧と同じ関数で、<code>X-Internal-Token</code> を付ける）から FastAPI を呼ぶ。BFF の Route Handler は通らない。</p>
     <p class="stop-say">一覧と同じ仕組みです。BFF は通らずに、サーバーから FastAPI を直接呼びます。内部トークンは、apiFetch が付けています。</p>
     <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘⇧F</kbd> で <code>/products/{product_id}</code> を検索し、<code>apps/api/app/routers/catalog.py</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/routers/catalog.py::get_product" data-focus="catalog_service.get_product_detail(" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::get_product" data-focus="catalog_service.get_product_detail(" data-layer="api" data-link="HTTP GET /api/v1/products/{id}（内部トークン付き。BFF は通らない）">
     <p class="stop-see"><code>@router.get("/products/{product_id}")</code>。ここがリクエスト先のバックエンド。<code>product_id</code> を受け取って、サービスを呼ぶだけの関数。</p>
     <p class="stop-say">リクエスト先は、FastAPI の GET /api/v1/products/商品 ID です。コードでは、routers/catalog.py の get_product にあたります。</p>
   </li>
@@ -46,12 +46,12 @@
     <p class="stop-say">ルーターがやるのは、商品 ID が整数かどうかの確認だけです。あとはサービスに渡します。</p>
     <p class="stop-next">次へ: <code>catalog_service.get_product_detail</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/services/catalog.py::get_product_detail" data-focus="raise AppError(404, &quot;not_found&quot;)" data-layer="service">
+  <li class="stop" data-ref="apps/api/app/services/catalog.py::get_product_detail" data-focus="raise AppError(404, &quot;not_found&quot;)" data-layer="service" data-link="関数の呼び出し">
     <p class="stop-see">公開商品が無ければ 404 <code>not_found</code>（非公開と存在しないは区別しない）。あれば variants・画像・関連商品を順に取る。<code>in_stock</code> は <code>stock &gt; 0</code> で決め、色とサイズは出てきた順のまま重複を除く。</p>
     <p class="stop-say">サービスは、まず公開中の商品かどうかを見ます。非公開の商品と存在しない商品は、どちらも同じ 404 です。そのうえで、色・サイズごとの在庫の有無を、在庫が 0 より大きいかどうかで決めます。</p>
     <p class="stop-next">次へ: <code>products_repo.get_published</code> にカーソルを置いて <kbd>F12</kbd></p>
   </li>
-  <li class="stop" data-ref="apps/api/app/repositories/products.py::get_published" data-focus="published_products().where(Product.id == product_id)" data-layer="repo">
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::get_published" data-focus="published_products().where(Product.id == product_id)" data-layer="repo" data-link="関数の呼び出し">
     <p class="stop-see"><code>published_products()</code>（公開条件つきの SELECT）に、ID の条件を足す。</p>
     <p class="stop-say">公開の条件は、一覧と同じ published_filter です。</p>
     <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>list_variants</code> へ</p>
@@ -66,7 +66,7 @@
     <p class="stop-say">関連商品は、同じカテゴリの公開商品のうち、新着順に 4 件です。商品自身は除きます。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>Variant</code> へ</p>
   </li>
-  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock: Mapped[int]" data-layer="db">
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock: Mapped[int]" data-layer="db" data-link="SQL の SELECT">
     <p class="stop-see"><code>variants</code> テーブル（<code>color</code>・<code>size</code>・<code>sku</code>・<code>stock</code>）。<code>stock</code> は 0 以上の CHECK 付き。画像は <code>product_images</code>。</p>
     <p class="stop-say">在庫の数は、variants の stock 列にあります。API が画面に返すのは、その数ではなく、0 より大きいかどうかだけです。</p>
   </li>
@@ -85,12 +85,12 @@
 </div>
 <h3 id="r02-response">④ 応答から表示まで</h3>
 <ol class="route" data-title="順路 A：応答から商品詳細のページ表示まで">
-  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductDetailOut" data-focus="variants: list[VariantOut]" data-layer="api">
+  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductDetailOut" data-focus="variants: list[VariantOut]" data-layer="api" data-link="DB の行を応答の形に詰める">
     <p class="stop-see">応答は id・name・description・material・price_incl_tax・images・colors・sizes・variants・related。<code>VariantOut</code> は variant_id・color・size・<code>in_stock</code>（真偽）で、残りの数は含まない。</p>
     <p class="stop-say">FastAPI が返す形は、この Pydantic のクラスで決まります。在庫は、あるかないかの真偽値だけです。</p>
     <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/products/[id]/page.tsx</code> を開く</p>
   </li>
-  <li class="stop" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="if (result.status === 404) notFound();" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="if (result.status === 404) notFound();" data-layer="screen" data-link="HTTP 応答の JSON（getProduct の戻り値）">
     <p class="stop-see">404 は <code>notFound()</code>（404 の画面）。それ以外の非 2xx は、ステータスと code をログに出して、「商品情報を読み込めませんでした」の <code>LoadError</code> にする。接続できないとき（<code>UpstreamUnavailableError</code>）も同じ <code>LoadError</code>。</p>
     <p class="stop-say">取得できなかったときは、404 なら 404 の画面を出します。それ以外は「読み込めませんでした」の表示です。</p>
     <p class="stop-next">次へ: 同じ関数の下へ進み、<code>PurchasePanel</code> を呼ぶ行を見る</p>

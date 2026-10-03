@@ -47,6 +47,9 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 | `review/template-review.html` | レビュー回答ガイドの外枠。順路・行番号・キー・テスト状態バッジ・突き合わせ表・台本ボックスの CSS と、順路の JS を持つ |
 | `review/NN-*.html` | レビュー回答ガイドの本文。ファイル名順に連結される（`template*.html` は本文として扱わない） |
 | `review/00-sample.html` | レビュー回答ガイドの動作確認用サンプル（`--include-sample` のときだけ入る） |
+| `review/translations/*.json` | コードの日本語訳（本番は `t1.json`〜`t3.json`）。`sample.json` は動作確認用 |
+| `review/glossary.json` | 用語集（`glossary.sample.json` は動作確認用） |
+| `partials/review-aid.css`・`review-aid.js` | 初心者向けの補助（住所・つながり図・重なりの図・用語・対訳・初心者モード）の CSS と JS |
 | `map/template-map.html` | 地図の外枠（CSS・JS・ヘッダー・全体図・ツリー・説明パネル） |
 | `map/descriptions.json` | 地図の説明データの本番ファイル（説明担当が作る） |
 | `map/sample.json` | 地図の動作確認用サンプル（最終出力には使わない） |
@@ -229,6 +232,8 @@ python3 docs/05_解説/code-guide/build.py --review --include-sample   # review/
 python3 docs/05_解説/code-guide/build.py --review --list-stops       # 停留所ごとの path:行 を一覧する（突き合わせ用）
 ```
 
+訳・住所・つながり図・用語集のオプション（`--allow-missing-translations` など）は、次の「初心者向けの補助」を参照。
+
 - 出力: `docs/05_解説/GU_ECsite_レビュー回答ガイド.html`（`--out` で差し替え可。サンプルの動作確認は `--out` で別の場所に出す）
 - `--commit`・`--check`・`--content-dir`・`--out`・`--include-sample` は解説書と同じ。`--content-dir` の既定だけ `code-guide/review`
 - `--guide-url`（既定 `GU_ECsite_コード解説.html`）と `--map-url`（既定 `GU_ECsite_リポジトリ地図.html`）はヘッダーのリンク先
@@ -332,6 +337,79 @@ python3 docs/05_解説/code-guide/build.py --review --list-stops       # 停留�
 
 `a.ref`、`flow`、`arch`、`note`、`status`、`req`、`tid`、`layer`、`table-wrap`、`filterable`、`details.qa`、`pre.code`、`metaphor`、`why`、`grid2` はそのまま使える。`data-focus` は `a.ref` と `flow-step` にも使える。
 
+## 初心者向けの補助（日本語訳・住所・つながり図・重なりの図・用語・初心者モード）
+
+`--review` のときだけ、組み立て時に次を組み込む（解説書・地図の出力には入らない）。データは別担当が作り、build.py は検査と差し込みだけを行う。
+
+```bash
+python3 docs/05_解説/code-guide/build.py --review                                  # 訳・用語集が本番データで揃っていないとエラー
+python3 docs/05_解説/code-guide/build.py --review --allow-missing-translations     # 訳の無い行を警告に落とす（データ作成中の確認用）
+python3 docs/05_解説/code-guide/build.py --review --check --allow-missing-translations --dump-translation-scope /tmp/scope.json   # 訳の対象を書き出す
+```
+
+| オプション | 意味 |
+|---|---|
+| `--allow-missing-translations` | 「訳の無い行」だけを警告にする（形式の不備・はみ出し・重なり・存在しないファイルは、付けてもエラー） |
+| `--dump-translation-scope PATH` | 訳の対象を `{path: {"ranges": [[a,b],...], "lines": n, "nonblank": m}}` で書き出す。`lines` は和集合の全行数、`nonblank` は空行を除く行数 |
+| `--translations-dir DIR` / `--glossary PATH` | 訳・用語集の置き場の差し替え（検証用。既定は `review/translations/`・`review/glossary.json`） |
+
+### 訳の JSON（`review/translations/*.json`）
+
+`sample.json` 以外をすべて読み込んでマージする。本番ファイル（`t1.json` など）が 1 つも無いときだけ `sample.json` を読む（動作確認用。使ったときは警告が出る）。
+
+```json
+{
+  "apps/api/app/services/orders.py": [
+    {"lines": [281, 283], "ja": "注文を確定する入口の関数。カートのトークン、入力内容、決済とメールの部品を受け取る"},
+    {"lines": [284, 284], "ja": "…"}
+  ]
+}
+```
+
+- キーはリポジトリルートからの相対パス。`lines` は実ファイル（`--commit` のコミット。既定は origin/main）の行番号で、両端を含む。`ja` は空でない文字列。`lines` と `ja` 以外のキーはエラー
+- **網羅の検査**: 本文の全 `li.stop` の `data-ref` を解決し、ファイルごとに行範囲の和集合（隣接・重複は結合）を求める。その和集合の中の **空行以外のすべての行** が、ちょうど 1 つのブロックに含まれること
+  - ブロックが和集合の外にはみ出す、ブロックどうしが重なる、ファイルが存在しない・停留所に出てこないファイルのブロック、JSON の形式の不備 → エラー（exit 1。ファイルと行の一覧を出す）
+  - 訳の無い行 → エラー（`--allow-missing-translations` のときだけ警告）。ブロックに空行を含めるのは可（和集合の内側に限る）
+- 対象は `--dump-translation-scope` で確認できる。`a.ref` や `span.loc` の範囲は対象外（`li.stop` だけ）
+
+### 用語集の JSON（`review/glossary.json`）
+
+```json
+[
+  {"term": "BFF", "aliases": ["Backend for Frontend"], "short": "2〜3 文の説明", "analogy": "身近な例え 1 文（任意）", "ref": "apps/web/lib/server/api.ts::apiFetch"}
+]
+```
+
+- `term` と `short` は必須。`aliases`・`analogy`・`ref`（`data-ref` 構文）は任意。`ref` が解決できない・同じ語が重複する・未知のキーがある、はエラー。`glossary.json` が無いときだけ `glossary.sample.json` を読む
+- 本文（`p`・`li`・`td`・`.stop-see`・`.stop-say`）と訳の地の文で、`term` / `aliases` に一致する語を、**各 section の中で最初の 1 回だけ**点線下線の `<button class="term">` にする（組み立て後の JS が行う。原文の文字列は変えない）。`code`・`kbd`・`pre`・`a`・見出し・既存のボタンの中は対象外。ドロワーの訳の中では、開くたびに最初の 1 回
+- 照合は長い語を優先する（`CSRF トークン` は `CSRF` より先、`FastAPI` は `API` より先）。語の端が英数字のときは語の境界で照合する（前後が英数字・`-`・`_` なら一致させない。`UT-WEB-09` の `UT` には反応しない）
+- 押す（PC ではホバーでも）と、説明（`short`）・たとえ（`analogy`）・「コードを見る」（`ref` があれば）のポップオーバーが出る。Esc・外側クリックで閉じる。キーボードは Tab で語に移り Enter / Space で開く
+
+### 画面に出るもの
+
+1. **停留所の補足**（各 `li.stop` の `stop-loc` の直下。build.py が HTML に入れる）
+   - 住所: `apps › web › components › OrderConfirm.tsx › submit()` の形のパンくず。フォルダ（CSS の記号）・ファイル（拡張子のラベル）・関数（`ƒ`。クラス・型は `T`、定数は `=`、行範囲は `L`）を区別する。各段は折り返せる
+   - 注目行と訳: `data-focus` の行のコード 1 行（等幅。中身は JS が埋め込み済みのスニペットから入れる）と、その行を含むブロックの訳。`data-focus` が無ければ範囲の先頭ブロック
+2. **ドロワーの対訳**: 広い画面は 3 列（行番号・コード・訳）。訳はブロックの行数ぶん縦に結合し、境目に薄い線を引く。コードが長いときは横にスクロールしても訳の列は右端に残る。狭い画面（< 720px）は各ブロックのコードの直後に訳を 1 段で出す。訳のデータが無い範囲のスニペット（本文の `a.ref` で範囲外のもの）は従来の表示。ドロワー上部の「訳を表示」は初心者モードと同じ状態に連動する
+3. **つながり図**（各 `ol.route` の直前に build.py が自動生成。矢印は JS が SVG で描く）
+   - 停留所の順に、層（`data-layer`）→ フォルダ → ファイル → 関数（`symbol`。`#L` 範囲は `L10-40`）の入れ子の箱。同じ層・フォルダ・ファイルが続く停留所は同じ箱に並べる
+   - 箱どうしを停留所の順に矢印でつなぐ。矢印のラベルは、`li.stop` の **`data-link="HTTP POST /api/orders"`**（前の停留所からこの停留所へのつながり方。任意）があればそれ。無ければ既定: 画面 → BFF「HTTP（fetch）」、BFF → API「HTTP（内部トークン付き）」、API → サービス・サービス → リポジトリ「関数の呼び出し」、リポジトリ → DB「SQL」、同じファイル内「同じファイル内」、それ以外「呼び出し」
+   - 広い画面は層を縦のレーン（左から 画面・BFF・API・サービス・リポジトリ・DB。そのほかの層は右）にして上から下へ箱を置き、矢印をレーンをまたいで斜めに結ぶ。レーンが多くて入りきらないときは図の中だけ横にスクロールする。狭い画面は 1 列で、矢印は下向き
+   - 箱を押すと、その停留所へスクロールしてハイライトし、ドロワーでコードを開く。「流れを再生」で箱と矢印が順に光る。SVG の色はすべてテーマトークン。`prefers-reduced-motion` では動きを付けない
+4. **重なりの図**（`<div class="overlap-map" data-title="購買 7 機能が通るファイル"></div>` を置いた場所に、build.py が表を入れる）
+   - 行 = 停留所に出てくるファイル（層 → フォルダの順。住所と同じ表記）、列 = 章 r01〜r07（`data-chapters="r01,r02"` で差し替え可）、セル = その章の停留所で使う関数名（押すとドロワー）。3 章以上で使うファイルの行は「共通」の印と色で強調する。`table-wrap` で横にスクロールできる
+5. **初心者モード**: ヘッダーのスイッチ（既定 ON）。OFF にすると住所・注目行と訳・つながり図・用語の下線・ドロワーの訳を隠す。状態は `localStorage`（`guapp-review-beginner`）に保存し、使えない環境でも ON で動く
+
+### 原文の保護の検査
+
+組み立てで挿入する要素にはすべて `data-gen` を付ける。build.py は、`data-gen` の要素と `span.loc` の中身を除いた出力のテキストが、`review/*.html` の原文のテキストと（空白を除いて）一致することを検査し、食い違えばエラーにする。
+
+### 組み込みの作り（保守用）
+
+- 新しい partial: `partials/review-aid.css`・`partials/review-aid.js`（`review/template-review.html` だけが取り込む）
+- `partials/drawer.js` には、フック 2 か所（`buildDrawerExtra`・`renderCodeTr`）だけ足してある。どちらも `typeof` で存在を確かめて呼ぶので、解説書・地図では何もしない
+- 訳・用語集は `<script type="application/json" id="translations-data">`・`id="glossary-data"` に埋め込む。コード本体は従来どおり `<script type="text/plain">` のまま
+
 ## 秘密検査
 
 出力 HTML は解説書・地図と同じく `gitleaks detect --no-git --source <file> --redact` と `pre-commit run detect-secrets --files <file>` を通す。埋め込み方式（コードは原文のまま `<script type="text/plain">`、JSON の `secret` はエスケープ）は解説書と共通。
@@ -343,6 +421,12 @@ python3 docs/05_解説/code-guide/build.py --review --list-stops       # 停留�
 - 地図（`--map`）の `body_html` では `data-focus` を解決しない（ドロワーの JS は `data-focus-line` があれば効く）
 - 順路の「流れを再生」は強調の移動のみ（フロー図のような動く点は無い）
 - JS が無い環境では「コピー」「コードを見る」ボタンは出ない（`path:行` の文字列は出る）
+- 初心者向けの補助のうち、つながり図の矢印・用語ポップアップ・ドロワーの対訳・初心者モードは JS が要る（JS が無い環境では、つながり図は出さない。住所と訳は表示される）
+- 用語は「各 section の最初の 1 回」。同じ section で 2 回目以降は下線が付かない。直前の要素をまたぐ語（`<code>` の隣など）は照合しない
+- ドロワーの対訳は、広い画面でコードが長いと、コードの上に訳の列が重なる（横スクロールで読める）。幅 1120px までドロワーを広げる
+- つながり図の層は 5 つ以上あると、図の中だけ横にスクロールする。ラベルは箱と箱のすき間の中央に置くが、すき間が狭い入れ子ではラベルが箱の枠に少し重なる
+- 重なりの図の列は章 r01〜r07（購買）。章のタイトルは 12 文字で切る
+- `--include-sample` は `review/00-sample.html` の章 id が `00-intro.html` と重複するため、現状はエラーになる（本改修より前からの状態）
 
 ---
 

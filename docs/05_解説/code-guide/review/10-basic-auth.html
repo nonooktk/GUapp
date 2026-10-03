@@ -12,7 +12,7 @@
 <h3 id="r10-s2">② 画面からバックエンドへ（proxy で判定されるまで）</h3>
 <p>Next.js 16 で、従来の <code>middleware.ts</code> が <code>proxy.ts</code> に名前を変えました。ページの表示も <code>/api/*</code> も、ルートの処理に入る前に、まずここを通ります。</p>
 <ol class="route" data-title="順路：リクエストが proxy.ts で判定されるまで">
-  <li class="stop" data-ref="apps/web/proxy.ts::config" data-focus="matcher:" data-layer="bff">
+  <li class="stop" data-ref="apps/web/proxy.ts::config" data-focus="matcher:" data-layer="bff" data-link="全リクエストの前に Next.js が呼ぶ">
     <p class="stop-see"><code>config.matcher</code>。<code>_next/static</code>・<code>_next/image</code>・<code>favicon.ico</code>・<code>sitemap.xml</code>・<code>robots.txt</code> を除く全リクエストが対象。<code>/api/*</code> も含む。</p>
     <p class="stop-say">静的ファイルを除いた、全ページと BFF が対象です。静的ファイルは、ファイル名にハッシュが付いていて、中身もビルドの成果物なので、対象から外しました（公開追補 7.1）。</p>
     <p class="stop-next">次へ: 同じファイルの <code>basicAuthConfig</code> へ</p>
@@ -72,7 +72,7 @@
 <h3 id="r10-s4">④ 応答から表示まで（帯の表示）</h3>
 <p>ここからは、認証に通ったあと全ページの上に出る「期間限定で公開しています」の帯の話です。終了日は環境変数 <code>DEMO_PUBLIC_UNTIL</code>（<code>YYYY-MM-DD</code>）で指定します。<code>NEXT_PUBLIC_</code> を付けていないので、ビルドし直さなくても、値を変えて延長できます（公開追補 6.1、DS-DEC-50）。</p>
 <ol class="route" data-title="順路：終了日が帯の文言になるまで">
-  <li class="stop" data-ref="apps/web/app/layout.tsx::RootLayout" data-focus="parseDemoPublicUntil(process.env.DEMO_PUBLIC_UNTIL)" data-layer="screen">
+  <li class="stop" data-ref="apps/web/app/layout.tsx::RootLayout" data-focus="parseDemoPublicUntil(process.env.DEMO_PUBLIC_UNTIL)" data-layer="screen" data-link="proxy が通したあとの描画">
     <p class="stop-see"><code>RootLayout</code>。実行時の環境変数を読み、<code>parseDemoPublicUntil</code> で検証して <code>YYYY/MM/DD</code> にする。</p>
     <p class="stop-say">全ページ共通のレイアウトが、環境変数の終了日を読みます。</p>
     <p class="stop-next">次へ: <code>parseDemoPublicUntil</code> にカーソルを置いて <kbd>F12</kbd></p>

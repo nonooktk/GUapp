@@ -1,0 +1,132 @@
+/* ---------- 初心者モード ---------- */
+.bm-bar{display:none;align-items:center;flex-wrap:wrap;gap:6px 14px;margin-top:14px}
+.js .bm-bar{display:flex}
+.bm-switch{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;line-height:1.4;color:var(--ink);cursor:pointer}
+.bm-switch input{width:18px;height:18px;margin:0;accent-color:var(--navy);cursor:pointer}
+.bm-desc{font-size:13px;color:var(--ink-2)}
+.bm-off .stop-addr:not(.addr-sm),.bm-off .stop-aid,.bm-off .conn-map{display:none!important}
+.drawer-tr-switch{padding:5px 4px;font-size:13px}
+
+/* ---------- 停留所の住所・注目行と訳 ---------- */
+.stop-addr{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;margin:0 0 6px;font-family:var(--mono);font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+.addr-seg{display:inline-flex;align-items:center;gap:5px;min-width:0;overflow-wrap:anywhere}
+.addr-sep{color:var(--ink-3)}
+.addr-dir::before{content:"";flex:none;width:13px;height:10px;background:currentColor;opacity:.7;clip-path:polygon(0 0,40% 0,52% 24%,100% 24%,100% 100%,0 100%)}
+.addr-file{color:var(--ink);font-weight:500}
+.addr-ext{flex:none;font-size:10px;font-weight:700;letter-spacing:.04em;line-height:1.5;padding:0 5px;border:1px solid var(--ink-3);border-radius:3px;color:var(--ink-2)}
+.addr-fn{color:var(--navy);font-weight:500}
+.addr-fn::before{content:"ƒ";flex:none;display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--navy-soft);color:var(--navy);font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:12px;line-height:1}
+.addr-fn.k-type::before{content:"T";font-style:normal;border-radius:4px}
+.addr-fn.k-const::before{content:"=";font-style:normal;border-radius:4px}
+.addr-fn.k-range::before{content:"L";font-style:normal;border-radius:4px}
+.stop-aid{margin:0 0 8px;padding:7px 11px 8px;background:var(--paper);border:1px solid var(--line);border-radius:6px}
+.aid-code{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+.aid-ln{flex:none;font-weight:700;color:var(--amber)}
+.aid-line{min-width:0;background:none;padding:0;border-radius:0;font-size:inherit;color:var(--code-ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.aid-tr{margin-top:4px;font-size:14.5px;line-height:1.75;color:var(--ink)}
+.aid-tr.is-missing{color:var(--ink-3)}
+.aid-tag{display:inline-block;margin-right:8px;padding:0 8px;border-radius:999px;background:var(--green-soft);color:var(--green);font-size:11.5px;font-weight:700;line-height:1.7;vertical-align:baseline}
+.stop.is-flash{background:var(--paper);border-color:var(--lc,var(--navy));box-shadow:0 0 0 3px var(--navy-soft),0 2px 10px var(--shadow)}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .stop.is-flash{box-shadow:0 0 0 3px color-mix(in srgb,var(--lc,var(--navy)) 40%,transparent),0 2px 10px var(--shadow)}
+}
+
+/* ---------- 用語（ボタン + ポップオーバー） ---------- */
+.term{font:inherit;color:inherit;text-align:inherit;background:none;border:0;border-bottom:1.5px dotted var(--ink-3);border-radius:0;padding:0;margin:0;cursor:help}
+.term:hover,.term[aria-expanded="true"]{color:var(--navy);border-bottom-color:var(--navy);background:var(--navy-soft)}
+.term-pop{position:fixed;z-index:80;width:min(340px,calc(100vw - 16px));padding:12px 14px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--navy);border-radius:8px;box-shadow:0 8px 28px var(--shadow);font-size:14px;line-height:1.7;outline:none}
+.term-pop p{margin:4px 0 0;max-width:none;font-size:inherit}
+.tp-term{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-weight:700;font-size:15px;color:var(--navy)}
+.tp-analogy{padding:6px 10px;background:var(--amber-soft);border-radius:6px}
+.tp-analogy b{margin-right:8px;font-size:12px;letter-spacing:.08em;color:var(--amber)}
+.tp-ref{margin-top:8px}
+
+/* ---------- つながり図 ---------- */
+.conn-map{display:none;margin:20px 0 8px;padding:12px 14px 14px;background:var(--paper);border:1px solid var(--line);border-radius:8px;max-width:none}
+.js .conn-map{display:block}
+.conn-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;margin-bottom:10px}
+.conn-title{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-weight:700;font-size:15px}
+.conn-sub{font-size:13px;color:var(--ink-2)}
+.conn-hint{font-size:12px;color:var(--ink-3)}
+.conn-scroll{overflow-x:auto;padding:0 10px 2px;margin:0 -10px}
+.conn-grid{position:relative;display:grid;grid-template-columns:repeat(var(--lanes),minmax(176px,1fr));grid-template-rows:repeat(var(--rows),auto);column-gap:22px;row-gap:48px;align-items:start;padding:30px 2px 4px}
+.conn-lane-bg{grid-column:var(--c);grid-row:1/-1;align-self:stretch;margin:-30px -8px -4px;border:1px dashed var(--line);border-radius:8px;background:var(--bg)}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .conn-lane-bg{background:color-mix(in srgb,var(--lc,var(--ink-3)) 7%,var(--paper))}
+}
+.conn-lane-bg::before{content:attr(data-label);display:block;padding:5px 10px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--lc,var(--ink-2))}
+.conn-layer{grid-column:var(--c);grid-row:var(--r);min-width:0;padding:6px 8px 8px;background:var(--paper);border:1px solid var(--lc,var(--ink-3));border-left-width:6px;border-radius:8px}
+.conn-layer-name{margin-bottom:2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--lc,var(--ink-2))}
+.conn-dir{margin-top:6px;padding:5px 6px 6px;border:1px dashed var(--ink-3);border-radius:6px}
+.conn-dir+.conn-dir{margin-top:24px}
+.conn-dir-name{margin-bottom:4px;font-family:var(--mono);font-size:10.5px;line-height:1.4;color:var(--ink-2);overflow-wrap:break-word}
+.conn-file{margin-top:4px;padding:5px 6px 6px;background:var(--bg);border:1px solid var(--line);border-radius:5px}
+.conn-file+.conn-file{margin-top:24px}
+.conn-file-name{display:flex;flex-wrap:wrap;align-items:center;gap:2px 5px;font-family:var(--mono);font-size:11px;font-weight:500;line-height:1.4;color:var(--ink);overflow-wrap:break-word}
+.conn-fn{display:flex;align-items:center;gap:6px;width:100%;margin-top:6px;padding:5px 8px;font:inherit;text-align:left;color:var(--ink);background:var(--paper);border:1px solid var(--lc,var(--ink-3));border-left-width:4px;border-radius:5px;cursor:pointer}
+.conn-fn+.conn-fn{margin-top:32px}
+.conn-fn:hover{background:var(--navy-soft)}
+.conn-fn.is-active{background:var(--navy-soft);border-color:var(--navy);border-left-color:var(--lc,var(--navy));box-shadow:0 0 0 3px var(--navy-soft),0 2px 8px var(--shadow)}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .conn-fn.is-active{box-shadow:0 0 0 3px color-mix(in srgb,var(--lc,var(--navy)) 35%,transparent),0 2px 8px var(--shadow)}
+}
+.conn-no{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--lc,var(--ink-3));color:var(--on-accent);font-family:var(--mono);font-size:11px;font-weight:500;line-height:1}
+.conn-fn-name{min-width:0;font-family:var(--mono);font-size:12px;line-height:1.4;overflow-wrap:break-word}
+.conn-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.conn-line{fill:none;stroke:var(--ink-3);stroke-width:1.6}
+.conn-tri{fill:var(--ink-3)}
+.conn-lbl-bg{fill:var(--paper);stroke:var(--line)}
+.conn-lbl{fill:var(--ink-2);font-family:'Noto Sans JP',system-ui,sans-serif;font-size:11px;font-weight:500;dominant-baseline:central}
+.conn-arrow.is-active .conn-line{stroke:var(--navy);stroke-width:2.8}
+.conn-arrow.is-active .conn-tri{fill:var(--navy)}
+.conn-arrow.is-active .conn-lbl-bg{stroke:var(--navy)}
+.conn-arrow.is-active .conn-lbl{fill:var(--navy);font-weight:700}
+@media (prefers-reduced-motion:no-preference){
+  .conn-fn,.conn-line,.conn-tri{transition:background-color .2s,box-shadow .2s,stroke .2s,fill .2s}
+}
+@media (max-width:719.98px){
+  .conn-map{padding:10px 10px 12px}
+  .conn-grid{display:flex;flex-direction:column;align-items:stretch;gap:48px;padding:2px}
+  .conn-lane-bg{display:none}
+  .conn-layer{grid-column:auto;grid-row:auto}
+}
+@media print{.conn-map,.bm-bar{display:none!important}}
+
+/* ---------- 重なりの図 ---------- */
+.overlap-gen{margin:20px 0}
+.overlap-head{font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-weight:700;font-size:17px}
+.overlap-note{margin:4px 0 0;max-width:46em;font-size:13.5px;color:var(--ink-2)}
+.overlap-table{font-size:13px}
+.overlap-table th,.overlap-table td{padding:6px 9px}
+.overlap-table thead th{white-space:normal;min-width:10em;vertical-align:bottom}
+.overlap-table thead th:first-child{min-width:21em}
+.overlap-table thead th .ov-ch{display:block;margin-top:2px;font-size:11.5px;font-weight:500;color:var(--ink-2);line-height:1.4}
+.overlap-table tbody th[scope="row"]{white-space:normal;min-width:21em;background:var(--paper);font-weight:500;position:sticky;left:0;z-index:1}
+.overlap-table .stop-addr{margin:3px 0 0;gap:1px 3px;font-size:11px}
+.overlap-table .addr-dir::before{width:11px;height:8px}
+.overlap-table td.num{text-align:right;color:var(--ink-2)}
+.overlap-table td.ov-empty{background:var(--bg);color:var(--ink-3);text-align:center}
+.ov-fn{display:block;max-width:100%;padding:1px 0;font:inherit;font-family:var(--mono);font-size:12px;line-height:1.55;text-align:left;color:var(--navy);background:none;border:0;border-radius:3px;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;overflow-wrap:break-word}
+.ov-fn:hover,.ov-fn.is-open{background:var(--navy-soft)}
+.overlap-table tr.hot>*{background:var(--amber-soft)}
+.overlap-table tr.hot>th[scope="row"]{box-shadow:inset 5px 0 0 var(--amber)}
+.overlap-table tr.hot td.num{font-weight:700;color:var(--amber)}
+.ov-hot{display:inline-block;margin-left:8px;padding:0 8px;border-radius:999px;background:var(--amber);color:var(--paper);font-size:11px;font-weight:700;line-height:1.7;vertical-align:baseline}
+
+/* ---------- ドロワーの対訳（3 列: 行番号・コード・訳） ---------- */
+.drawer.has-tr{width:min(1120px,96vw)}
+.code-view code.tr-grid{display:grid;grid-template-columns:minmax(0,1fr) var(--tr-w,340px)}
+.tr-grid .cl{grid-column:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.tr-grid .cl.blk-first{border-top:1px solid var(--line)}
+.tr-grid .cl::before{height:100%;vertical-align:top}
+.tr-cell{grid-column:2;grid-row:var(--r)/span var(--n);position:static;box-sizing:border-box;padding:6px 12px 8px;background:var(--paper);border-left:1px solid var(--line);border-top:1px solid var(--line);color:var(--ink);font-family:'Noto Sans JP',system-ui,sans-serif;font-size:13px;line-height:1.7;white-space:normal;overflow-wrap:anywhere}
+.tr-cell::before{content:"訳";display:inline-block;margin-right:7px;padding:0 7px;border-radius:999px;background:var(--green-soft);color:var(--green);font-size:11px;font-weight:700;line-height:1.7}
+@media (max-width:719.98px){
+  .drawer.has-tr{width:100%}
+  .code-view code.tr-grid{grid-template-columns:minmax(0,1fr)}
+  .tr-cell{grid-column:1;grid-row:auto;right:auto;left:auto;width:auto;border-left:4px solid var(--green);border-top:0;border-bottom:1px solid var(--line)}
+}
+@media (forced-colors:active){
+  .conn-line{stroke:CanvasText}.conn-tri{fill:CanvasText}
+}
+.drawer.has-tr .code-view{width:auto;min-width:0;max-width:100%}
