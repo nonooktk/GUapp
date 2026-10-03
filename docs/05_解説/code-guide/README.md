@@ -8,6 +8,8 @@
 
 `--review` を付けると、コードレビュー当日に IDE と並べて使う **レビュー回答ガイド**（`GU_ECsite_レビュー回答ガイド.html`）を組み立てる。本文は `review/*.html`。作り方と本文の部品は「レビュー回答ガイド」の章を参照。
 
+`--tracer` を付けると、画面の操作から処理の流れをたどって復習する **コードトレーサー**（`GU_ECsite_コードトレーサー.html`）を組み立てる。左に撮影したアプリの画面写真、右に IDE 風の画面。作り方は末尾の「コードトレーサー」を参照。
+
 ## 使い方
 
 リポジトリルートから実行する（スクリプト位置からルートを解決するので、どこから実行しても動く）。
@@ -53,6 +55,10 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 | `map/template-map.html` | 地図の外枠（CSS・JS・ヘッダー・全体図・ツリー・説明パネル） |
 | `map/descriptions.json` | 地図の説明データの本番ファイル（説明担当が作る） |
 | `map/sample.json` | 地図の動作確認用サンプル（最終出力には使わない） |
+| `tracer/template-tracer.html` | コードトレーサーの外枠（ヘッダー・左の画面写真・右の IDE の骨組み） |
+| `tracer/scenario.json` | 操作（action）→ レビュー回答ガイドの順路 の対応表（本ガイドで管理） |
+| `tracer/capture/` | 撮影担当の出力（`capture.json` と画面写真）。`build.py` は読むだけで、書かない |
+| `partials/tracer.css`・`tracer.js` | コードトレーサーの CSS と JS（`tracer/template-tracer.html` だけが取り込む） |
 
 ## 本文の書き方の約束
 
@@ -533,3 +539,111 @@ python3 docs/05_解説/code-guide/build.py --map --tree-commit HEAD --commit <SH
 - 行数はテキストファイルのみ。`.env*` と画像・バイナリは出さない
 - ブロックの並びは「フォルダ→名前順」の近似（IDE 側の並べ替え設定が違うと一致しない）
 - ハイライトは cdnjs の highlight.js 11.9.0 に依存する（読み込めない環境では素のテキスト）
+
+---
+
+# コードトレーサー（`--tracer`）
+
+左にアプリの画面写真、右に IDE 風の画面を並べ、左で操作すると右で処理の順番どおりにファイルが開き、該当の行が光り、各行の日本語訳が出る。何度も見返して、コードを説明できるようになるための教材。順路・解説・訳・用語集は **レビュー回答ガイドのデータをそのまま使う**（新しく書くものは `scenario.json` だけ）。
+
+## 作り方
+
+```bash
+python3 docs/05_解説/code-guide/build.py --tracer                          # → docs/05_解説/GU_ECsite_コードトレーサー.html
+python3 docs/05_解説/code-guide/build.py --tracer --check                  # 出力を書かず検証だけ
+python3 docs/05_解説/code-guide/build.py --tracer --list-routes --check    # 順路の一覧（章 id・data-title・停留所数）
+python3 docs/05_解説/code-guide/build.py --tracer --capture-dir <DIR> --scenario <PATH> --out <PATH>   # 素材・対応表・出力先の差し替え
+```
+
+- 既定の素材は `tracer/capture/capture.json`。無ければエラー（`--capture-dir` で別の場所を指定できる）
+- コード（全文）・訳・用語集は `--review` と同じ検査を通る（訳の無い行はエラー。`--allow-missing-translations` で警告に落とせる）。`--commit`・`--content-dir`・`--guide-url`・`--map-url`・`--review-url`（レビュー回答ガイドへのリンク先）も使える
+- 標準出力に「action → 順路（章「data-title」[停留所の範囲]）の並び → 停留所数」の対応表を出す
+- 既存の解説書・地図・レビュー回答ガイドの出力は変わらない（`--tracer` を付けないときの処理は触っていない）
+
+## scenario.json（操作 → 順路の対応表）
+
+```json
+{
+  "flow": ["open-product", "select-variant", "add-to-cart", "open-cart", "change-qty", "go-checkout", "go-confirm", "place-order"],
+  "aliases": {"place-order-confirm": {"action": "place-order", "stop": 3}},
+  "initial": {"title": "…", "routes": [{"section": "r01", "title": "順路 A：…"}]},
+  "actions": {
+    "go-checkout": {
+      "title": "レジに進む",
+      "routes": [{"section": "r05", "title": "順路：注文手続きの画面から FastAPI への呼び出しまで", "stops": [1, 4]}],
+      "extras": [{"section": "r05", "title": "順路：prepare が失敗したときの画面の出し分け"}],
+      "server_calls": [{"method": "GET", "path": "/api/v1/cart", "note": "…"}],
+      "forward_headers": ["X-Internal-Token: BFF が付ける（値は非公開）"],
+      "network_note": "通信が無い操作の説明（capture の note より優先）"
+    }
+  }
+}
+```
+
+| キー | 意味 |
+|---|---|
+| `flow` | 画面を進める順の action。まだ押していない最初の action の hotspot を「次に押すところ」として点滅させる |
+| `aliases` | 撮影素材の hotspot の action id が scenario の action と違うときの対応。`stop` は本筋の何番目の停留所から始めるか（1 始まり）。値を文字列にすると `stop` は 1 |
+| `initial` | ページを開いた直後に出すトレース（最初の状態の写真と、その 1 番目の停留所） |
+| `actions.<id>.routes` | たどる順路（章 id `section` と `ol.route` の `data-title`、完全一致）を順に並べる。`stops: [開始, 終了]` で順路の一部だけを使う（1 始まり・両端を含む）。存在しない順路・範囲外・同名の順路が 2 本以上、は build エラー |
+| `actions.<id>.extras` | 本筋に含めない別ルート（参考）。「流れ」パネルに折りたたんで出る。押すとその流れをたどれ、「本筋に戻る」で戻る |
+| `server_calls`・`forward_headers`・`network_note` | 「通信」パネルの補足。ブラウザから見えない FastAPI 呼び出しを、コードから組み立て直した説明として出す |
+
+対応（本筋の停留所数）は build の標準出力に出る。順路を足す・変えるときは、本文（`review/*.html`）の `data-title` と合わせる。
+
+## 撮影素材の約束（`tracer/capture/capture.json`）
+
+撮影担当が作る。トレーサーが読むのは次の項目。
+
+```json
+{
+  "captured_at": "…", "base_url": "http://127.0.0.1:3000", "viewport": {"width": 390, "height": 844, "scale": 2},
+  "states": [{"id": "list", "title": "商品一覧", "path": "/products", "image": "01-list.jpg", "width": 390, "height": 5031,
+              "hotspots": [{"action": "open-product", "label": "商品カード", "x": 16, "y": 320, "w": 175, "h": 345, "next": "detail"}]}],
+  "actions": {"add-to-cart": {"title": "…", "from": "…", "to": "…", "network": [{"method": "POST", "path": "/api/cart/items", "status": 201,
+              "request_headers": {}, "request_body": {}, "response_body": {}}], "note": "…", "db": {"before": {}, "after": {}}}}
+}
+```
+
+- 座標は CSS ピクセル（full_page 画像の左上が原点）。画像は `capture.json` と同じフォルダに置き、data URI でページに埋め込む
+- 状態 id の重複・`next` の行き先が無い・画像が無い・`hotspots` の座標が数でない、は build エラー。scenario に無い action、撮影素材に無い scenario の action は警告
+
+## 画面の動き
+
+1. **左**（幅 400px）: 状態の画面写真。hotspot を半透明の枠で示し、次に押すところを点滅させる（`prefers-reduced-motion` では点滅なし・太い枠だけ）。押した hotspot は緑の枠
+   - hotspot を押す → その action のトレースを右で始める。トレースの最後の停留所まで進むか、「次の画面へ」を押すと、写真が次の状態（`actions.<id>.to`、無ければ hotspot の `next`）に切り替わる。最後から「前へ」で戻ると、写真も戻る
+   - 同じ action の hotspot が 1 画面に複数ある（`select-variant` の色・サイズ）ときは、トレースは 1 回だけ走る。すべて押す（または最後の 1 つを押す）と、次の画面へ進む
+   - hotspot の `next` が action の `to` と違う（`place-order`: 確認画面の「注文を確定する」→ 確認ダイアログ → 完了）ときは、押した時点で `next` の写真（ダイアログ）に切り替わり、トレースは始まる。ダイアログの「確定する」（`place-order-confirm`）は `aliases` で `place-order` として扱い、通信と DB は `place-order` から読み、トレースを `stop` の位置（ダイアログの確定の次の停留所）へ進める。トレースが完了すると完了画面に切り替わる
+   - 順路の無い action の hotspot は、次の画面へ移るだけ（警告が出る）
+   - 「最初から」: 最初の状態の写真と `initial` のトレース（1 番目の停留所）に戻す
+2. **右の上**: 層の帯（ブラウザ／BFF／FastAPI／サービス／リポジトリ／DB。アダプターが出る流れでは「インフラ」も）。今の停留所の層が光る。直下に「前から来た経路」（停留所の `data-link`。無ければ層の変わり目から既定の文言）
+3. **操作**: 前へ・次へ（← →・F10）、自動再生（1 停留所 2.5 秒）、位置（12 / 52）、訳の表示 ON/OFF（`localStorage` の `guapp-tracer-tr` に保存。使えなくても動く）
+4. **ファイル一覧**: 今のトレースに出てくるファイルだけのツリー（子が 1 つのフォルダは 1 行にまとめる）。今のファイルを強調し、押すとそのファイルの最初の停留所へ移る
+5. **エディター**: 開いたファイルのタブ ＋ ファイル全文（`git show <commit>:<path>`）。トレースで参照する範囲（停留所の `data-ref` の和集合）以外は「… n 行（この流れでは通らない）」に畳み、押すと開く（「▲ n 行を畳む」で戻る）。今の停留所の範囲を薄く、`data-focus` の行を強く強調し、その行までスクロールする。訳（`review/translations`）は、各ブロックの最後の行の直後に 1 段で出す（ブロックの最後の行が畳まれているときは、見えている最後の行の直後）
+6. **下のパネル**（タブ切り替え）
+   - 解説: 停留所の「見る・言う・次へ」。用語（`review/glossary.json`）は点線の下線で、押す（PC ではホバー）と説明が出る。各停留所で最初の 1 回だけ
+   - 流れ: このトレースの停留所の一覧（番号・層・関数・`ファイル:行`）。今の位置を強調し、押すとジャンプ。順路の区切りに順路名を出す。別ルート（参考）は折りたたみ
+   - 通信: その action の `network`（リクエストのヘッダー・本文、レスポンスの本文）。`/api/…` の呼び出しには「BFF がこの本文を FastAPI の `/api/v1/…` に転送する（内部トークンを付ける）。ブラウザからは見えないため、コードから組み立て直した説明」を添える。`network` が空の action は `note`（scenario の `network_note` があればそちら）と、`server_calls` を出す
+   - DB（`db` を持つ action のときだけ）: `before` と `after` を、配列は `id`／`variant_id`／`order_number` で突き合わせ、入れ子を `variants › #182 ネイビー/M › stock` の形に平らにして比べる。変わった項目だけを表にし（在庫・注文件数・状態は強調）、変わらなかった項目は折りたたむ。数値には差（`−2`・`+1`）を出す
+7. **狭い画面**（< 900px）: 写真を上、IDE を下に積む。ファイル一覧は折りたたむ
+
+## 組み込みの作り（保守用）
+
+- 順路の解析・行番号の解決・訳と用語集の検査は `--review` の関数（`ContentScanner`・`resolve_ref`・`prepare_review_aids` など）をそのまま使う。`prepare_review_aids` の戻り値に `infos`・`routes`・`route_rw` を足しただけで、`--review` の出力は変わらない
+- データは `<script type="application/json" id="tracer-data">`（状態・action・トレース・訳・用語集）に、コード全文は `<script type="text/plain" data-file="パス">`、画像は `<script type="text/plain" data-image="状態 id">`（data URI）に埋め込む。ページは 1 ファイルで動き、外部は Google Fonts と cdnjs の highlight.js だけ
+- 停留所の「見る・言う・次へ」は本文の HTML から取り、`span.loc` は `path:行` の `code` に、リンク・バッジなどは文字だけにして入れる
+
+## 秘密検査
+
+出力 HTML は `gitleaks detect --no-git --source <file> --redact` と `pre-commit run detect-secrets --files <file>` を通す。コードは原文のまま `<script type="text/plain">`、JSON の `secret` はエスケープする（解説書と共通）。40 桁の SHA 単体は検知されるため、JSON には短い SHA（7 桁）だけを入れ、完全な SHA は `href` の URL の中にだけ置く。撮影素材の Cookie・トークン類は撮影側で伏せ字にしてある前提（トレーサーは値を加工しない）。
+
+## 既知の制限（コードトレーサー）
+
+- 画面写真は撮影時点の見た目で、`--commit` のコードとは別に撮っている。コードを変えたら素材も撮り直す
+- 写真の切り替えは「トレースの最後に着いたとき」と「次の画面へ」だけ。トレースの途中で写真が先に変わるのは、hotspot の `next` と action の `to` が違う場合だけ
+- 通信は action ごとに 1 組。1 つの action の中で、どの通信がどの停留所に当たるかは対応づけていない
+- DB の差分は `before`・`after` の入れ子を平らにして比べる。配列の行は `id`・`variant_id`・`order_number` で突き合わせ、どれも無いときは位置で比べる
+- 別ルート（参考）は、本筋とは別のトレースとして動く。位置の表示は「参考 3 / 8」。「本筋に戻る」で、本筋で最後に見ていた位置へ戻る
+- ハイライトは cdnjs の highlight.js 11.9.0 に依存する（読み込めない環境では素のテキスト。読み込めたら描き直す）
+- 長いファイルでも全文を埋め込むため、出力は約 2.4MB になる
+

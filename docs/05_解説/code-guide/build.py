@@ -6,6 +6,7 @@
     python3 docs/05_解説/code-guide/build.py --map [--map-data PATH] [--check] [--guide-url URL] [--map-url URL]
     python3 docs/05_解説/code-guide/build.py --review [--check] [--include-sample] [--guide-url URL] [--map-url URL] [--list-stops]
         [--allow-missing-translations] [--dump-translation-scope PATH] [--translations-dir DIR] [--glossary PATH]
+    python3 docs/05_解説/code-guide/build.py --tracer [--capture-dir DIR] [--scenario PATH] [--list-routes] [--check] [--out PATH]
 
 - content/*.html をファイル名順に連結して template.html に差し込む
 - 本文中の data-ref を `git show <sha>:<path>` で読んだコードに解決し、JSON として埋め込む
@@ -17,6 +18,10 @@
   実ファイルの行番号を組み立て時に自動で入れる。あわせて、初心者向けの
   コードの日本語訳（review/translations/*.json）・住所・つながり図・重なりの図・用語集（review/glossary.json）を組み込む
 
+- `--tracer` を付けると、コードトレーサー（tracer/template-tracer.html）を組み立てる。
+  左に撮影した画面写真（tracer/capture/）、右に IDE 風の画面。画面の操作ごとに、レビュー回答ガイド（review/*.html）の
+  順路を tracer/scenario.json の対応表どおりにたどり、全文のコード・訳・解説・通信の記録を 1 枚の HTML に埋め込む
+
 data-ref の構文・descriptions.json のスキーマは README.md を参照。
 """
 
@@ -24,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import base64
 import html
 import json
 import re
@@ -43,9 +49,14 @@ MAP_TEMPLATE = HERE / "map" / "template-map.html"
 MAP_DATA_DEFAULT = HERE / "map" / "descriptions.json"
 REVIEW_DIR = HERE / "review"
 REVIEW_TEMPLATE = REVIEW_DIR / "template-review.html"
+TRACER_DIR = HERE / "tracer"
+TRACER_TEMPLATE = TRACER_DIR / "template-tracer.html"
+TRACER_SCENARIO = TRACER_DIR / "scenario.json"
+TRACER_CAPTURE = TRACER_DIR / "capture"
 OUTPUT_NAME = "GU_ECsite_コード解説.html"
 MAP_OUTPUT_NAME = "GU_ECsite_リポジトリ地図.html"
 REVIEW_OUTPUT_NAME = "GU_ECsite_レビュー回答ガイド.html"
+TRACER_OUTPUT_NAME = "GU_ECsite_コードトレーサー.html"
 # 停留所のレイヤー表示名（template.html の LAYER_LABEL と同じ）
 LAYER_LABEL = {
     "screen": "画面", "bff": "BFF", "api": "API", "service": "サービス", "repo": "リポジトリ",
@@ -1537,7 +1548,10 @@ def prepare_review_aids(
         f"用語集: {len(glossary)} 語" + (f"（{gl_used}）" if gl_used else ""),
     ]
     tr_json = {p: [[a, b, ja] for a, b, ja in v] for p, v in sorted(merged.items())}
-    return {"tr_json": tr_json, "glossary": glossary, "summary": summary}
+    return {
+        "tr_json": tr_json, "glossary": glossary, "summary": summary,
+        "infos": infos, "routes": routes, "route_rw": route_rw,
+    }
 
 
 def build_guide(args: argparse.Namespace) -> int:
@@ -1704,6 +1718,558 @@ def build_guide(args: argparse.Namespace) -> int:
         print("停留所の一覧（ファイル:行 は実ファイルの行番号）:")
         for line in stop_list:
             print(line)
+    if args.check:
+        print(f"検証のみ（出力は書いていない）。出力サイズの見込み: {size:,} bytes")
+    else:
+        try:
+            shown = str(out_path.relative_to(root))
+        except ValueError:
+            shown = str(out_path)
+        print(f"出力: {shown}（{size:,} bytes）")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# コードトレーサー（--tracer）
+# ---------------------------------------------------------------------------
+
+# 層の帯に並べる順（data-layer の値 → 表示名）
+TRACER_LAYERS = [
+    ("screen", "ブラウザ"), ("bff", "BFF"), ("api", "FastAPI"), ("service", "サービス"),
+    ("repo", "リポジトリ"), ("db", "DB"), ("infra", "インフラ"),
+]
+IMAGE_MIME = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif", "avif": "image/avif"}
+_STOP_P_RE = re.compile(r'<p class="stop-(see|say|next)">(.*?)</p>', re.S)
+_LOC_SPAN_RE = re.compile(r'<span class="loc"([^>]*)>\s*</span>')
+_TAG_RE = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9]*)([^>]*)>")
+TRACER_INLINE_TAGS = {"code", "kbd", "strong", "em", "b", "i", "br"}
+_SCENARIO_KEYS = {"version", "description", "flow", "aliases", "initial_state", "initial", "actions"}
+_ACTION_KEYS = {"title", "routes", "extras", "server_calls", "network_note", "forward_headers"}
+_ROUTE_KEYS = {"section", "title", "stops", "label"}
+
+
+def tracer_clean_html(inner: str, snippets: dict[str, dict], where: str, errors: list[str]) -> str:
+    """停留所の補足（見る・言う・次へ）の HTML を、トレーサーの解説パネルに入れられる形にする。
+
+    - span.loc（中身は組み立て時に入る）は `path:行` の code にする
+    - code・kbd・strong・em・b・i・br 以外のタグ（リンク・バッジなど）は、属性ごと外して中の文字だけ残す
+    """
+
+    def loc(m: re.Match[str]) -> str:
+        attrs = m.group(1)
+        mr = re.search(r'data-ref="([^"]*)"', attrs)
+        mf = re.search(r'data-focus="([^"]*)"', attrs)
+        ref = html.unescape(mr.group(1)).strip() if mr else ""
+        focus = html.unescape(mf.group(1)) if mf else ""
+        sn = snippets.get(ref)
+        if not sn or "error" in sn:
+            errors.append(f"{where}: span.loc の参照 {ref} を解決できない")
+            return "<code>?</code>"
+        try:
+            return f"<code>{html.escape(sn['path'])}:{focus_line(sn, focus)}</code>"
+        except ResolveError as exc:
+            errors.append(f"{where}: span.loc {ref} → {exc}")
+            return "<code>?</code>"
+
+    inner = _LOC_SPAN_RE.sub(loc, inner)
+
+    def tag(m: re.Match[str]) -> str:
+        closing, name = m.group(1), m.group(2).lower()
+        if name == "br":
+            return "<br>"
+        return f"<{closing}{name}>" if name in TRACER_INLINE_TAGS else ""
+
+    return _TAG_RE.sub(tag, inner).strip()
+
+
+def tracer_link(prev: StopInfo | None, cur: StopInfo, first_of_route: bool, route_title: str) -> str:
+    """前の停留所からこの停留所への経路の文言。data-link があればそれ。無ければ層の変わり目から決める。"""
+    if prev is None:
+        return ""
+    if cur.link:
+        return cur.link
+    if first_of_route and "応答" in route_title:
+        return "応答が戻る（処理の結果が画面の側へ返っていく）"
+    if first_of_route and prev.layer == cur.layer and cur.layer:
+        return "順路の続き（同じ層の中の処理へ）"
+    return default_link(prev, cur)
+
+
+def tracer_load_scenario(path: Path, errors: list[str]) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        errors.append(f"scenario: {path} を読めない: {exc}")
+        return {}
+    except json.JSONDecodeError as exc:
+        errors.append(f"scenario: {path} が JSON として読めない: {exc}")
+        return {}
+    if not isinstance(data, dict):
+        errors.append("scenario: 最上位はオブジェクトにする")
+        return {}
+    extra = set(data) - _SCENARIO_KEYS
+    if extra:
+        errors.append(f"scenario: 未知のキー {sorted(extra)}")
+    return data
+
+
+def tracer_resolve_routes(
+    specs: object, catalog: dict[tuple[str, str], list[dict]], where: str, errors: list[str]
+) -> list[dict]:
+    """scenario の routes（{section, title, stops?, label?} の配列）を、順路の実体に解決する。"""
+    out: list[dict] = []
+    if not isinstance(specs, list) or not specs:
+        errors.append(f"{where}: 順路の配列（1 件以上）にする")
+        return out
+    for k, sp in enumerate(specs):
+        w = f"{where}[{k}]"
+        if not isinstance(sp, dict):
+            errors.append(f"{w}: オブジェクト {{section, title}} にする")
+            continue
+        extra = set(sp) - _ROUTE_KEYS
+        if extra:
+            errors.append(f"{w}: 未知のキー {sorted(extra)}")
+        sec, title = sp.get("section"), sp.get("title")
+        if not isinstance(sec, str) or not isinstance(title, str):
+            errors.append(f"{w}: section と title は文字列にする")
+            continue
+        hits = catalog.get((sec, title), [])
+        if not hits:
+            cands = [t for (s, t) in catalog if s == sec]
+            hint = "。この章の順路: " + " ／ ".join(f"「{t}」" for t in cands) if cands else f"。章 {sec} は本文に無い"
+            errors.append(f"{w}: 章 {sec} に data-title「{title}」の順路が無い{hint}")
+            continue
+        if len(hits) > 1:
+            errors.append(f"{w}: 章 {sec} に同じ data-title「{title}」の順路が {len(hits)} 本ある（本文側で区別が要る）")
+            continue
+        entry = hits[0]
+        n = len(entry["stops"])
+        lo, hi = 1, n
+        if "stops" in sp:
+            rng = sp["stops"]
+            if not (isinstance(rng, list) and len(rng) == 2 and all(isinstance(x, int) and not isinstance(x, bool) for x in rng) and 1 <= rng[0] <= rng[1] <= n):
+                errors.append(f"{w}: stops は [開始, 終了]（1〜{n} の整数、開始 <= 終了）にする: {rng!r}")
+                continue
+            lo, hi = rng
+        label = sp.get("label")
+        if label is not None and not isinstance(label, str):
+            errors.append(f"{w}: label は文字列にする")
+            label = None
+        out.append({"entry": entry, "lo": lo, "hi": hi, "label": label or ""})
+    return out
+
+
+def tracer_group(items: list[dict], docs: list, starts: dict[int, list[int]], snippets: dict[str, dict],
+                 extra: bool, title: str, errors: list[str]) -> dict:
+    """順路（の一部）をつないで、1 本の停留所の列にする。"""
+    stops: list[dict] = []
+    routes_meta: list[dict] = []
+    prev: StopInfo | None = None
+    for ri, it in enumerate(items):
+        entry = it["entry"]
+        di = entry["key"][0]
+        text = docs[di][1]
+        picked = entry["stops"][it["lo"] - 1 : it["hi"]]
+        routes_meta.append({
+            "title": entry["title"], "label": it["label"], "section": entry["section"], "doc": entry["doc"],
+            "count": len(picked), "from": it["lo"], "to": it["hi"], "total": len(entry["stops"]),
+        })
+        for k, info in enumerate(picked):
+            where = f"{entry['doc']} 章{entry['section']}「{entry['title']}」停留所 {info.no}"
+            if not info.sn or not info.focus:
+                errors.append(f"{where}: data-ref を解決できていない（トレースに使えない）")
+                continue
+            rw = info.rw
+            off = starts[di][rw["line"] - 1] + rw["col"] + len(rw["raw"])
+            close = text.find("</li>", off)
+            body = text[off:close] if close >= 0 else ""
+            parts = {"see": "", "say": "", "next": ""}
+            for m in _STOP_P_RE.finditer(body):
+                parts[m.group(1)] = tracer_clean_html(m.group(2), snippets, where, errors)
+            sn = info.sn
+            stops.append({
+                "path": info.path, "start": sn["start"], "end": sn["end"], "focus": info.focus,
+                "label": info.label, "kind": info.kind, "layer": info.layer,
+                "link": tracer_link(prev, info, k == 0 and ri > 0, entry["title"]) if stops else "",
+                "see": parts["see"], "say": parts["say"], "next": parts["next"],
+                "route": ri, "no": info.no,
+            })
+            prev = info
+    return {"title": title, "extra": extra, "routes": routes_meta, "stops": stops}
+
+
+def tracer_load_capture(cap_dir: Path, errors: list[str], warnings: list[str]) -> tuple[dict, dict[str, str]]:
+    """撮影素材（capture.json と画像）を読んで検査する。(capture の JSON（画像を除く）, 状態 id → data URI)。"""
+    cj = cap_dir / "capture.json"
+    try:
+        cap = json.loads(cj.read_text(encoding="utf-8"))
+    except OSError as exc:
+        errors.append(f"capture: {cj} を読めない: {exc}")
+        return {}, {}
+    except json.JSONDecodeError as exc:
+        errors.append(f"capture: {cj} が JSON として読めない: {exc}")
+        return {}, {}
+    if not isinstance(cap, dict) or not isinstance(cap.get("states"), list) or not cap["states"]:
+        errors.append("capture: states（1 件以上の配列）が要る")
+        return {}, {}
+    actions = cap.get("actions", {})
+    if not isinstance(actions, dict):
+        errors.append("capture: actions はオブジェクトにする")
+        actions = {}
+    images: dict[str, str] = {}
+    ids: set[str] = set()
+    states: list[dict] = []
+
+    def is_num(v: object) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    for i, st in enumerate(cap["states"]):
+        w = f"capture: states[{i}]"
+        if not isinstance(st, dict) or not isinstance(st.get("id"), str) or not st["id"]:
+            errors.append(f"{w}: id（文字列）が要る")
+            continue
+        sid = st["id"]
+        w = f"capture: states[{i}]（{sid}）"
+        if sid in ids:
+            errors.append(f"{w}: id が重複している")
+        ids.add(sid)
+        for key in ("width", "height"):
+            if not is_num(st.get(key)) or st[key] <= 0:
+                errors.append(f"{w}: {key} は正の数にする")
+        img = st.get("image")
+        if not isinstance(img, str) or not img:
+            errors.append(f"{w}: image（ファイル名）が要る")
+        else:
+            p = cap_dir / img
+            ext = img.rsplit(".", 1)[-1].lower() if "." in img else ""
+            if ext not in IMAGE_MIME:
+                errors.append(f"{w}: 画像の拡張子 .{ext} は未対応（{'/'.join(sorted(IMAGE_MIME))}）")
+            elif not p.is_file():
+                errors.append(f"{w}: 画像 {img} が {cap_dir} に無い")
+            else:
+                images[sid] = f"data:{IMAGE_MIME[ext]};base64," + base64.b64encode(p.read_bytes()).decode("ascii")
+        hs = st.get("hotspots", [])
+        if not isinstance(hs, list):
+            errors.append(f"{w}: hotspots は配列にする")
+            hs = []
+        for j, h in enumerate(hs):
+            hw = f"{w} hotspots[{j}]"
+            if not isinstance(h, dict) or not isinstance(h.get("action"), str):
+                errors.append(f"{hw}: action（文字列）が要る")
+                continue
+            for key in ("x", "y", "w", "h"):
+                if not is_num(h.get(key)):
+                    errors.append(f"{hw}: {key} は数にする")
+        states.append({k: v for k, v in st.items() if k != "image"})
+    for i, st in enumerate(cap["states"]):
+        hs = st.get("hotspots", []) if isinstance(st, dict) else []
+        for j, h in enumerate(hs if isinstance(hs, list) else []):
+            nx = h.get("next") if isinstance(h, dict) else None
+            if nx and nx not in ids:
+                errors.append(f"capture: states[{i}]（{st.get('id')}）hotspots[{j}]: next「{nx}」という状態が無い")
+    for aid, ac in actions.items():
+        if not isinstance(ac, dict):
+            errors.append(f"capture: actions.{aid} はオブジェクトにする")
+            continue
+        for key in ("from", "to"):
+            if ac.get(key) and ac[key] not in ids:
+                warnings.append(f"capture: actions.{aid}.{key}「{ac[key]}」という状態が無い")
+        net = ac.get("network", [])
+        if not isinstance(net, list) or not all(isinstance(n, dict) for n in net):
+            errors.append(f"capture: actions.{aid}.network はオブジェクトの配列にする")
+    out = {k: v for k, v in cap.items() if k not in ("states", "actions")}
+    out["states"] = states
+    out["actions"] = actions
+    return out, images
+
+
+def tracer_aliases(raw: object, scen_actions: dict, errors: list[str]) -> dict[str, dict]:
+    """aliases を {別名: {action, stop}} にそろえる。値は action 名の文字列か {action, stop}（stop は本筋の何番目の停留所から始めるか。1 始まり）。"""
+    out: dict[str, dict] = {}
+    if raw in (None, {}):
+        return out
+    if not isinstance(raw, dict):
+        errors.append("scenario: aliases はオブジェクトにする")
+        return out
+    for a, v in raw.items():
+        if isinstance(v, str):
+            v = {"action": v}
+        if not isinstance(v, dict) or set(v) - {"action", "stop"} or not isinstance(v.get("action"), str):
+            errors.append(f"scenario: aliases.{a} は action 名の文字列か {{action, stop}} にする")
+            continue
+        stop = v.get("stop", 1)
+        if not isinstance(stop, int) or isinstance(stop, bool) or stop < 1:
+            errors.append(f"scenario: aliases.{a}.stop は 1 以上の整数にする")
+            continue
+        if v["action"] not in scen_actions:
+            errors.append(f"scenario: aliases.{a} → 「{v['action']}」という action が scenario.actions に無い")
+            continue
+        out[a] = {"action": v["action"], "stop": stop}
+    return out
+
+
+def build_tracer(args: argparse.Namespace) -> int:
+    root = repo_root()
+    sha = resolve_commit(root, args.commit)
+    git = GitFiles(root, sha)
+
+    content_dir = Path(args.content_dir).resolve()
+    label = content_dir.name
+    files = sorted(content_dir.glob("*.html"), key=lambda p: p.name)
+    if not args.include_sample:
+        files = [p for p in files if not p.name.startswith("00-sample")]
+    files = [p for p in files if not p.name.startswith("template")]
+    if not files:
+        print(f"エラー: {content_dir}/*.html が見つからない", file=sys.stderr)
+        return 1
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # --- 順路の本文を解析し、参照・行番号を解決する（--review と同じ処理） ---
+    docs: list[tuple[Path, str, ContentScanner]] = []
+    sections: list[dict] = []
+    all_refs: list[tuple[str, str, str, int]] = []
+    id_seen: dict[str, str] = {}
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        scanner = ContentScanner(path.name)
+        scanner.feed(text)
+        scanner.close()
+        sections.extend(scanner.sections)
+        for ref, note, line in scanner.refs:
+            all_refs.append((ref, note, path.name, line))
+        for id_, line in scanner.ids:
+            if id_ in id_seen:
+                errors.append(f"{label}/{path.name}:{line}: id \"{id_}\" が重複（初出 {id_seen[id_]}）")
+            else:
+                id_seen[id_] = f"{path.name}:{line}"
+        for line, msg in scanner.problems:
+            errors.append(f"{label}/{path.name}:{line}: {msg}")
+        docs.append((path, text, scanner))
+
+    snippets: dict[str, dict] = {}
+    for ref, note, fname, line in all_refs:
+        if not ref:
+            errors.append(f"{label}/{fname}:{line}: data-ref が空")
+            continue
+        if ref not in snippets:
+            try:
+                snippets[ref] = resolve_ref(ref, git)
+            except ResolveError as exc:
+                snippets[ref] = {"error": str(exc)}
+        if "error" in snippets[ref]:
+            errors.append(f"{label}/{fname}:{line}: {ref} → {snippets[ref]['error']}")
+    for path, text, scanner in docs:
+        for rw in scanner.rewrites:
+            ref = rw["attrs"].get("data-ref", "").strip()
+            entry = snippets.get(ref) if ref else None
+            if not entry or "error" in entry:
+                continue
+            try:
+                rw["focus_line"] = focus_line(entry, rw["attrs"].get("data-focus", ""))
+            except ResolveError as exc:
+                errors.append(f"{label}/{path.name}:{rw['line']}: {ref} → {exc}")
+                continue
+            rw["path"] = entry["path"]
+
+    # 訳・用語集の検査と読み込み（--review と共通。訳の無い行は既定でエラー）
+    review_info = prepare_review_aids(args, root, git, docs, sections, snippets, errors, warnings)
+
+    # --- 順路の一覧（章 id × data-title） ---
+    doc_starts: dict[int, list[int]] = {}
+    for di, (_p, text, _sc) in enumerate(docs):
+        st = [0]
+        for m in re.finditer("\n", text):
+            st.append(m.end())
+        doc_starts[di] = st
+    catalog: dict[tuple[str, str], list[dict]] = {}
+    catalog_list: list[dict] = []
+    for key, rw in sorted(review_info["route_rw"].items()):
+        entry = {
+            "key": key, "doc": docs[key[0]][0].name, "section": rw.get("section", ""),
+            "title": rw["attrs"].get("data-title", ""), "stops": review_info["routes"].get(key, []),
+        }
+        catalog.setdefault((entry["section"], entry["title"]), []).append(entry)
+        catalog_list.append(entry)
+    if args.list_routes:
+        print("順路の一覧（章 id ／ data-title ／ 停留所数 ／ 本文ファイル）:")
+        for e in catalog_list:
+            print(f"  {e['section']}  {e['title']}  （{len(e['stops'])} 停留所）  {e['doc']}")
+
+    # --- 撮影素材 ---
+    cap_dir = Path(args.capture_dir).resolve() if args.capture_dir else TRACER_CAPTURE
+    capture: dict = {}
+    images: dict[str, str] = {}
+    if not (cap_dir / "capture.json").is_file():
+        errors.append(
+            f"撮影素材が無い: {cap_dir / 'capture.json'}（撮影担当の出力 tracer/capture/ を待つか、"
+            "別の場所の素材を --capture-dir で指定する）"
+        )
+    else:
+        capture, images = tracer_load_capture(cap_dir, errors, warnings)
+
+    # --- scenario（操作 → 順路の対応） ---
+    scen_path = Path(args.scenario).resolve() if args.scenario else TRACER_SCENARIO
+    scenario: dict = {}
+    if scen_path.is_file():
+        scenario = tracer_load_scenario(scen_path, errors)
+    else:
+        errors.append(f"scenario が無い: {scen_path}")
+
+    traces: dict[str, dict] = {}
+    scen_actions = scenario.get("actions", {})
+    if scenario and not isinstance(scen_actions, dict):
+        errors.append("scenario: actions はオブジェクトにする")
+        scen_actions = {}
+    summary_rows: list[str] = []
+
+    def make_trace(name: str, spec: object) -> None:
+        where = f"scenario: {name}"
+        if not isinstance(spec, dict):
+            errors.append(f"{where}: オブジェクトにする")
+            return
+        extra_keys = set(spec) - _ACTION_KEYS
+        if extra_keys:
+            errors.append(f"{where}: 未知のキー {sorted(extra_keys)}")
+        main_items = tracer_resolve_routes(spec.get("routes"), catalog, f"{where}.routes", errors)
+        groups = [tracer_group(main_items, docs, doc_starts, snippets, False, "本筋", errors)]
+        for k, ex in enumerate(spec.get("extras", []) or []):
+            items = tracer_resolve_routes([ex], catalog, f"{where}.extras[{k}]", errors)
+            if items:
+                t = items[0]["label"] or items[0]["entry"]["title"]
+                groups.append(tracer_group(items, docs, doc_starts, snippets, True, t, errors))
+        for key in ("server_calls", "forward_headers"):
+            if key in spec and not isinstance(spec[key], list):
+                errors.append(f"{where}.{key}: 配列にする")
+        traces[name] = {
+            "title": spec.get("title", name), "groups": groups,
+            "server_calls": spec.get("server_calls", []), "network_note": spec.get("network_note", ""),
+            "forward_headers": spec.get("forward_headers", []),
+        }
+        main_titles = " ＋ ".join(
+            f"{r['section']}「{r['title']}」" + (f"[{r['from']}-{r['to']}]" if (r["from"], r["to"]) != (1, r["total"]) else "")
+            for r in groups[0]["routes"]
+        )
+        row = f"  {name}: {main_titles} → {len(groups[0]['stops'])} 停留所"
+        for g in groups[1:]:
+            row += f"\n      別ルート（参考）: {g['routes'][0]['section']}「{g['routes'][0]['title']}」 → {len(g['stops'])} 停留所"
+        summary_rows.append(row)
+
+    aliases: dict[str, dict] = {}
+    flow: list[str] = []
+    if scenario:
+        if "initial" not in scenario:
+            errors.append("scenario: initial（ページを開いたときの順路）が要る")
+        else:
+            make_trace("initial", scenario["initial"])
+        for aid, spec in scen_actions.items():
+            make_trace(aid, spec)
+        aliases = tracer_aliases(scenario.get("aliases"), scen_actions, errors)
+        flow = scenario.get("flow", [])
+        if not isinstance(flow, list) or not all(isinstance(x, str) for x in flow):
+            errors.append("scenario: flow は action id の文字列の配列にする")
+            flow = []
+        for a in flow:
+            if a not in scen_actions and a not in aliases:
+                errors.append(f"scenario: flow の「{a}」が scenario.actions にも aliases にも無い")
+        for a, v in aliases.items():
+            tr = traces.get(v["action"])
+            if tr and v["stop"] > len(tr["groups"][0]["stops"]):
+                errors.append(f"scenario: aliases.{a}.stop = {v['stop']} が「{v['action']}」の本筋の停留所数 {len(tr['groups'][0]['stops'])} を超えている")
+        if capture:
+            state_ids = {s["id"] for s in capture["states"]}
+            init_state = scenario.get("initial_state") or capture["states"][0]["id"]
+            if init_state not in state_ids:
+                errors.append(f"scenario: initial_state「{init_state}」が撮影素材の states に無い")
+            real = lambda a: aliases[a]["action"] if a in aliases else a  # noqa: E731
+            for aid in capture["actions"]:
+                if real(aid) not in scen_actions:
+                    warnings.append(f"撮影素材の action「{aid}」に対応する scenario.actions が無い（押しても順路は出ない）")
+            for aid in scen_actions:
+                if aid not in capture["actions"]:
+                    warnings.append(f"scenario の action「{aid}」が撮影素材の actions に無い（通信の記録は出ない）")
+            for st in capture["states"]:
+                for h in st.get("hotspots", []):
+                    a = h.get("action", "")
+                    if real(a) not in scen_actions:
+                        warnings.append(f"撮影素材の状態「{st['id']}」の hotspot「{a}」は scenario に無い（押すと次の画面へ移るだけ）")
+
+    # --- 使うファイルの全文 ---
+    used_paths: list[str] = []
+    for tr in traces.values():
+        for g in tr["groups"]:
+            for s in g["stops"]:
+                if s["path"] not in used_paths:
+                    used_paths.append(s["path"])
+    used_paths.sort()
+    file_text: dict[str, str] = {}
+    files_meta: dict[str, dict] = {}
+    for p in used_paths:
+        try:
+            lines = git.lines(p)
+        except ResolveError as exc:
+            errors.append(f"ファイル {p}: {exc}")
+            continue
+        file_text[p] = "\n".join(lines)
+        files_meta[p] = {"lang": lang_of(p), "n": len(lines), "tr": review_info["tr_json"].get(p, [])}
+
+    for w in warnings:
+        print(f"警告: {w}", file=sys.stderr)
+    if errors:
+        print(f"エラー: {sum(1 for e in errors if not e.startswith(' '))} 件（トレーサーを組み立てられない）", file=sys.stderr)
+        for e in errors:
+            print(e if e.startswith(" ") else f"  - {e}", file=sys.stderr)
+        return 1
+
+    jst = timezone(timedelta(hours=9))
+    built = datetime.now(jst).strftime("%Y-%m-%d")
+    data = {
+        "meta": {
+            "commit": sha[:7], "built": built,
+            "captured_at": capture.get("captured_at", ""), "base_url": capture.get("base_url", ""),
+            "viewport": capture.get("viewport", {}), "repo_url": REPO_URL,
+        },
+        "layers": [{"id": i, "label": l} for i, l in TRACER_LAYERS],
+        "flow": flow, "aliases": aliases,
+        "initial_state": scenario.get("initial_state") or capture["states"][0]["id"],
+        "states": capture["states"], "actions": capture["actions"],
+        "traces": traces, "files": files_meta, "glossary": review_info["glossary"],
+    }
+    file_blocks = "\n".join(
+        f'<script type="text/plain" data-file="{html.escape(p, quote=True)}">{escape_script_text(t)}</script>'
+        for p, t in file_text.items()
+    )
+    image_blocks = "\n".join(
+        f'<script type="text/plain" data-image="{html.escape(sid, quote=True)}">{uri}</script>' for sid, uri in images.items()
+    )
+    values = {
+        "TRACER_JSON": escape_json_for_script(data),
+        "TRACER_FILES": file_blocks,
+        "TRACER_IMAGES": image_blocks,
+        "COMMIT": sha[:7], "COMMIT_FULL": sha, "BUILD_DATE": built,
+        "MAP_URL": html.escape(args.map_url, quote=True),
+        "GUIDE_URL": html.escape(args.guide_url, quote=True),
+        "REVIEW_URL": html.escape(args.review_url, quote=True),
+    }
+    output = render_template(TRACER_TEMPLATE, values)
+    out_path = Path(args.out).resolve() if args.out else root / "docs" / "05_解説" / TRACER_OUTPUT_NAME
+    size = len(output.encode("utf-8"))
+    if not args.check:
+        out_path.write_text(output, encoding="utf-8")
+
+    print(f"対象コミット: {sha}")
+    print(f"撮影素材: {cap_dir}（状態 {len(capture['states'])}・action {len(capture['actions'])}・画像 {len(images)}）")
+    print(f"scenario: {scen_path}（action {len(scen_actions)} ＋ initial）")
+    print("action → 順路（章「data-title」[停留所の範囲]）の並び → 停留所数（本筋）:")
+    for r in summary_rows:
+        print(r)
+    for a, v in aliases.items():
+        print(f"  （別名）{a} → {v['action']} の本筋の {v['stop']} 番目の停留所から")
+    n_stops = sum(len(g["stops"]) for tr in traces.values() for g in tr["groups"])
+    print(f"停留所のべ数: {n_stops}／埋め込むファイル: {len(file_text)}（{sum(len(t) for t in file_text.values()):,} 文字）／画像: {len(images)}")
+    for line in review_info["summary"]:
+        print(line)
     if args.check:
         print(f"検証のみ（出力は書いていない）。出力サイズの見込み: {size:,} bytes")
     else:
@@ -2183,21 +2749,32 @@ def main() -> int:
     parser.add_argument("--dump-translation-scope", default="", metavar="PATH", help="--review で、訳の対象（停留所の data-ref の和集合: ファイル別の行範囲と行数）を JSON で書き出す")
     parser.add_argument("--translations-dir", default=None, help="--review の訳の JSON ディレクトリ（既定: code-guide/review/translations。sample.json 以外をすべて読む。無ければ sample.json）")
     parser.add_argument("--glossary", default=None, help="--review の用語集 JSON（既定: code-guide/review/glossary.json。無ければ glossary.sample.json）")
+    parser.add_argument("--tracer", action="store_true", help="解説書ではなくコードトレーサーを組み立てる（順路は code-guide/review/*.html、対応表は tracer/scenario.json、画面写真は tracer/capture/）")
+    parser.add_argument("--capture-dir", default=None, help="--tracer の撮影素材ディレクトリ（capture.json と画像。既定: code-guide/tracer/capture。開発中は tracer/capture-dummy）")
+    parser.add_argument("--scenario", default=None, help="--tracer の操作 → 順路の対応表（既定: code-guide/tracer/scenario.json）")
+    parser.add_argument("--list-routes", action="store_true", help="--tracer で、順路の一覧（章 id・data-title・停留所数）を標準出力に出す")
     parser.add_argument("--map-data", default=str(MAP_DATA_DEFAULT), help="地図の説明データ（既定: code-guide/map/descriptions.json）")
     parser.add_argument("--tree-commit", default="HEAD", help="地図のツリーを作るコミット（既定: HEAD）。プレビューのコードは --commit から読み、無いファイルだけここから読む")
     parser.add_argument("--guide-url", default=OUTPUT_NAME, help="地図・レビュー回答ガイドから解説書へのリンク先（既定: GU_ECsite_コード解説.html）")
     parser.add_argument("--map-url", default=MAP_OUTPUT_NAME, help="解説書・レビュー回答ガイドのヘッダーから地図へのリンク先（既定: GU_ECsite_リポジトリ地図.html）")
+    parser.add_argument("--review-url", default=REVIEW_OUTPUT_NAME, help="コードトレーサーからレビュー回答ガイドへのリンク先（既定: GU_ECsite_レビュー回答ガイド.html）")
     args = parser.parse_args()
     if args.map and args.review:
         parser.error("--map と --review は同時に指定できない")
+    if args.tracer and (args.map or args.review):
+        parser.error("--tracer は --map・--review と同時に指定できない")
+    if (args.capture_dir or args.scenario or args.list_routes) and not args.tracer:
+        parser.error("--capture-dir・--scenario・--list-routes は --tracer と一緒に使う")
     if args.content_dir is None:
-        args.content_dir = str(REVIEW_DIR if args.review else CONTENT_DIR)
+        args.content_dir = str(REVIEW_DIR if (args.review or args.tracer) else CONTENT_DIR)
     if args.translations_dir is None:
         args.translations_dir = str(REVIEW_TRANSLATIONS_DIR)
     if args.glossary is None:
         args.glossary = str(REVIEW_GLOSSARY)
-    if not args.review and (args.allow_missing_translations or args.dump_translation_scope):
-        parser.error("--allow-missing-translations と --dump-translation-scope は --review と一緒に使う")
+    if not (args.review or args.tracer) and (args.allow_missing_translations or args.dump_translation_scope):
+        parser.error("--allow-missing-translations と --dump-translation-scope は --review（または --tracer）と一緒に使う")
+    if args.tracer:
+        return build_tracer(args)
     return build_map(args) if args.map else build_guide(args)
 
 
