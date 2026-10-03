@@ -3325,6 +3325,23 @@
       "role": "Mermaid 図の PNG 化",
       "body_html": "<p>設計仕様書の Markdown から mermaid ブロックを抜き出し、Mermaid CLI で PNG にする。</p>",
       "ref": "tools/docs/render_mermaid.py#L1-20"
+    },
+    "docs/05_解説/code-guide/map": {
+      "role": "リポジトリ地図の説明データ",
+      "body_html": "<p>このページ（リポジトリ地図）の説明文 <code>descriptions.json</code> とテンプレートが入っています。ツリーは git から自動で作り、説明だけをここに書きます。</p>",
+      "open_when": [
+        "フォルダやファイルの説明を直したいとき"
+      ],
+      "key_files": [
+        "docs/05_解説/code-guide/map/descriptions.json"
+      ]
+    },
+    "docs/05_解説/code-guide/partials": {
+      "role": "3 ページ共通の CSS・JS",
+      "body_html": "<p>解説書・地図・レビュー回答ガイドで共通に使う色の定義、コードを引き出して表示する部品などです。<code>build.py</code> が各ページに埋め込みます。</p>",
+      "open_when": [
+        "3 ページ共通の見た目や動きを直したいとき"
+      ]
     }
   },
   "collapse": [

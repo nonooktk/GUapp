@@ -28,12 +28,16 @@
     return sn.start === sn.end ? 'L' + sn.start : 'L' + sn.start + '-' + sn.end;
   }
   function baseName(p) { return p.split('/').pop(); }
+  // build.py が data-focus（部分文字列）を実ファイルの行番号に解決して付ける属性。無ければ 0
+  function focusOf(node) { return parseInt(node.getAttribute('data-focus-line') || '0', 10) || 0; }
 
   function initRefs() {
     $$('[data-ref]').forEach(function (node) {
       var key = refKey(node);
       if (!key) { return; }
       if (!SN[key]) { node.classList.add('ref-missing'); node.title = 'コードを解決できていません: ' + key; return; }
+      // 順路の停留所（li.stop）は全面をクリック対象にしない。「コードを見る」ボタンが showRef を呼ぶ
+      if (node.classList.contains('stop')) { node.classList.add('stop-has-ref'); return; }
       node.classList.add('has-ref');
       if (!node.hasAttribute('tabindex')) { node.setAttribute('tabindex', '0'); }
       node.setAttribute('role', 'button');
@@ -45,7 +49,7 @@
      ドロワー
   --------------------------------------------------------------- */
   var drawer, backdrop, elPath, elTitle, elRange, elNote, elBody, elCode, btnBack, btnCopy, linkGh, btnClose;
-  var cur = null;        // { key, note }
+  var cur = null;        // { key, note, focus }
   var hist = [];         // 直前に見た参照
   var opener = null;
   var copyTimer = null;
@@ -117,16 +121,25 @@
     return raw.map(esc);
   }
 
-  function renderCode(sn) {
+  function renderCode(sn, focus) {
     var lines = highlightLines(sn);
     var html = '';
     for (var i = 0; i < lines.length; i++) {
-      html += '<span class="cl" data-n="' + (sn.start + i) + '">' + lines[i] + '\n</span>';
+      var n = sn.start + i;
+      html += '<span class="cl' + (focus && n === focus ? ' is-focus' : '') + '" data-n="' + n + '">' + lines[i] + '\n</span>';
     }
     elCode.innerHTML = html;
   }
 
-  function renderHead(sn, note) {
+  // 注目行（is-focus）が上から 1/3 あたりに来るようにスクロールする
+  function scrollToFocus() {
+    var f = elCode.querySelector('.cl.is-focus');
+    if (!f) { return; }
+    var delta = f.getBoundingClientRect().top - elBody.getBoundingClientRect().top;
+    elBody.scrollTop = Math.max(0, elBody.scrollTop + delta - Math.round(elBody.clientHeight / 3));
+  }
+
+  function renderHead(sn, note, focus) {
     var p = sn.path, idx = p.lastIndexOf('/');
     elPath.textContent = '';
     if (idx >= 0) {
@@ -136,7 +149,7 @@
     elPath.appendChild(f);
     elTitle.textContent = sn.symbol || baseName(sn.path);
     var n = sn.end - sn.start + 1;
-    elRange.textContent = rangeText(sn) + '（' + n + ' 行）';
+    elRange.textContent = rangeText(sn) + '（' + n + ' 行）' + (focus ? ' ／ 注目 L' + focus : '');
     linkGh.setAttribute('href', sn.url);
     if (note) {
       elNote.textContent = '';
@@ -149,10 +162,10 @@
   }
 
   function markOpen() {
-    $$('[data-ref].has-ref').forEach(function (n) {
-      var on = !!cur && refKey(n) === cur.key;
+    $$('[data-ref].has-ref, .stop.stop-has-ref').forEach(function (n) {
+      var on = !!cur && refKey(n) === cur.key && focusOf(n) === (cur.focus || 0);
       n.classList.toggle('is-open', on);
-      n.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (!n.classList.contains('stop')) { n.setAttribute('aria-expanded', on ? 'true' : 'false'); }
     });
   }
 
@@ -161,17 +174,19 @@
     else { btnBack.setAttribute('disabled', 'disabled'); btnBack.textContent = '← 戻る'; }
   }
 
-  function showRef(key, note, openerNode, isBack) {
+  function showRef(key, note, openerNode, isBack, focus) {
     var sn = SN[key];
     if (!sn) { return; }
     hideTip();
     var wasOpen = drawer.classList.contains('is-open');
-    if (wasOpen && cur && !isBack && cur.key !== key) { hist.push(cur); }
+    focus = focus || 0;
+    if (wasOpen && cur && !isBack && (cur.key !== key || (cur.focus || 0) !== focus)) { hist.push(cur); }
     if (!wasOpen) { hist = []; opener = openerNode || document.activeElement; }
-    cur = { key: key, note: note || sn.note || '' };
-    renderHead(sn, cur.note);
-    renderCode(sn);
+    cur = { key: key, note: note || sn.note || '', focus: focus };
+    renderHead(sn, cur.note, focus);
+    renderCode(sn, focus);
     elBody.scrollTop = 0; elBody.scrollLeft = 0;
+    scrollToFocus();
     markOpen();
     updateBack();
     if (!wasOpen) {
@@ -185,7 +200,7 @@
   function goBack() {
     if (!hist.length) { return; }
     var prev = hist.pop();
-    showRef(prev.key, prev.note, null, true);
+    showRef(prev.key, prev.note, null, true, prev.focus);
   }
 
   function closeDrawer() {
@@ -238,7 +253,7 @@
   }
 
   function openFromNode(node) {
-    showRef(refKey(node), node.getAttribute('data-note') || '', node, false);
+    showRef(refKey(node), node.getAttribute('data-note') || '', node, false, focusOf(node));
   }
 
   function initRefEvents() {
@@ -287,7 +302,8 @@
     var sn = SN[refKey(node)];
     if (!sn) { return; }
     if (!tip) { tip = el('div', { 'class': 'ref-tip', role: 'tooltip' }); document.body.appendChild(tip); }
-    tip.textContent = sn.path + ':' + rangeText(sn);
+    var fl = focusOf(node);
+    tip.textContent = fl ? sn.path + ':' + fl : sn.path + ':' + rangeText(sn);
     tip.hidden = false;
     var r = node.getBoundingClientRect();
     var tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -338,7 +354,7 @@
     highlightPres();
     if (cur && SN[cur.key]) {
       var st = elBody.scrollTop, sl = elBody.scrollLeft;
-      renderCode(SN[cur.key]);
+      renderCode(SN[cur.key], cur.focus);
       elBody.scrollTop = st; elBody.scrollLeft = sl;
     }
   }

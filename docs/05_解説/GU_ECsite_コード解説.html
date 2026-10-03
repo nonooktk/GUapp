@@ -210,6 +210,9 @@ pre.code[data-lang]::before{content:attr(data-lang);display:block;text-align:rig
 .code-view code,pre.code code{background:none;padding:0;font-size:inherit;border-radius:0}
 .code-view .cl{display:block;padding-right:20px}
 .code-view .cl::before{content:attr(data-n);display:inline-block;position:sticky;left:0;box-sizing:content-box;width:3.6em;padding:0 .9em 0 .6em;margin-right:14px;text-align:right;color:var(--code-gutter);background:var(--code-gutter-bg);border-right:1px solid var(--line);user-select:none;-webkit-user-select:none}
+/* 注目行（data-focus で指定した行）。色だけに頼らず、左の太線と行番号の太字でも示す */
+.code-view .cl.is-focus{background:var(--amber-soft)}
+.code-view .cl.is-focus::before{color:var(--amber);font-weight:700;box-shadow:inset 4px 0 0 var(--amber)}
 .drawer-empty{padding:16px;color:var(--ink-3)}
 @media (max-width:719.98px){
   .drawer{top:auto;left:0;right:0;bottom:0;width:100%;height:88vh;height:88dvh;border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -10px 30px var(--shadow);transform:translateY(100%)}
@@ -301,7 +304,7 @@ pre.code[data-lang]::before{content:attr(data-lang);display:block;text-align:rig
   <p class="lead">コードレビュー中に、機能ごとに「どこで・何をしているか」を引くための解説書。</p>
   <div class="meta">
     <span>対象コミット <a href="https://github.com/nonooktk/GUapp/commit/2b9c87d8e9356d6064d9a315d032bebd7f9fb3a8" target="_blank" rel="noopener noreferrer"><code>2b9c87d</code></a></span>
-    <span>作成 2026-09-29</span>
+    <span>作成 2026-10-03</span>
     <span>リポジトリ <a href="https://github.com/nonooktk/GUapp" target="_blank" rel="noopener noreferrer">nonooktk/GUapp</a></span>
     <span>ファイルの場所は <a href="GU_ECsite_リポジトリ地図.html">リポジトリ地図</a></span>
   </div>
@@ -3020,7 +3023,7 @@ ORDER BY o.created_at;</pre>
 <dd>REQ は要求仕様書の要求 ID（REQ-FR-501 など）、F は要件定義書の機能 ID（F-013 など）、SCR は画面 ID。追跡は REQ から F、設計 ID、テスト ID の順につなぐ（対応表は<a class="ref" data-ref="docs/00_計画/実装フェーズ計画.md#L53-93">実装フェーズ計画 4 章</a>）。</dd>
 </dl>
 </section>
-    <footer>GUapp コード解説書 ／ 対象コミット 2b9c87d ／ 作成 2026-09-29。コードは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
+    <footer>GUapp コード解説書 ／ 対象コミット 2b9c87d ／ 作成 2026-10-03。コードは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
   </main>
 </div>
 </div>
@@ -36822,12 +36825,16 @@ asyncio_default_fixture_loop_scope = "function"
     return sn.start === sn.end ? 'L' + sn.start : 'L' + sn.start + '-' + sn.end;
   }
   function baseName(p) { return p.split('/').pop(); }
+  // build.py が data-focus（部分文字列）を実ファイルの行番号に解決して付ける属性。無ければ 0
+  function focusOf(node) { return parseInt(node.getAttribute('data-focus-line') || '0', 10) || 0; }
 
   function initRefs() {
     $$('[data-ref]').forEach(function (node) {
       var key = refKey(node);
       if (!key) { return; }
       if (!SN[key]) { node.classList.add('ref-missing'); node.title = 'コードを解決できていません: ' + key; return; }
+      // 順路の停留所（li.stop）は全面をクリック対象にしない。「コードを見る」ボタンが showRef を呼ぶ
+      if (node.classList.contains('stop')) { node.classList.add('stop-has-ref'); return; }
       node.classList.add('has-ref');
       if (!node.hasAttribute('tabindex')) { node.setAttribute('tabindex', '0'); }
       node.setAttribute('role', 'button');
@@ -36839,7 +36846,7 @@ asyncio_default_fixture_loop_scope = "function"
      ドロワー
   --------------------------------------------------------------- */
   var drawer, backdrop, elPath, elTitle, elRange, elNote, elBody, elCode, btnBack, btnCopy, linkGh, btnClose;
-  var cur = null;        // { key, note }
+  var cur = null;        // { key, note, focus }
   var hist = [];         // 直前に見た参照
   var opener = null;
   var copyTimer = null;
@@ -36911,16 +36918,25 @@ asyncio_default_fixture_loop_scope = "function"
     return raw.map(esc);
   }
 
-  function renderCode(sn) {
+  function renderCode(sn, focus) {
     var lines = highlightLines(sn);
     var html = '';
     for (var i = 0; i < lines.length; i++) {
-      html += '<span class="cl" data-n="' + (sn.start + i) + '">' + lines[i] + '\n</span>';
+      var n = sn.start + i;
+      html += '<span class="cl' + (focus && n === focus ? ' is-focus' : '') + '" data-n="' + n + '">' + lines[i] + '\n</span>';
     }
     elCode.innerHTML = html;
   }
 
-  function renderHead(sn, note) {
+  // 注目行（is-focus）が上から 1/3 あたりに来るようにスクロールする
+  function scrollToFocus() {
+    var f = elCode.querySelector('.cl.is-focus');
+    if (!f) { return; }
+    var delta = f.getBoundingClientRect().top - elBody.getBoundingClientRect().top;
+    elBody.scrollTop = Math.max(0, elBody.scrollTop + delta - Math.round(elBody.clientHeight / 3));
+  }
+
+  function renderHead(sn, note, focus) {
     var p = sn.path, idx = p.lastIndexOf('/');
     elPath.textContent = '';
     if (idx >= 0) {
@@ -36930,7 +36946,7 @@ asyncio_default_fixture_loop_scope = "function"
     elPath.appendChild(f);
     elTitle.textContent = sn.symbol || baseName(sn.path);
     var n = sn.end - sn.start + 1;
-    elRange.textContent = rangeText(sn) + '（' + n + ' 行）';
+    elRange.textContent = rangeText(sn) + '（' + n + ' 行）' + (focus ? ' ／ 注目 L' + focus : '');
     linkGh.setAttribute('href', sn.url);
     if (note) {
       elNote.textContent = '';
@@ -36943,10 +36959,10 @@ asyncio_default_fixture_loop_scope = "function"
   }
 
   function markOpen() {
-    $$('[data-ref].has-ref').forEach(function (n) {
-      var on = !!cur && refKey(n) === cur.key;
+    $$('[data-ref].has-ref, .stop.stop-has-ref').forEach(function (n) {
+      var on = !!cur && refKey(n) === cur.key && focusOf(n) === (cur.focus || 0);
       n.classList.toggle('is-open', on);
-      n.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (!n.classList.contains('stop')) { n.setAttribute('aria-expanded', on ? 'true' : 'false'); }
     });
   }
 
@@ -36955,17 +36971,19 @@ asyncio_default_fixture_loop_scope = "function"
     else { btnBack.setAttribute('disabled', 'disabled'); btnBack.textContent = '← 戻る'; }
   }
 
-  function showRef(key, note, openerNode, isBack) {
+  function showRef(key, note, openerNode, isBack, focus) {
     var sn = SN[key];
     if (!sn) { return; }
     hideTip();
     var wasOpen = drawer.classList.contains('is-open');
-    if (wasOpen && cur && !isBack && cur.key !== key) { hist.push(cur); }
+    focus = focus || 0;
+    if (wasOpen && cur && !isBack && (cur.key !== key || (cur.focus || 0) !== focus)) { hist.push(cur); }
     if (!wasOpen) { hist = []; opener = openerNode || document.activeElement; }
-    cur = { key: key, note: note || sn.note || '' };
-    renderHead(sn, cur.note);
-    renderCode(sn);
+    cur = { key: key, note: note || sn.note || '', focus: focus };
+    renderHead(sn, cur.note, focus);
+    renderCode(sn, focus);
     elBody.scrollTop = 0; elBody.scrollLeft = 0;
+    scrollToFocus();
     markOpen();
     updateBack();
     if (!wasOpen) {
@@ -36979,7 +36997,7 @@ asyncio_default_fixture_loop_scope = "function"
   function goBack() {
     if (!hist.length) { return; }
     var prev = hist.pop();
-    showRef(prev.key, prev.note, null, true);
+    showRef(prev.key, prev.note, null, true, prev.focus);
   }
 
   function closeDrawer() {
@@ -37032,7 +37050,7 @@ asyncio_default_fixture_loop_scope = "function"
   }
 
   function openFromNode(node) {
-    showRef(refKey(node), node.getAttribute('data-note') || '', node, false);
+    showRef(refKey(node), node.getAttribute('data-note') || '', node, false, focusOf(node));
   }
 
   function initRefEvents() {
@@ -37081,7 +37099,8 @@ asyncio_default_fixture_loop_scope = "function"
     var sn = SN[refKey(node)];
     if (!sn) { return; }
     if (!tip) { tip = el('div', { 'class': 'ref-tip', role: 'tooltip' }); document.body.appendChild(tip); }
-    tip.textContent = sn.path + ':' + rangeText(sn);
+    var fl = focusOf(node);
+    tip.textContent = fl ? sn.path + ':' + fl : sn.path + ':' + rangeText(sn);
     tip.hidden = false;
     var r = node.getBoundingClientRect();
     var tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -37132,7 +37151,7 @@ asyncio_default_fixture_loop_scope = "function"
     highlightPres();
     if (cur && SN[cur.key]) {
       var st = elBody.scrollTop, sl = elBody.scrollLeft;
-      renderCode(SN[cur.key]);
+      renderCode(SN[cur.key], cur.focus);
       elBody.scrollTop = st; elBody.scrollLeft = sl;
     }
   }

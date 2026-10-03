@@ -4,12 +4,16 @@
 使い方（どのディレクトリから実行しても動く）:
     python3 docs/05_解説/code-guide/build.py [--commit SHA] [--check] [--include-sample]
     python3 docs/05_解説/code-guide/build.py --map [--map-data PATH] [--check] [--guide-url URL] [--map-url URL]
+    python3 docs/05_解説/code-guide/build.py --review [--check] [--include-sample] [--guide-url URL] [--map-url URL] [--list-stops]
 
 - content/*.html をファイル名順に連結して template.html に差し込む
 - 本文中の data-ref を `git show <sha>:<path>` で読んだコードに解決し、JSON として埋め込む
 - 解決できない参照が 1 つでもあれば一覧を出して exit 1
 - `--map` を付けると、リポジトリ地図（map/template-map.html）を組み立てる。
   ツリーは `git ls-tree`、説明は map/descriptions.json、プレビューは `git show` から作る
+- `--review` を付けると、レビュー回答ガイド（review/template-review.html）を組み立てる。
+  本文は review/*.html。順路（ol.route）の停留所・インラインの行番号（span.loc）・data-focus は、
+  実ファイルの行番号を組み立て時に自動で入れる
 
 data-ref の構文・descriptions.json のスキーマは README.md を参照。
 """
@@ -34,8 +38,16 @@ TEMPLATE = HERE / "template.html"
 PARTIALS_DIR = HERE / "partials"
 MAP_TEMPLATE = HERE / "map" / "template-map.html"
 MAP_DATA_DEFAULT = HERE / "map" / "descriptions.json"
+REVIEW_DIR = HERE / "review"
+REVIEW_TEMPLATE = REVIEW_DIR / "template-review.html"
 OUTPUT_NAME = "GU_ECsite_コード解説.html"
 MAP_OUTPUT_NAME = "GU_ECsite_リポジトリ地図.html"
+REVIEW_OUTPUT_NAME = "GU_ECsite_レビュー回答ガイド.html"
+# 停留所のレイヤー表示名（template.html の LAYER_LABEL と同じ）
+LAYER_LABEL = {
+    "screen": "画面", "bff": "BFF", "api": "API", "service": "サービス", "repo": "リポジトリ",
+    "db": "DB", "ci": "CI", "infra": "インフラ", "browser": "ブラウザ", "web": "Web",
+}
 REPO_URL = "https://github.com/nonooktk/GUapp"
 
 LANG_BY_EXT = {
@@ -551,10 +563,51 @@ class ContentScanner(HTMLParser):
         self.sections: list[dict] = []
         self._current_section: dict | None = None
         self._h3: dict | None = None
+        # 組み立て時に書き換える開始タグ（data-focus 付き・span.loc・li.stop）
+        self.rewrites: list[dict] = []
+        self.problems: list[tuple[int, str]] = []  # (行, メッセージ)
+        self._ol_stack: list[bool] = []  # ol が順路（class="route"）か
+        self._stop_n = 0
+        self.route_count = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = {k: (v or "") for k, v in attrs}
         line = self.getpos()[0]
+        classes = set(a.get("class", "").split())
+        if tag == "ol":
+            is_route = "route" in classes
+            self._ol_stack.append(is_route)
+            if is_route:
+                self.route_count += 1
+                self._stop_n = 0
+        in_route = bool(self._ol_stack) and self._ol_stack[-1]
+        is_stop = tag == "li" and "stop" in classes
+        is_loc = "loc" in classes
+        if is_stop:
+            if in_route:
+                self._stop_n += 1
+            else:
+                self.problems.append((line, "li.stop は ol.route の直下に置く"))
+        if "data-focus" in a and not a["data-focus"]:
+            self.problems.append((line, "data-focus が空"))
+        if "data-focus" in a and "data-ref" not in a:
+            self.problems.append((line, "data-focus は data-ref と一緒に使う"))
+        if "data-focus-line" in a:
+            self.problems.append((line, "data-focus-line は組み立て時に自動で付く（本文には書かない）"))
+        if is_loc and "data-ref" not in a:
+            self.problems.append((line, "span.loc には data-ref が必要"))
+        if (is_stop and in_route) or ("data-ref" in a and ("data-focus" in a or is_loc)):
+            self.rewrites.append(
+                {
+                    "tag": tag,
+                    "line": line,
+                    "col": self.getpos()[1],
+                    "raw": self.get_starttag_text() or "",
+                    "attrs": a,
+                    "kind": "stop" if is_stop else ("loc" if is_loc else "focus"),
+                    "stop_no": self._stop_n if is_stop else 0,
+                }
+            )
         if "data-ref" in a:
             self.refs.append((a["data-ref"].strip(), a.get("data-note", ""), line))
         if "id" in a:
@@ -574,6 +627,8 @@ class ContentScanner(HTMLParser):
             self._h3 = {"id": a.get("id", ""), "text": "", "line": line}
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "ol" and self._ol_stack:
+            self._ol_stack.pop()
         if tag == "h3" and self._h3 is not None and self._current_section is not None:
             self._h3["text"] = re.sub(r"\s+", " ", self._h3["text"]).strip()
             if self._h3["id"] and self._h3["text"]:
@@ -682,26 +737,111 @@ def render_template(path: Path, values: dict[str, str]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 解説書の組み立て
+# 行番号の自動挿入（data-focus・span.loc・順路の停留所）
+# ---------------------------------------------------------------------------
+
+
+def focus_line(sn: dict, focus: str) -> int:
+    """解決済みスニペットの範囲内で、focus を含む最初の行の実ファイルの行番号。focus が空なら範囲の開始行。"""
+    if not focus:
+        return sn["start"]
+    for i, line in enumerate(sn["code"].split("\n")):
+        if focus in line:
+            return sn["start"] + i
+    raise ResolveError(f'data-focus "{focus}" が {sn["path"]} の L{sn["start"]}-L{sn["end"]} の中に見つからない')
+
+
+def stop_loc_html(no: int, layer: str, path: str | None, line: int | None) -> str:
+    """順路の各停留所の先頭に入れる「番号・レイヤー・path:行・ボタン」。ボタンは JS が動かす（JS 無しでは隠す）。"""
+    parts = [f'<span class="stop-no"><span class="visually-hidden">停留所 </span>{no}</span>']
+    if layer:
+        label = html.escape(LAYER_LABEL.get(layer, layer))
+        parts.append(f'<span class="layer" data-layer="{html.escape(layer, quote=True)}">{label}</span>')
+    if path is not None and line is not None:
+        parts.append(f'<span class="stop-path">{html.escape(path)}:{line}</span>')
+        parts.append(
+            '<span class="stop-btns">'
+            '<button type="button" class="btn stop-copy">コピー</button>'
+            '<button type="button" class="btn stop-view">コードを見る</button>'
+            "</span>"
+        )
+    return f'<div class="stop-loc">{"".join(parts)}</div>'
+
+
+def apply_rewrites(text: str, rewrites: list[dict], where: str, errors: list[str]) -> str:
+    """ContentScanner が集めた開始タグを書き換える（後ろから置換するので位置はずれない）。
+
+    - data-ref 付きで focus_line が決まったタグ: `data-focus-line="N"` を足す
+    - span.loc: 中身を `path:N` にする
+    - li.stop: 直後に div.stop-loc を挿入する
+    """
+    starts = [0]
+    for m in re.finditer("\n", text):
+        starts.append(m.end())
+    edits: list[tuple[int, int, str]] = []
+    for rw in rewrites:
+        raw = rw["raw"]
+        off = starts[rw["line"] - 1] + rw["col"]
+        if text[off : off + len(raw)] != raw:
+            errors.append(f"{where}:{rw['line']}: 開始タグの位置を特定できない（内部エラー）")
+            continue
+        end = off + len(raw)
+        has_line = "focus_line" in rw
+        new_tag = raw
+        if has_line:
+            attr = f' data-focus-line="{rw["focus_line"]}"'
+            new_tag = raw[:-2] + attr + "/>" if raw.endswith("/>") else raw[:-1] + attr + ">"
+        if rw["kind"] == "stop":
+            layer = rw["attrs"].get("data-layer", "")
+            if layer and layer not in LAYER_LABEL:
+                errors.append(f"{where}:{rw['line']}: data-layer \"{layer}\" は {'|'.join(LAYER_LABEL)} のいずれかにする")
+            new_tag += stop_loc_html(
+                rw["stop_no"], layer, rw.get("path") if has_line else None, rw["focus_line"] if has_line else None
+            )
+            edits.append((off, end, new_tag))
+        elif rw["kind"] == "loc":
+            if rw["tag"] != "span":
+                errors.append(f"{where}:{rw['line']}: loc は span 要素にする")
+                continue
+            close = text.find("</span>", end)
+            inner = text[end:close] if close >= 0 else None
+            if inner is None or "<" in inner:
+                errors.append(f"{where}:{rw['line']}: span.loc の中身は空にする（path:行 は自動で入る）")
+                continue
+            if has_line:
+                edits.append((off, close, new_tag + html.escape(f'{rw["path"]}:{rw["focus_line"]}')))
+        elif has_line:
+            edits.append((off, end, new_tag))
+    for start, stop, rep in sorted(edits, key=lambda e: e[0], reverse=True):
+        text = text[:start] + rep + text[stop:]
+    return text
+
+
+# ---------------------------------------------------------------------------
+# 解説書・レビュー回答ガイドの組み立て
 # ---------------------------------------------------------------------------
 
 
 def build_guide(args: argparse.Namespace) -> int:
+    review = bool(getattr(args, "review", False))
     root = repo_root()
     sha = resolve_commit(root, args.commit)
     git = GitFiles(root, sha)
 
     content_dir = Path(args.content_dir).resolve()
+    label = content_dir.name  # エラー表示用（content / review）
     files = sorted(content_dir.glob("*.html"), key=lambda p: p.name)
     if not args.include_sample:
-        files = [p for p in files if not p.name.startswith("00-")]
+        files = [p for p in files if not p.name.startswith("00-sample")]
+    if review:
+        files = [p for p in files if not p.name.startswith("template")]  # template-review.html は本文ではない
     if not files:
         print(f"エラー: {content_dir}/*.html が見つからない", file=sys.stderr)
         return 1
 
     errors: list[str] = []
     warnings: list[str] = []
-    chunks: list[str] = []
+    docs: list[tuple[Path, str, ContentScanner]] = []
     sections: list[dict] = []
     all_refs: list[tuple[str, str, str, int]] = []  # (ref, note, file, line)
     id_seen: dict[str, str] = {}
@@ -732,16 +872,18 @@ def build_guide(args: argparse.Namespace) -> int:
                 id_seen[id_] = where
         for target, line in scanner.hrefs:
             hrefs.append((target, path.name, line))
-        chunks.append(text.rstrip("\n"))
+        for line, msg in scanner.problems:
+            errors.append(f"{label}/{path.name}:{line}: {msg}")
+        docs.append((path, text, scanner))
 
     for target, fname, line in hrefs:
         if target not in id_seen:
-            warnings.append(f"content/{fname}:{line}: リンク先 #{target} が本文に存在しない")
+            warnings.append(f"{label}/{fname}:{line}: リンク先 #{target} が本文に存在しない")
 
     snippets: dict[str, dict] = {}
     for ref, note, fname, line in all_refs:
         if not ref:
-            errors.append(f"content/{fname}:{line}: data-ref が空")
+            errors.append(f"{label}/{fname}:{line}: data-ref が空")
             continue
         if ref not in snippets:
             try:
@@ -750,9 +892,37 @@ def build_guide(args: argparse.Namespace) -> int:
                 snippets[ref] = {"error": str(exc)}
         entry = snippets[ref]
         if "error" in entry:
-            errors.append(f"content/{fname}:{line}: {ref} → {entry['error']}")
+            errors.append(f"{label}/{fname}:{line}: {ref} → {entry['error']}")
         elif note and not entry["note"]:
             entry["note"] = note
+
+    # data-focus・span.loc・停留所の行番号を、解決済みのコードから求める
+    focus_total = 0
+    stop_list: list[str] = []
+    for path, text, scanner in docs:
+        for rw in scanner.rewrites:
+            ref = rw["attrs"].get("data-ref", "").strip()
+            if not ref:
+                if rw["kind"] == "stop":
+                    warnings.append(f"{label}/{path.name}:{rw['line']}: 停留所に data-ref が無い（path:行 とコードボタンは出ない）")
+                continue
+            entry = snippets.get(ref)
+            if not entry or "error" in entry:
+                continue  # 参照の解決エラーは上で報告済み
+            try:
+                rw["focus_line"] = focus_line(entry, rw["attrs"].get("data-focus", ""))
+            except ResolveError as exc:
+                errors.append(f"{label}/{path.name}:{rw['line']}: {ref} → {exc}")
+                continue
+            rw["path"] = entry["path"]
+            focus_total += 1
+            if rw["kind"] == "stop":
+                f = rw["attrs"].get("data-focus", "")
+                stop_list.append(f"  {path.name}:{rw['line']}  停留所 {rw['stop_no']}  {entry['path']}:{rw['focus_line']}" + (f"  （focus: {f}）" if f else ""))
+
+    chunks: list[str] = []
+    for path, text, scanner in docs:
+        chunks.append(apply_rewrites(text, scanner.rewrites, f"{label}/{path.name}", errors).rstrip("\n"))
 
     for w in warnings:
         print(f"警告: {w}", file=sys.stderr)
@@ -777,10 +947,12 @@ def build_guide(args: argparse.Namespace) -> int:
         "COMMIT_FULL": sha,
         "BUILD_DATE": datetime.now(jst).strftime("%Y-%m-%d"),
         "MAP_URL": html.escape(args.map_url, quote=True),
+        "GUIDE_URL": html.escape(args.guide_url, quote=True),
     }
-    output = render_template(TEMPLATE, values)
+    output = render_template(REVIEW_TEMPLATE if review else TEMPLATE, values)
 
-    out_path = Path(args.out).resolve() if args.out else root / "docs" / "05_解説" / OUTPUT_NAME
+    default_name = REVIEW_OUTPUT_NAME if review else OUTPUT_NAME
+    out_path = Path(args.out).resolve() if args.out else root / "docs" / "05_解説" / default_name
     size = len(output.encode("utf-8"))
     if not args.check:
         out_path.write_text(output, encoding="utf-8")
@@ -789,6 +961,14 @@ def build_guide(args: argparse.Namespace) -> int:
     print(f"章数: {len(sections)}")
     print(f"参照数: {len(all_refs)}")
     print(f"ユニークスニペット数: {len(unique)}")
+    if review or focus_total:
+        n_routes = sum(sc.route_count for _, _, sc in docs)
+        n_stops = sum(1 for _, _, sc in docs for rw in sc.rewrites if rw["kind"] == "stop")
+        print(f"順路数: {n_routes}／停留所数: {n_stops}／行番号を自動で入れた箇所: {focus_total}")
+    if getattr(args, "list_stops", False):
+        print("停留所の一覧（ファイル:行 は実ファイルの行番号）:")
+        for line in stop_list:
+            print(line)
     if args.check:
         print(f"検証のみ（出力は書いていない）。出力サイズの見込み: {size:,} bytes")
     else:
@@ -933,7 +1113,7 @@ def collect_refs(fragment: str) -> list[tuple[str, str]]:
 
 def scan_guide_ids(content_dir: Path) -> dict[str, str] | None:
     """解説書の content から id → 表示名（章タイトル › 見出し）を集める。content が無ければ None。"""
-    files = [p for p in sorted(content_dir.glob("*.html"), key=lambda p: p.name) if not p.name.startswith("00-")]
+    files = [p for p in sorted(content_dir.glob("*.html"), key=lambda p: p.name) if not p.name.startswith("00-sample")]
     if not files:
         return None
     ids: dict[str, str] = {}
@@ -1255,18 +1435,24 @@ def build_map(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="GUapp コード解説書 / リポジトリ地図を組み立てる")
+    parser = argparse.ArgumentParser(description="GUapp コード解説書 / リポジトリ地図 / レビュー回答ガイドを組み立てる")
     parser.add_argument("--commit", default="origin/main", help="コードを読むコミット（既定: origin/main の完全 SHA）")
     parser.add_argument("--check", action="store_true", help="出力を書かず、参照と構造の検証だけ行う")
-    parser.add_argument("--include-sample", action="store_true", help="00- で始まるサンプル本文を取り込む（解説書のみ）")
-    parser.add_argument("--content-dir", default=str(CONTENT_DIR), help="解説書の本文ディレクトリ（既定: code-guide/content。検証用。地図では guide の id 照合に使う）")
-    parser.add_argument("--out", default="", help="出力先 HTML（既定: 解説書は docs/05_解説/GU_ECsite_コード解説.html、地図は GU_ECsite_リポジトリ地図.html。検証用）")
+    parser.add_argument("--include-sample", action="store_true", help="00- で始まるサンプル本文を取り込む（解説書・レビュー回答ガイド）")
+    parser.add_argument("--content-dir", default=None, help="本文ディレクトリ（既定: 解説書は code-guide/content、--review は code-guide/review。検証用。地図では guide の id 照合に使う）")
+    parser.add_argument("--out", default="", help="出力先 HTML（既定: 解説書は docs/05_解説/GU_ECsite_コード解説.html、地図は GU_ECsite_リポジトリ地図.html、--review は GU_ECsite_レビュー回答ガイド.html。検証用）")
     parser.add_argument("--map", action="store_true", help="解説書ではなくリポジトリ地図を組み立てる")
+    parser.add_argument("--review", action="store_true", help="解説書ではなくレビュー回答ガイドを組み立てる（本文は code-guide/review/*.html）")
+    parser.add_argument("--list-stops", action="store_true", help="--review で、停留所ごとの path:行 を標準出力に一覧する")
     parser.add_argument("--map-data", default=str(MAP_DATA_DEFAULT), help="地図の説明データ（既定: code-guide/map/descriptions.json）")
     parser.add_argument("--tree-commit", default="HEAD", help="地図のツリーを作るコミット（既定: HEAD）。プレビューのコードは --commit から読み、無いファイルだけここから読む")
-    parser.add_argument("--guide-url", default=OUTPUT_NAME, help="地図から解説書へのリンク先（既定: GU_ECsite_コード解説.html）")
-    parser.add_argument("--map-url", default=MAP_OUTPUT_NAME, help="解説書のヘッダーから地図へのリンク先（既定: GU_ECsite_リポジトリ地図.html）")
+    parser.add_argument("--guide-url", default=OUTPUT_NAME, help="地図・レビュー回答ガイドから解説書へのリンク先（既定: GU_ECsite_コード解説.html）")
+    parser.add_argument("--map-url", default=MAP_OUTPUT_NAME, help="解説書・レビュー回答ガイドのヘッダーから地図へのリンク先（既定: GU_ECsite_リポジトリ地図.html）")
     args = parser.parse_args()
+    if args.map and args.review:
+        parser.error("--map と --review は同時に指定できない")
+    if args.content_dir is None:
+        args.content_dir = str(REVIEW_DIR if args.review else CONTENT_DIR)
     return build_map(args) if args.map else build_guide(args)
 
 

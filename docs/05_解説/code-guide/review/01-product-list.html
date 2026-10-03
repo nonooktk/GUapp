@@ -1,0 +1,245 @@
+<section id="r01" data-title="商品一覧を表示する">
+<h2>1. 商品一覧を表示する</h2>
+<p class="asked">「トップページで商品を表示する」「商品一覧ページ（/products）を表示する」「カテゴリで絞り込んで表示する」「『もっと見る』を押したときの動き」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>商品一覧は、初回の表示と「もっと見る」で通る道が違います。初回は、Next.js のサーバー側のページが BFF を通らず、FastAPI の <code>GET /api/v1/products</code> を直接呼びます。「もっと見る」だけは、ブラウザから BFF の <code>/api/products</code> を呼び、BFF が同じ FastAPI に取り次ぎます。FastAPI は内部トークンを確かめたあと、ルーター、サービス、リポジトリの順に処理を進め、公開中の商品を新着順に 24 件、MySQL から読みます。応答には <code>items</code>・<code>total</code>・<code>has_more</code> が入っていて、ProductsGrid が商品カードを並べます。「もっと見る」は、<code>has_more</code> が true の間だけ出します。</p>
+</div>
+<h3 id="r01-front">② 画面からバックエンドへ</h3>
+<p>経路は 2 本あり、どちらも着く先は FastAPI の同じエンドポイント（<code>GET /api/v1/products</code>）です。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>経路</th><th>呼ぶ側</th><th>途中で通る場所</th><th>使われる場面</th></tr></thead>
+<tbody>
+<tr><td>A. 初回表示</td><td>サーバー側のページ（Server Component）</td><td><code>lib/server/catalog.ts</code> → <code>apiFetch</code> → FastAPI。<strong>BFF は通らない</strong></td><td>トップのおすすめ 8 件、/products の 24 件、カテゴリ切り替え（URL が変わってページが描き直される）</td></tr>
+<tr><td>B. もっと見る</td><td>ブラウザ（ProductsGrid）</td><td><code>/api/products</code>（BFF の Route Handler）→ <code>apiFetch</code> → FastAPI</td><td>2 ページ目以降の追加取得</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note fact"><p>事実: 設計仕様書 4.3 の BFF 表に「Server Component から直接 FastAPI を呼ぶ場合は BFF を経由しなくてよい（サーバー間通信）」という注記があります（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L369">設計仕様書 4.3</a>）。初回表示が BFF を通らないのは、この注記どおりです。</p></div>
+<p>カテゴリの絞り込みは、URL のクエリ（<code>/products?gender=women&amp;category=women-tops</code> の形）を変えるリンクです。このリンクを作るのは <span class="loc" data-ref="apps/web/components/CategoryNav.tsx::CategoryNav" data-focus="const href ="></span> で、押すとページが描き直され、経路 A で FastAPI が呼ばれます。</p>
+<ol class="route" data-title="順路 A：トップまたは /products の初回表示から FastAPI まで">
+  <li class="stop" data-ref="apps/web/app/page.tsx::HomePage" data-focus="getProducts({ page: 1, per_page: 8 })" data-layer="screen">
+    <p class="stop-see">トップの「おすすめ商品」。新着 8 件を <code>getProducts({ page: 1, per_page: 8 })</code> で取る。お知らせ用の <code>getContents</code> と <code>Promise.all</code> で同時に呼ぶ。</p>
+    <p class="stop-say">トップのおすすめ商品も、サーバー側のページから getProducts を呼んでいます。1 ページ目の 8 件です。</p>
+    <p class="stop-next">次へ: 一覧ページの説明を続けるなら <kbd>⌘P</kbd> で <code>apps/web/app/products/page.tsx</code> を開く。トップだけを聞かれたなら <code>getProducts</code> にカーソルを置いて <kbd>F12</kbd>（stop 3 へ）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/products/page.tsx::ProductsPage" data-focus="getProducts({ gender" data-layer="screen">
+    <p class="stop-see"><code>searchParams</code> から取り出すのは、<code>gender</code>・<code>category</code> が英小文字・数字・<code>-</code>・<code>_</code> で 64 文字以内のもの、<code>page</code> が 3 桁以内の数字のものだけ。それを <code>getProducts</code> に渡す行で、<code>per_page</code> は 24 固定。fetch も BFF の URL もここには出てこない。</p>
+    <p class="stop-say">/products のページは、サーバー側で動く Server Component です。URL の gender・category・page を整えて、getProducts という関数で商品を取ります。ブラウザから API を呼ぶ処理は、この初回表示にはありません。</p>
+    <p class="stop-next">次へ: <code>getProducts</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProducts" data-focus="buildProductsQuery(q)" data-layer="bff">
+    <p class="stop-see"><code>/products?gender=…&amp;category=…&amp;page=…&amp;per_page=…</code> のクエリ文字列を <code>buildProductsQuery</code> で組み立て、<code>apiFetch</code> に渡す。BFF を通らない理由は、ファイル冒頭のコメント（<span class="loc" data-ref="apps/web/lib/server/catalog.ts#L1-30" data-focus="BFF を経由しなくてよい"></span>）に書いてある。</p>
+    <p class="stop-say">サーバー側のページから FastAPI へ向かう関数がここです。BFF の Route Handler は経由せず、同じ Next.js のサーバーの中から apiFetch で FastAPI を呼びます。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="reqHeaders.set(&quot;X-Internal-Token&quot;, env.INTERNAL_TOKEN);" data-layer="bff">
+    <p class="stop-see">呼び先は <code>API_BASE_URL</code> + <code>/api/v1</code> + path。ヘッダーに <code>X-Internal-Token</code> を付ける。<code>cache: "no-store"</code>、タイムアウト 5 秒。接続できなければ <code>UpstreamUnavailableError</code>、非 2xx は <code>{ok:false, status, error}</code> で返す。</p>
+    <p class="stop-say">FastAPI の URL に内部トークンのヘッダーを付けて呼びます。BFF の Route Handler も、この同じ関数を使います。ここから先は URL の文字列でつながっているので、IDE のジャンプではなく全体検索で FastAPI 側を探します。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>@router.get("/products"</code> を検索し、<code>apps/api/app/routers/catalog.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api">
+    <p class="stop-see"><code>@router.get("/products")</code>。これがリクエスト先のバックエンド。<code>gender</code>・<code>category</code>・<code>page</code>・<code>per_page</code> を受け取り、サービスを呼ぶだけの関数。</p>
+    <p class="stop-say">リクエスト先は FastAPI の GET /api/v1/products で、routers/catalog.py の list_products です。ここは入力を受け取って、サービスに渡すだけの場所です。</p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 B：「もっと見る」ボタンから FastAPI まで">
+  <li class="stop" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="const next = await fetchProductsPage(query, page + 1);" data-layer="screen">
+    <p class="stop-see">ボタン（<span class="loc" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="onClick={loadMore}"></span>）から呼ばれる <code>loadMore</code>。<code>"use client"</code> のコンポーネントで、<code>query</code>（gender・category）と次のページ番号を渡す。</p>
+    <p class="stop-say">「もっと見る」を押すと、ブラウザ側で loadMore が動き、次のページ番号を付けて fetchProductsPage を呼びます。初回の 24 件と違って、ここはブラウザの JavaScript から API を呼びます。</p>
+    <p class="stop-next">次へ: <code>fetchProductsPage</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::fetchProductsPage" data-focus="/api/products?" data-layer="screen">
+    <p class="stop-see"><code>page</code> を上書きし、<code>per_page=24</code> を付けて <code>/api/products</code> を GET する。商品一覧の取得だが、置き場所はカート用の <code>cart-api.ts</code>。</p>
+    <p class="stop-say">ブラウザが呼ぶのは同じ Next.js の /api/products で、FastAPI の URL はブラウザには出ません。</p>
+    <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/products/route.ts</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="await apiFetch&lt;ProductListResponse&gt;(" data-layer="bff">
+    <p class="stop-see">BFF の <code>GET</code>。<code>gender</code>・<code>category</code> は slug の形だけ通し、<code>page</code> は 1〜999、<code>per_page</code> は 1〜24 に丸める。そのあと <code>buildProductsQuery</code> と <code>apiFetch</code>（経路 A と同じ 2 関数）で FastAPI を呼ぶ。読み取りなので CSRF の検証は無い。</p>
+    <p class="stop-say">BFF は、受け取った条件を決まった範囲に丸めて、FastAPI に取り次ぎます。商品一覧は読むだけの操作なので、CSRF の検証はありません。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> の中身は経路 A の stop 4 と同じ。FastAPI 側は <kbd>⌘⇧F</kbd> で <code>@router.get("/products"</code> を検索</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="catalog_service.list_products(" data-layer="api">
+    <p class="stop-see">経路 A の stop 5 と同じルーターに着く。</p>
+    <p class="stop-say">初回表示と同じエンドポイントです。FastAPI から先の処理は、2 つの経路で共通です。</p>
+  </li>
+</ol>
+<div class="note warn"><p>注意（既知の弱点 C3）: 一覧の取得関数 <code>fetchProductsPage</code> が、カート用の <code>cart-api.ts</code> にあります。また <code>loadMore</code> は <a class="ref" data-ref="apps/web/components/SearchResults.tsx#L43-59">SearchResults</a> にもほぼ同じ形で書かれています。どちらも挙動は同じです。共通化は Issue にする予定です。</p></div>
+<h3 id="r01-back">③ バックエンドの処理</h3>
+<ol class="route" data-title="順路：内部トークンの検証から products テーブルまで">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="dependencies=[Depends(verify_internal_token)]" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下のルーターすべてに <code>verify_internal_token</code> が付く。<code>catalog.router</code> の登録もここ。<code>health</code> だけ別で、検証の対象外。</p>
+    <p class="stop-say">/api/v1 の下は、この 1 か所で内部トークンの検証が必須になっています。商品一覧のルーターもここに登録されています。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="hmac.compare_digest(" data-layer="api">
+    <p class="stop-see">ヘッダー <code>X-Internal-Token</code> が無い、または一致しないと 401 <code>unauthorized</code>。期待値が未設定のときも全拒否。比較は <code>hmac.compare_digest</code>。</p>
+    <p class="stop-say">BFF からの呼び出しだけを通す仕組みです。トークンが違えば、中身を見る前に 401 で返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>list_products</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::list_products" data-focus="page: Annotated[int, Query(ge=1)] = 1," data-layer="api">
+    <p class="stop-see">クエリの検証。<code>page</code> は 1 以上、<code>per_page</code> は 1〜48（<code>PER_PAGE_MAX</code>）、<code>category</code> は 100 文字以内、<code>gender</code> は <code>Gender</code> の列挙。外れると 400 <code>validation_error</code>（FastAPI 既定の 422 をハンドラで変換）。</p>
+    <p class="stop-say">入力の形はここで確かめます。たとえば page が 0 だと、400 の validation_error で返ります。</p>
+    <p class="stop-next">次へ: <code>catalog_service.list_products</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/catalog.py::list_products" data-focus="products_repo.list_published(" data-layer="service">
+    <p class="stop-see">リポジトリで一覧と総件数を取り、続けて色をまとめて取る。<code>has_more</code> は <code>page * per_page &lt; total</code>。</p>
+    <p class="stop-say">サービスは、一覧と総件数を取り、色の一覧を足して、次のページがあるかどうかを計算します。</p>
+    <p class="stop-next">次へ: <code>list_published</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::list_published" data-focus="summary_select().offset((page - 1) * per_page).limit(per_page)" data-layer="repo">
+    <p class="stop-see">件数用の <code>count</code> と本体の SELECT の 2 本。性別・カテゴリの絞り込みは <code>_category_scope</code>（サブクエリ）。ページ送りは offset と limit。</p>
+    <p class="stop-say">ここで SQL を組み立てます。先に件数、次に該当ページの分を取ります。</p>
+    <p class="stop-next">次へ: <code>summary_select</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::summary_select" data-focus=".where(published_filter())" data-layer="repo">
+    <p class="stop-see">公開条件 <code>published_filter()</code>、新着順（<code>created_at</code> 降順、同時刻は <code>id</code> 降順）、先頭画像（サブクエリ）はここで決まる。<code>sold_out</code> は、在庫合計（variants を GROUP BY で 1 回集計）から作る。</p>
+    <p class="stop-say">非公開の商品は、ここで除かれます。公開の条件は published_filter の 1 か所で、一覧も詳細もカート追加もここを通ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>colors_by_product</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::colors_by_product" data-focus="select(Variant.product_id, Variant.color)" data-layer="repo">
+    <p class="stop-see">ページ分の商品 ID をまとめて渡し、1 クエリで色を取る。商品ごとに問い合わせる形（N+1）にはしていない。</p>
+    <p class="stop-say">24 件分の色は、1 回の問い合わせでまとめて取っています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>Product</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Product" data-focus="published: Mapped[bool]" data-layer="db">
+    <p class="stop-see"><code>products</code> テーブル（公開フラグ <code>published</code>、税込価格 <code>price_incl_tax</code>）。ほかに画像は <code>product_images</code>、色と在庫は <code>variants</code>、絞り込みは <code>product_categories</code> と <code>categories</code>。</p>
+    <p class="stop-say">読むテーブルの中心は products です。画像、色と在庫、カテゴリの対応表をつないで一覧を作ります。</p>
+  </li>
+</ol>
+<p>この API で起きうる失敗と、返るステータス・code です。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>状態</th><th>ステータス・code</th><th>判定する場所</th><th>確認するテスト</th></tr></thead>
+<tbody>
+<tr><td>内部トークンが無い・違う</td><td>401 <code>unauthorized</code></td><td><span class="loc" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="raise AppError(401, &quot;unauthorized&quot;)"></span></td><td><a class="ref" data-ref="apps/api/tests/unit/test_ut_sec_02_error_handler.py::test_ut_sec_02_internal_token_missing_and_mismatch_401">UT-SEC-02</a>（検証用の仮ルートで 401 を確認。一覧の API 自体では確認していない）</td></tr>
+<tr><td><code>page</code> が 0 以下、<code>per_page</code> が 49 以上、<code>gender</code> が列挙外</td><td>400 <code>validation_error</code>（<code>fields</code> に name と reason。page は <code>out_of_range</code>、gender は <code>format</code>）</td><td>ルーターの <code>Query</code>・列挙型</td><td>IT-002-01（gender）、IT-002-02（page・per_page）</td></tr>
+<tr><td>最終ページより先の <code>page</code>、該当 0 件</td><td>200 と空の <code>items</code>（<code>total</code> はそのまま、<code>has_more</code> は false）</td><td>サービス・リポジトリ（エラーにしない）</td><td>IT-002-02</td></tr>
+<tr><td>DB の障害など想定外</td><td>500 <code>internal_error</code>（固定文言）</td><td>例外ハンドラ（<code>_unhandled_error_handler</code>）</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<p>404 はありません。一覧には「対象の ID」が無いためです。</p>
+<h3 id="r01-response">④ 応答から表示まで</h3>
+<ol class="route" data-title="順路 A：初回表示（Server Component）で、応答から商品カードまで">
+  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductListResponse" data-focus="has_more: bool" data-layer="api">
+    <p class="stop-see">応答は <code>items</code>・<code>page</code>・<code>per_page</code>・<code>total</code>・<code>has_more</code>。<code>items</code> の 1 件は <code>ProductListItemOut</code>（id・name・price_incl_tax・image_path・colors・sold_out）。</p>
+    <p class="stop-say">FastAPI が返す形は、この Pydantic のクラスで決まっています。大事なのは、商品の配列、総件数、次のページがあるかどうかの 3 点です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>apiFetch</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="return { ok: true, status: res.status, data: body as T };" data-layer="bff">
+    <p class="stop-see">2xx なら本文の JSON をそのまま <code>data</code> に入れて返す（整形はしない）。非 2xx は <code>sanitizeErrorBody</code> で <code>{code, …}</code> だけに絞る。</p>
+    <p class="stop-say">FastAPI の応答は、成功ならそのまま data に入って返ります。初回表示の経路では、BFF による整形はありません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/catalog.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>loadOrNull</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::loadOrNull" data-focus="return result.data;" data-layer="bff">
+    <p class="stop-see">失敗（非 2xx・接続不可）は <code>null</code> を返し、ログだけ残す。成功なら <code>data</code>。</p>
+    <p class="stop-say">失敗したときは null を返す取り決めになっていて、ページ側は null なら「読み込めませんでした」を出します。FastAPI が止まっていても、画面は崩れません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/products/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/products/page.tsx::ProductsPage" data-focus="list === null ? (" data-layer="screen">
+    <p class="stop-see"><code>list === null</code> なら <code>LoadError</code>。そうでなければ <code>ProductsGrid</code> に <code>initialItems</code>・<code>initialPage</code>・<code>hasMore</code>・<code>total</code> を渡す。見出し横の件数は <code>list.total</code>。</p>
+    <p class="stop-say">取得に失敗していれば LoadError を出し、成功なら、取れた商品と総件数を ProductsGrid に渡します。</p>
+    <p class="stop-next">次へ: <code>ProductsGrid</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="const [items, setItems] = useState(initialItems);" data-layer="screen">
+    <p class="stop-see">渡された 24 件が state の初期値。0 件なら「該当する商品がありません」。1 件以上は <code>ProductCard</code> を並べ、「{表示数} / {total} 件を表示」を出す。「もっと見る」は <code>more</code>（<code>has_more</code>）が true の間だけ。</p>
+    <p class="stop-say">最初の 24 件は、サーバーから渡されたものをそのまま state の初期値にしています。次のページがある間だけ、「もっと見る」を出します。</p>
+    <p class="stop-next">次へ: <code>ProductCard</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/ProductCard.tsx::ProductCard" data-focus="{soldOut ? (" data-layer="screen">
+    <p class="stop-see">画像は <code>IMAGE_BASE_URL</code> と <code>image_path</code> をつないだ URL、名称、価格（<code>Price</code>）。<code>sold_out</code> が true なら左上に「在庫切れ」のバッジを出し、価格の代わりに「在庫切れ」。色の数は「n 色」。画像が無ければ「NO IMAGE」。</p>
+    <p class="stop-say">商品カードが 1 件分の表示です。全バリエーションの在庫が 0 の商品は、価格の代わりに「在庫切れ」と出します。</p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 B：「もっと見る」で、応答から追加表示まで">
+  <li class="stop" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="return Response.json(result.data, { status: 200," data-layer="bff">
+    <p class="stop-see">成功は FastAPI の本文をそのまま 200 で返す（<code>Cache-Control: no-store</code>）。失敗は <code>result.error</code> を元のステータスで返す。接続不可は 503 <code>upstream_unavailable</code>、想定外は 500 <code>internal_error</code>。</p>
+    <p class="stop-say">BFF は、成功なら FastAPI の応答をそのまま返し、失敗ならエラーの code だけを返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/client/cart-api.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>requestJson</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::requestJson" data-focus="throw new CartApiError(res.status, await parseJson&lt;ApiErrorBody&gt;(res));" data-layer="screen">
+    <p class="stop-see">2xx 以外は <code>CartApiError</code>（status と body）を投げる。2xx は JSON を返す（本文が空なら <code>bad_response</code>）。<code>fetchProductsPage</code> の戻り値は <code>ProductListResponse</code>。</p>
+    <p class="stop-say">ブラウザ側の fetch は、失敗なら例外、成功なら JSON を返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/ProductsGrid.tsx</code> を開き、<code>loadMore</code> の続きを見る</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="const seen = new Set(prev.map((p) =&gt; p.id));" data-layer="screen">
+    <p class="stop-see">返った <code>items</code> から、すでに表示している <code>id</code> を除いて末尾に足す。<code>page</code> と <code>more</code> は応答の <code>page</code>・<code>has_more</code> で更新する。</p>
+    <p class="stop-say">返ってきた商品のうち、すでに画面にあるものは除いて、末尾に足します。表示中に新着が増えて 1 ページの境目がずれても、同じ商品は 2 回出ません。</p>
+    <p class="stop-next">次へ: 同じ関数の下の <code>catch</code> を見る</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="setError(&quot;読み込めませんでした。もう一度お試しください&quot;);" data-layer="screen">
+    <p class="stop-see">どんな失敗でも同じ文言。<code>role="alert"</code> で表示し、<code>finally</code> で処理中を解除するので押し直せる。ステータスごとの出し分けはしない。</p>
+    <p class="stop-say">追加の取得に失敗したときは、「読み込めませんでした。もう一度お試しください」と出します。ボタンはそのまま押し直せます。</p>
+  </li>
+</ol>
+<p>失敗・空のときの画面の出し分けです。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>場面</th><th>画面の表示</th><th>出す場所</th></tr></thead>
+<tbody>
+<tr><td>一覧の初回取得に失敗（FastAPI 停止・非 2xx）</td><td>「商品一覧を読み込めませんでした。時間をおいて再読み込みしてください。」</td><td><span class="loc" data-ref="apps/web/app/products/page.tsx::ProductsPage" data-focus="&lt;LoadError what=&quot;商品一覧&quot; /&gt;"></span></td></tr>
+<tr><td>トップのおすすめの取得に失敗</td><td>「おすすめ商品を読み込めませんでした。時間をおいて再読み込みしてください。」</td><td><span class="loc" data-ref="apps/web/app/page.tsx::HomePage" data-focus="&lt;LoadError what=&quot;おすすめ商品&quot; /&gt;"></span></td></tr>
+<tr><td>一覧が 0 件</td><td>「該当する商品がありません」</td><td><span class="loc" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="該当する商品がありません"></span></td></tr>
+<tr><td>トップが 0 件</td><td>「商品がまだ登録されていません」</td><td><span class="loc" data-ref="apps/web/app/page.tsx::HomePage" data-focus="商品がまだ登録されていません"></span></td></tr>
+<tr><td>「もっと見る」の取得に失敗</td><td>「読み込めませんでした。もう一度お試しください」（赤字）</td><td><span class="loc" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid" data-focus="setError(&quot;読み込めませんでした"></span></td></tr>
+<tr><td>画像のパスが無い</td><td>「NO IMAGE」</td><td><span class="loc" data-ref="apps/web/components/ProductCard.tsx::ProductCard" data-focus="NO IMAGE"></span></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn"><p>注意（既知の弱点 B3）: 画面側の応答の型 <code>ProductListResponse</code> は、FastAPI のスキーマを手で書き写したものです（<a class="ref" data-ref="apps/web/lib/types.ts::ProductListResponse">types.ts</a>）。API の型を変えて書き写しを直し忘れても、コンパイルは通ります。</p></div>
+<h3 id="r01-test">⑤ テスト 1 本の説明</h3>
+<p><strong>推しのテスト</strong>　<span class="tid">IT-002-01</span><span class="req">DS-API-002</span><span class="req">F-001</span>　<span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span></p>
+<p>テスト設計書 4 章の文は、「<code>GET /products?category=…&amp;page=1</code> → 公開商品のみ 24 件、<code>total</code> が返る」です（区分は正常）。守りたいのは、一覧に非公開商品が混ざらないこと、1 ページが 24 件であること、総件数と「次のページ」の情報が正しく返ることです。</p>
+<p>テストコード: <a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total">test_it_002_01_products_first_page_24_and_total</a>（<a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py">test_it_001_003_catalog.py</a>）</p>
+<ol>
+<li><strong>準備</strong>: <code>client</code> は、FastAPI のアプリ（<code>it_app</code>）と、seed を入れた MySQL（<code>seed_db</code>）をつないだ HTTP クライアントです。seed は商品 31 点で、そのうち 1 点が非公開なので、公開は 30 点です。接続先は環境変数 <code>DATABASE_URL_TEST</code>（DB 名が <code>_test</code> で終わる MySQL）で、未設定だと全件スキップします。</li>
+<li><strong>実行</strong>: 内部トークンのヘッダーを付けて、<span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="params="></span> で 1 ページ目、続けて 2 ページ目を GET します。</li>
+<li><strong>確認</strong>: 1 ページ目は、<code>page</code> が 1、<code>per_page</code> が 24、<code>total</code> が公開数の 30、<code>items</code> が 24 件、<code>has_more</code> が true。非公開商品の名前が含まれず、1 件のキーが 6 個、<code>image_path</code> が <code>products/</code> で始まり、色が 2 色。2 ページ目は、残り 6 件で <code>has_more</code> が false、全バリエーション在庫 0 の商品（P-ALL0）だけが <code>sold_out</code> の true。</li>
+</ol>
+<p><strong>予備の 1 本</strong>　<span class="tid">IT-002-02</span>　<span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span>　<a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_02_page_0_is_400_and_beyond_last_is_empty">test_it_002_02_page_0_is_400_and_beyond_last_is_empty</a>。<code>page=0</code> が 400（<code>fields</code> は page の <code>out_of_range</code>）、最終ページより先の <code>page=3</code> が 200 で空の <code>items</code>（<code>total</code> は 30、<code>has_more</code> は false）、<code>per_page=49</code> が 400。</p>
+<p><strong>画面側のテスト</strong>　<code>ProductsGrid</code>・<code>ProductCard</code>・一覧のページ・BFF の <code>app/api/products/route.ts</code> を対象にした自動テストはありません。 <span class="tstat none">テストなし</span> 手動の記録は、ST-F001-01（ホーム → カテゴリ）<span class="tstat manual">手動で合格（2026-09-18）</span>、ST-F001-02（非公開商品が出ない）<span class="tstat manual">手動で合格（2026-09-24）</span>、ST-F001-03（「もっと見る」）<span class="tstat manual">手動で合格（2026-09-18）</span>、AT-07（カテゴリ導線。再実施）<span class="tstat manual">手動で合格（2026-09-24）</span> です。実施記録は <a class="ref" data-ref="docs/05_検収/ST-AT実施記録_正常系_20260918.md">ST-AT 実施記録（正常系）</a> と <a class="ref" data-ref="docs/05_検収/ST実施記録_異常境界_20260924.md">ST 実施記録（異常・境界）</a> にあります。</p>
+<div class="note warn"><p>注意（既知の弱点 C2）: web のテストには偏りがあり、<code>ProductsGrid</code> と <code>app/api/products/route.ts</code> は直接のテストがありません。「もっと見る」は手動の ST-F001-03 だけで確かめています。ST-F001-03 は、25 点以上のカテゴリが seed に無かったため、全件一覧で代替した記録です。</p></div>
+<h3 id="r01-compare">⑥ 仕様書との突き合わせ</h3>
+<p>IT-002-01 の仕様書の記述と、テストコードの値を並べます。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>呼ぶ API</td><td><code>GET /products?category=…&amp;page=1</code></td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="params="></span>（<code>page</code> だけ。<code>category</code> は付けない）。カテゴリ・性別の絞り込みは別の関数 <a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_filter_by_gender_and_category">test_it_002_01_filter_by_gender_and_category</a> が同じ ID で確認</td><td class="warn">要注意（関数が分かれている）</td></tr>
+<tr><td>件数</td><td>24 件</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="len(body["></span> が 24</td><td class="ok">一致</td></tr>
+<tr><td>公開商品のみ</td><td>公開商品のみ</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="TEST_PRODUCT_NAME_UNPUB not in names"></span>（非公開の P-UNPUB が含まれない）</td><td class="ok">一致</td></tr>
+<tr><td>total</td><td><code>total</code> が返る</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="_published_count() == 30"></span>（seed の公開数 30 と一致）</td><td class="ok">一致</td></tr>
+<tr><td>2 ページ目・P-ALL0（仕様書に無い追加確認）</td><td>記述なし（AT-03 に「P-ALL0 は一覧でも在庫切れ表示」）</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="== 6 and"></span>（残り 6 件）、<span class="loc" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_002_01_products_first_page_24_and_total" data-focus="TEST_PRODUCT_NAME_ALL0"></span>（P-ALL0 の <code>sold_out</code>）</td><td class="ok">一致（仕様より広く確認）</td></tr>
+<tr><td>「もっと見る」で 24 件ずつ追加（ST-F001-03）</td><td>24 件で区切られ、次の 24 件が追加表示される</td><td>自動テストなし（API の 2 ページ目までは上の行）。ProductsGrid のテストが無い</td><td class="warn">要注意（手動のみ）</td></tr>
+<tr><td>実行の場所</td><td>1.2 合否基準: 「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」</td><td>CI の api-test は <code>200 passed, 100 skipped</code>。ci.yml に <code>DATABASE_URL_TEST</code> が無く、結合テスト 100 件が全件スキップ</td><td class="ng">不一致</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn"><p>注意（既知の弱点 D3）: このテストは手元（2026-10-03 15:47、ローカルの MySQL）では通りますが、CI ではスキップされます。ci.yml の api-test の env に <code>DATABASE_URL</code> はあっても、結合テストの conftest が見る <code>DATABASE_URL_TEST</code> が無いためです。足したあとに通るかは未確認です。</p></div>
+<div class="note fact"><p>事実（実物と設計書の食い違い）: 設計仕様書 4.3 の BFF 表は <code>/api/products</code>・<code>/api/products/[id]</code>・<code>/api/categories</code> の 3 本を挙げますが、実装の <code>app/api/</code> にあるのは <code>/api/products</code> だけです。<code>/api/products/[id]</code> と <code>/api/categories</code> は、Server Component が直接 FastAPI を呼ぶため作られていません。同じ表の注記（BFF を経由しなくてよい）とは矛盾しませんが、表だけ読むと 3 本あるように見えます。</p></div>
+<h3 id="r01-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>なぜ初回表示は BFF を通らないのですか</summary>
+  <div class="qa-body">
+    <p>設計仕様書 4.3 に、サーバー間通信なら BFF を通さなくてよいと決めてあります。サーバー側のページは Next.js のサーバーの中で動くので、FastAPI の URL も内部トークンもブラウザには出ません。BFF が必要なのは、ブラウザの JavaScript から呼ぶ経路（「もっと見る」・カート操作・注文）だけです。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: BFF を通さないと CSRF の検証は抜けませんか</p>
+      <p>一覧は読み取りだけなので、CSRF の検証が要る操作ではありません。状態を変える操作（カートへの追加など）は、すべて BFF を通り、CSRF を確かめています。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>非公開の商品が一覧に出ないことは、どう保証していますか</summary>
+  <div class="qa-body">
+    <p>公開の条件は <code>published_filter</code> の 1 か所で、一覧・詳細・関連商品・カート追加がすべてこれを通ります。確かめているのは、IT-002-01（一覧に非公開商品の名前が無い）、IT-003-02（詳細は 404）、手動の ST-F001-02 です。ただし結合テストは CI でスキップされるため、自動で守られているのは手元で実行したときだけです。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>「もっと見る」で同じ商品が重複したり、取りこぼしたりしませんか</summary>
+  <div class="qa-body">
+    <p>重複は <code>ProductsGrid</code> が <code>id</code> で除いています。取りこぼしの対策は入れていません。並びは <code>created_at</code> 降順なので、閲覧中に新商品が登録されると、ページの境目で 1 件ずれる可能性があります。P1 は seed の固定データで、閲覧中に商品が増えることは想定していません（これは私の見立てで、コードにこの前提を書いた記述はありません）。</p>
+  </div>
+</details>
+</section>

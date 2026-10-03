@@ -1,0 +1,197 @@
+<section id="r02" data-title="商品詳細と色・サイズの選択">
+<h2>2. 商品詳細を表示し、色・サイズを選ぶ</h2>
+<p class="asked">「商品詳細ページを表示する」「色・サイズを選ぶと在庫の表示が変わる」「在庫切れの商品を選んだときの表示」「商品カードを押して詳細へ行く」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>商品詳細は、一覧の初回表示と同じ経路です。Next.js のサーバー側のページが、BFF を通らずに FastAPI の <code>GET /api/v1/products/{id}</code> を直接呼びます。FastAPI は公開中の商品だけを引いて、色・サイズごとの在庫の有無、画像、関連商品 4 件を付けて返します。在庫は、あるかないかだけを返します。残りの数は返しません。色とサイズを選んだときの判定は、ブラウザ側の PurchasePanel が、受け取った <code>variants</code> の一覧を見て、画面の中だけで行います。選んだ組み合わせが無いか、在庫が無いときは「在庫切れ」を出して、追加ボタンを無効にします。この選択では API を呼びません。</p>
+</div>
+<h3 id="r02-front">② 画面からバックエンドへ</h3>
+<div class="note fact"><p>事実: 詳細の表示は、一覧の初回表示（経路 A）と同じで、<strong>BFF を通りません</strong>。<code>app/products/[id]/page.tsx</code> の Server Component が、<code>lib/server/catalog.ts</code> の <code>getProduct</code> を経由して FastAPI を直接呼びます。この画面には、ブラウザから API を呼ぶ経路がありません。色・サイズを選ぶ操作でも API は呼びません（④ で説明します）。</p></div>
+<ol class="route" data-title="順路：商品カードのリンクから FastAPI まで">
+  <li class="stop" data-ref="apps/web/components/ProductCard.tsx::ProductCard" data-focus="&lt;Link href=" data-layer="screen">
+    <p class="stop-see">一覧・トップ・関連商品のカードは、<code>/products/{id}</code> へのリンク。ふつうの <code>Link</code> で、ここでは API を呼ばない。</p>
+    <p class="stop-say">商品カードは、/products/商品 ID へのリンクです。API を呼ぶのは、リンク先のページが開くときで、サーバー側から商品の情報を取りに行きます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/products/[id]/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="result = await getProduct(id);" data-layer="screen">
+    <p class="stop-see"><code>id</code> は 1〜18 桁の数字だけ通す。外れたら <code>notFound()</code>（<span class="loc" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="notFound();"></span>）を呼び、API は呼ばない。通れば <code>getProduct(id)</code> を呼ぶ。Next.js 16 では <code>params</code> が Promise なので <code>await</code> する。</p>
+    <p class="stop-say">詳細のページも、サーバー側で動く Server Component です。getProduct を呼んで商品を取ります。id が数字でなければ、API は呼ばずに 404 の画面にします。</p>
+    <p class="stop-next">次へ: <code>getProduct</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getProduct" data-focus="encodeURIComponent(id)" data-layer="bff">
+    <p class="stop-see"><code>/products/{id}</code> を組み立て、<code>apiFetch</code>（一覧と同じ関数で、<code>X-Internal-Token</code> を付ける）から FastAPI を呼ぶ。BFF の Route Handler は通らない。</p>
+    <p class="stop-say">一覧と同じ仕組みです。BFF は通らずに、サーバーから FastAPI を直接呼びます。内部トークンは、apiFetch が付けています。</p>
+    <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘⇧F</kbd> で <code>/products/{product_id}</code> を検索し、<code>apps/api/app/routers/catalog.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::get_product" data-focus="catalog_service.get_product_detail(" data-layer="api">
+    <p class="stop-see"><code>@router.get("/products/{product_id}")</code>。ここがリクエスト先のバックエンド。<code>product_id</code> を受け取って、サービスを呼ぶだけの関数。</p>
+    <p class="stop-say">リクエスト先は、FastAPI の GET /api/v1/products/商品 ID です。コードでは、routers/catalog.py の get_product にあたります。</p>
+  </li>
+</ol>
+<div class="note fact"><p>事実（設計書との差）: 設計仕様書 4.3 の BFF 表には <code>/api/products/[id]</code> がありますが、実装にはありません。Server Component が直接呼ぶからです。同じ表の注記「BFF を経由しなくてよい」とは矛盾しません。</p></div>
+<h3 id="r02-back">③ バックエンドの処理</h3>
+<ol class="route" data-title="順路：内部トークンの検証から variants テーブルまで">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="dependencies=[Depends(verify_internal_token)]" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下のルーターすべてに、<code>verify_internal_token</code> が付く。<code>catalog.router</code> もここで登録している。</p>
+    <p class="stop-say">/api/v1 の下は、この 1 か所の指定で、すべて内部トークンの検証が必須になります。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="hmac.compare_digest(" data-layer="api">
+    <p class="stop-see"><code>X-Internal-Token</code> が無いか、一致しないと 401 <code>unauthorized</code>。</p>
+    <p class="stop-say">BFF 以外からの呼び出しは、ここで 401 になります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>get_product</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/catalog.py::get_product" data-focus="product_id: int" data-layer="api">
+    <p class="stop-see">パスの <code>product_id</code> を整数として検証する。整数でなければ 400 <code>validation_error</code>。業務上の判定はしない。</p>
+    <p class="stop-say">ルーターがやるのは、商品 ID が整数かどうかの確認だけです。あとはサービスに渡します。</p>
+    <p class="stop-next">次へ: <code>catalog_service.get_product_detail</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/catalog.py::get_product_detail" data-focus="raise AppError(404, &quot;not_found&quot;)" data-layer="service">
+    <p class="stop-see">公開商品が無ければ 404 <code>not_found</code>（非公開と存在しないは区別しない）。あれば variants・画像・関連商品を順に取る。<code>in_stock</code> は <code>stock &gt; 0</code> で決め、色とサイズは出てきた順のまま重複を除く。</p>
+    <p class="stop-say">サービスは、まず公開中の商品かどうかを見ます。非公開の商品と存在しない商品は、どちらも同じ 404 です。そのうえで、色・サイズごとの在庫の有無を、在庫が 0 より大きいかどうかで決めます。</p>
+    <p class="stop-next">次へ: <code>products_repo.get_published</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::get_published" data-focus="published_products().where(Product.id == product_id)" data-layer="repo">
+    <p class="stop-see"><code>published_products()</code>（公開条件つきの SELECT）に、ID の条件を足す。</p>
+    <p class="stop-say">公開の条件は、一覧と同じ published_filter です。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>list_variants</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::list_variants" data-focus="select(Variant).where(Variant.product_id == product_id).order_by(Variant.id)" data-layer="repo">
+    <p class="stop-see">その商品の variants（色・サイズ・在庫）を id 順に取る。</p>
+    <p class="stop-say">色とサイズの組み合わせごとの行を、ここで全部取ってきます。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>list_related</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/products.py::list_related" data-focus=".where(Product.id != product_id)" data-layer="repo">
+    <p class="stop-see">同じカテゴリの公開商品から、自分を除いて新着順に <code>RELATED_LIMIT</code>（4）件。</p>
+    <p class="stop-say">関連商品は、同じカテゴリの公開商品のうち、新着順に 4 件です。商品自身は除きます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/catalog.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>Variant</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/catalog.py::Variant" data-focus="stock: Mapped[int]" data-layer="db">
+    <p class="stop-see"><code>variants</code> テーブル（<code>color</code>・<code>size</code>・<code>sku</code>・<code>stock</code>）。<code>stock</code> は 0 以上の CHECK 付き。画像は <code>product_images</code>。</p>
+    <p class="stop-say">在庫の数は、variants の stock 列にあります。API が画面に返すのは、その数ではなく、0 より大きいかどうかだけです。</p>
+  </li>
+</ol>
+<p>この API で起きうる失敗と、返るステータス・code をまとめます。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>状態</th><th>ステータス・code</th><th>判定する場所</th><th>確認するテスト</th></tr></thead>
+<tbody>
+<tr><td>内部トークンが無い・違う</td><td>401 <code>unauthorized</code></td><td><span class="loc" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="raise AppError(401, &quot;unauthorized&quot;)"></span></td><td>IT-003-02（トークン無しで 401）、<a class="ref" data-ref="apps/api/tests/unit/test_ut_sec_02_error_handler.py::test_ut_sec_02_internal_token_missing_and_mismatch_401">UT-SEC-02</a></td></tr>
+<tr><td><code>product_id</code> が整数でない</td><td>400 <code>validation_error</code></td><td>ルーターのパス検証（画面側は、1〜18 桁の数字でなければ API を呼ばない）</td><td>—</td></tr>
+<tr><td>非公開の商品・存在しない商品</td><td>404 <code>not_found</code>（2 つを区別しない）</td><td><span class="loc" data-ref="apps/api/app/services/catalog.py::get_product_detail" data-focus="raise AppError(404, &quot;not_found&quot;)"></span></td><td>IT-003-02</td></tr>
+<tr><td>DB の障害など想定外</td><td>500 <code>internal_error</code>（固定文言）</td><td>例外ハンドラ</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="r02-response">④ 応答から表示まで</h3>
+<ol class="route" data-title="順路 A：応答から商品詳細のページ表示まで">
+  <li class="stop" data-ref="apps/api/app/schemas/catalog.py::ProductDetailOut" data-focus="variants: list[VariantOut]" data-layer="api">
+    <p class="stop-see">応答は id・name・description・material・price_incl_tax・images・colors・sizes・variants・related。<code>VariantOut</code> は variant_id・color・size・<code>in_stock</code>（真偽）で、残りの数は含まない。</p>
+    <p class="stop-say">FastAPI が返す形は、この Pydantic のクラスで決まります。在庫は、あるかないかの真偽値だけです。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/products/[id]/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="if (result.status === 404) notFound();" data-layer="screen">
+    <p class="stop-see">404 は <code>notFound()</code>（404 の画面）。それ以外の非 2xx は、ステータスと code をログに出して、「商品情報を読み込めませんでした」の <code>LoadError</code> にする。接続できないとき（<code>UpstreamUnavailableError</code>）も同じ <code>LoadError</code>。</p>
+    <p class="stop-say">取得できなかったときは、404 なら 404 の画面を出します。それ以外は「読み込めませんでした」の表示です。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進み、<code>PurchasePanel</code> を呼ぶ行を見る</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="&lt;PurchasePanel" data-layer="screen">
+    <p class="stop-see">画像（複数枚は横スクロール）、名称、税込価格（<code>Price</code> に「（税込）」）を表示し、<code>PurchasePanel</code> に colors・sizes・variants を渡す。そのあとに、説明・素材・サイズの一覧と、関連商品（<code>ProductCard</code> を最大 4 件）が続く。</p>
+    <p class="stop-say">取れた商品の情報を、画面に並べます。色・サイズ・バリエーションの一覧は、購入操作を受け持つ PurchasePanel に渡します。</p>
+    <p class="stop-next">次へ: <code>PurchasePanel</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 B：色・サイズを選ぶと在庫の表示が変わる（画面の中だけ。API は呼ばない）">
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="const [color, setColor] = useState&lt;string | null&gt;(colors.length === 1 ? colors[0] : null);" data-layer="screen">
+    <p class="stop-see">色とサイズの選択は <code>useState</code> で持つ。1 種類しかない商品は、最初から選択済み。数量は 1〜10 のセレクト（<code>MAX_QUANTITY_PER_ITEM</code>）。</p>
+    <p class="stop-say">選んだ色とサイズは、ブラウザの中の state に持っています。色やサイズが 1 種類しかなければ、最初から選ばれた状態です。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>resolveVariant</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::resolveVariant" data-focus="return variants.find((v) =&gt; v.color === color &amp;&amp; v.size === size) ?? null;" data-layer="screen">
+    <p class="stop-see">純粋関数。色とサイズが両方選ばれ、その組み合わせが <code>variants</code> にあれば variant、無ければ <code>null</code>。</p>
+    <p class="stop-say">色とサイズの組み合わせから、バリエーションを 1 つ決める関数です。受け取った variants の中から探すだけなので、API は呼びません。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>PurchasePanel</code> に戻り、<code>outOfStock</code> の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="const outOfStock = selected &amp;&amp; (variant === null || !variant.in_stock);" data-layer="screen">
+    <p class="stop-see">在庫切れになるのは、「両方選択済み」で、組み合わせが無いか <code>in_stock</code> が false のとき。<code>canAdd</code> は、在庫ありで、処理中でないとき。</p>
+    <p class="stop-say">色とサイズを両方選んだあとで、その組み合わせが無いか、在庫が無ければ、在庫切れとして扱います。</p>
+    <p class="stop-next">次へ: 下の <code>stockLabel</code> の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="const stockLabel = !selected ?" data-layer="screen">
+    <p class="stop-see">表示は 3 通り。「色とサイズを選択してください」「在庫切れ」「在庫あり」。<code>aria-live="polite"</code>。追加ボタンは <code>disabled={!canAdd}</code> で、在庫切れならラベルも「在庫切れ」。</p>
+    <p class="stop-say">表示は、未選択、在庫切れ、在庫ありの 3 通りです。在庫切れのときは、追加ボタンを無効にして、ボタンの文言も「在庫切れ」に変えます。</p>
+    <p class="stop-next">次へ: 下のチップの行 <code>isCombinationOut(c, size)</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="isCombinationOut(c, size)" data-layer="screen">
+    <p class="stop-see">相手側（サイズ）が選択済みなら、その組み合わせが在庫切れになる色チップに、取り消し線を引き、「（在庫切れ）」を付けた <code>aria-label</code> を出す。サイズ側も同じ。</p>
+    <p class="stop-say">両方を選び終える前でも、在庫の無い組み合わせは、チップの取り消し線で分かるようにしてあります。</p>
+    <p class="stop-next">次へ: 同じ関数の最後、<code>data-testid="sticky-bar"</code> の固定バーへ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="data-testid=&quot;sticky-bar&quot;" data-layer="screen">
+    <p class="stop-see">375px 幅の下部固定バー。選択内容（色 / サイズ / 数量）と、価格 × 数量、追加ボタン。sm 以上では出ない。</p>
+    <p class="stop-say">スマホの幅では、画面の下にバーを固定で出します。スクロール中でも、カートに入れられます。</p>
+  </li>
+</ol>
+<p>失敗したときや、特別な状態のときの画面の出し分けをまとめます。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>場面</th><th>画面の表示</th><th>出す場所</th></tr></thead>
+<tbody>
+<tr><td>商品の取得に失敗（FastAPI 停止・非 2xx）</td><td>「商品情報を読み込めませんでした。時間をおいて再読み込みしてください。」</td><td><span class="loc" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="&lt;LoadError what=&quot;商品情報&quot; /&gt;"></span></td></tr>
+<tr><td>非公開・存在しない商品、id が数字でない</td><td>「ページが見つかりません」（404 の画面）</td><td><span class="loc" data-ref="apps/web/app/not-found.tsx::NotFound" data-focus="ページが見つかりません"></span></td></tr>
+<tr><td>色とサイズが未選択</td><td>「色とサイズを選択してください」。追加ボタンは無効</td><td><span class="loc" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="const stockLabel = !selected ?"></span></td></tr>
+<tr><td>選んだ組み合わせが在庫切れ</td><td>「在庫切れ」。追加ボタンは無効で、ラベルも「在庫切れ」</td><td><span class="loc" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel" data-focus="const outOfStock"></span></td></tr>
+<tr><td>画像が登録されていない</td><td>空の画像枠（<code>images</code> が空なら空文字 1 件で描く）</td><td><span class="loc" data-ref="apps/web/app/products/[id]/page.tsx::ProductDetailPage" data-focus="const images = product.images.length &gt; 0"></span></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="r02-test">⑤ テスト 1 本の説明</h3>
+<p><strong>推しのテスト</strong>　<span class="tid">UT-WEB-08</span><span class="req">F-007</span><span class="req">DS-SCR-003</span>　<span class="tstat pass">通過（ローカル・CI とも）</span></p>
+<p>テスト設計書 5.2 には、「在庫切れ表示：在庫 0 のバリエーション選択 → ボタン disabled、「在庫切れ」表示」と書かれています（区分は正常）。このテストが守るのは、在庫の無い色・サイズの組み合わせを選んだとき、追加ボタンが押せなくなり、理由が画面に出ることです。</p>
+<p>テストコード: <a class="ref" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56">ut-web-08.purchase-panel.test.tsx の「in_stock=false の組合せ（黒 / M）を選ぶと…」</a>（Vitest。TypeScript のテストはシンボルで引けないので、行範囲で参照しています）</p>
+<ol>
+<li><strong>準備</strong>: <code>renderPanel()</code> が、<code>ToastProvider</code> と <code>CartProvider</code>（Cookie 無し）の中に <code>PurchasePanel</code> を描画します。バリエーションは 4 つあり、黒/S・白/S・白/M は在庫あり、黒/M だけが <code>in_stock: false</code> です（テスト内のコメントに V-STOCK0 とあります）。</li>
+<li><strong>実行</strong>: 「色 黒」のボタンと「サイズ M」のボタンを続けて押します（<span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56" data-focus="/^サイズ M/"></span>）。</li>
+<li><strong>確認</strong>: ① 在庫の表示（<code>stock-status</code>）が「在庫切れ」になっていること。② パネル内と固定バーの 2 つの追加ボタンが、どちらも disabled で、文言も「在庫切れ」になっていること。③ 押した色・サイズのボタンの <code>aria-pressed</code> が true のままであること。</li>
+</ol>
+<p><strong>予備の 1 本</strong>　<span class="tid">IT-003-02</span>　<span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span>　<a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_003_02_unpublished_and_missing_are_404">test_it_003_02_unpublished_and_missing_are_404</a>。非公開の商品と存在しない ID（999999）が、どちらも 404 で、本文が <code>{"code": "not_found"}</code> であることを見ます。内部トークン無しは 401 です。API 側の在庫の有無（<code>in_stock</code>）は、<a class="ref" data-ref="apps/api/tests/integration/test_it_001_003_catalog.py::test_it_003_01_product_detail_variants_and_related">test_it_003_01_product_detail_variants_and_related</a> が確かめます。</p>
+<p><strong>画面側のテスト</strong>　詳細のページ（<code>ProductDetailPage</code>）には、専用のテストがありません。 <span class="tstat none">テストなし</span> 手動の記録は、ST-F005-01（詳細を開く）<span class="tstat manual">手動で合格（2026-09-18）</span>、ST-F005-02（色・サイズの切り替え）<span class="tstat manual">手動で合格（2026-09-18）</span>、ST-F005-03（375px の固定バー）<span class="tstat manual">手動で合格（2026-09-18）</span>、AT-03（在庫切れ）<span class="tstat manual">手動で合格（2026-09-18）</span> です。記録は <a class="ref" data-ref="docs/05_検収/ST-AT実施記録_正常系_20260918.md">ST-AT 実施記録（正常系）</a> にあります。</p>
+<h3 id="r02-compare">⑥ 仕様書との突き合わせ</h3>
+<p>UT-WEB-08 について、仕様書の記述とテストコードの値を並べて見ます。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>入力（在庫 0 のバリエーション）</td><td>在庫 0 のバリエーション選択（6 章のテストデータ V-STOCK0）</td><td><span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56" data-focus="/^サイズ M/"></span>。黒/M を <code>in_stock: false</code> と手書きしたスタブで、seed の V-STOCK0 そのものではない</td><td class="warn">要注意（スタブ）</td></tr>
+<tr><td>ボタン disabled</td><td>ボタン disabled</td><td><span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56" data-focus="toBeDisabled()"></span>（パネル内と固定バーの 2 つ）</td><td class="ok">一致</td></tr>
+<tr><td>「在庫切れ」表示</td><td>「在庫切れ」表示</td><td><span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56" data-focus="stock-status"></span>（表示）、<span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx#L44-56" data-focus="expect(b).toHaveTextContent"></span>（ボタンの文言）</td><td class="ok">一致</td></tr>
+<tr><td>仕様書に無い追加確認</td><td>記述なし</td><td>未選択時の文言（<span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx" data-focus="色とサイズを選択してください"></span>）、在庫ありに戻すと有効になること、数量が 1〜10 の 10 択であること</td><td class="ok">一致（仕様より広く確認）</td></tr>
+<tr><td>在庫の有無を決める側</td><td>6.5「選んだ色・サイズの在庫が 0 なら「在庫切れ」を表示」</td><td>この UT は、API が返す <code>in_stock</code> をそのまま使って表示するだけ。<code>stock &gt; 0</code> の判定は API 側にあり、IT-003-01 が <code>in_stock</code> の false を 1 件確認している</td><td class="ok">一致</td></tr>
+<tr><td>再入荷通知への誘導</td><td>6.5「再入荷通知の申込（P2）へ誘導する」</td><td>実装なし。画面にも導線は無く、テストも無い</td><td class="warn">要注意（P2 で未実装）</td></tr>
+<tr><td>375px の固定バーの位置</td><td>UT-WEB-07: 選択に追従。位置は AT-02／ST-F005-03 で確認</td><td><span class="loc" data-ref="apps/web/tests/ut-web-08.purchase-panel.test.tsx" data-focus="UT-WEB-07:"></span> が確認するのは内容の追従だけ。位置は手動</td><td class="ok">一致</td></tr>
+<tr><td>実行の場所（UT）</td><td>1.2: 「IT・UT は CI で実行」</td><td>CI の web-test は 228 件通過（この UT を含む）</td><td class="ok">一致</td></tr>
+<tr><td>実行の場所（予備の IT-003-02）</td><td>1.2: 「IT・UT は CI で実行」</td><td>CI の api-test は結合テスト 100 件を全件スキップ（ci.yml に <code>DATABASE_URL_TEST</code> が無い）</td><td class="ng">不一致</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn"><p>注意（既知の弱点 D3・C2）: API 側の在庫の有無（IT-003-01・IT-003-02）は、CI では検証されません。画面側は UT-WEB-08 が CI で動きますが、詳細のページ全体（<code>ProductDetailPage</code>）には自動テストが無く、手動の ST-F005 系だけです。</p></div>
+<h3 id="r02-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>在庫の残り数は画面に出さないのですか</summary>
+  <div class="qa-body">
+    <p>出していません。API の <code>VariantOut</code> にあるのは <code>in_stock</code>（在庫が 0 より大きいかどうか）だけで、残数は応答に含めない作りです。設計仕様書 6.5 も、求めているのは在庫の有無までです。残数が足りるかどうかは、カートに入れたあとで、カート画面の <code>stock_status</code>（insufficient）に出ます。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>表示したときは在庫ありだったのに、押したら売り切れていたらどうなりますか</summary>
+  <div class="qa-body">
+    <p>ページは <code>force-dynamic</code> で、毎回 API から取り直します。ただ、表示してから押すまでの間に在庫が変わることはあります。その場合は、追加の API が在庫をもう一度判定して、409 <code>out_of_stock</code> を返すので、「在庫切れのため追加できません」というトーストが出ます（3 章の順路）。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>非公開の商品の URL を直接開くとどうなりますか</summary>
+  <div class="qa-body">
+    <p>404 の画面になります。FastAPI が、非公開の商品と存在しない商品を区別せず、どちらにも同じ 404 <code>not_found</code> を返すからです。確認は、IT-003-02 と、手動の ST-F001-02 です。</p>
+  </div>
+</details>
+</section>

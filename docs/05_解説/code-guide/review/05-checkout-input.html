@@ -1,0 +1,375 @@
+<section id="r05" data-title="注文手続き（入力 → 確認画面へ）">
+<h2>5. 注文手続き（入力 → 確認画面へ）</h2>
+
+<p class="asked">「注文手続きの画面を説明してください」「『確認画面へ』を押すと何が起きますか」「prepare とは何ですか」「入力したお届け先はどこに置いていますか」「フォームの初期値がダミーなのはなぜですか」</p>
+
+<div class="script">
+<p class="script-title">30 秒版</p>
+<p>お届け先を入力して「確認画面へ」を押すと、ブラウザ側で入力を検査し、通れば POST /api/checkout/prepare を送ります。Next.js の BFF はこれを FastAPI の /api/v1/checkout/prepare に取り次ぎ、FastAPI がカートの中身から金額を計算して、冪等キーと一緒に返します。画面は応答と入力値を sessionStorage に保存して、確認画面へ移ります。お届け先はサーバーには保存しません。</p>
+</div>
+
+<div class="note warn"><p>未実装（画面には出ているが選べない）: 会員としての購入（P2）、店舗受け取り（P2）、クーポン（P3）。決済はスタブで、カード番号の入力欄はありません。<span class="tstat notimpl">未実装</span></p></div>
+
+<h3 id="r05-to-backend">② 画面からバックエンドへ</h3>
+
+<p>リクエストは 2 区間あります。ブラウザから BFF までが 1 本、BFF から FastAPI までがもう 1 本です。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>区間</th><th>メソッドとパス</th><th>主なヘッダー</th><th>本文</th></tr></thead>
+<tbody>
+<tr><td>ブラウザ → BFF</td><td>POST <code>/api/checkout/prepare</code></td><td><code>X-CSRF-Token</code>（Cookie <code>csrf_token</code> と一致が必要）。Cookie <code>cart_token</code> はブラウザが自動で付ける</td><td>なし</td></tr>
+<tr><td>BFF → FastAPI</td><td>POST <code>/api/v1/checkout/prepare</code></td><td><code>X-Internal-Token</code>、<code>X-Cart-Token</code>（Cookie から移す）、<code>X-Forwarded-For</code>（BFF が決めた利用者 IP）</td><td><code>{}</code>（空のオブジェクト）</td></tr>
+</tbody>
+</table>
+</div>
+
+<ol class="route" data-title="順路：注文手続きの画面から FastAPI への呼び出しまで">
+  <li class="stop" data-ref="apps/web/app/checkout/page.tsx::CheckoutPage" data-focus="&lt;CheckoutForm /&gt;" data-layer="screen">
+    <p class="stop-see">パンくずと <code>CheckoutForm</code> を並べるだけの Server Component。入力の処理はここには無い。</p>
+    <p class="stop-say">注文手続きのページです。パンくずとフォームを置くだけで、入力の処理はクライアントコンポーネントの CheckoutForm が受け持っています。</p>
+    <p class="stop-next">次へ: <code>CheckoutForm</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutForm" data-focus="useSessionItem(CHECKOUT_KEY)" data-layer="screen">
+    <p class="stop-see">外側の <code>CheckoutForm</code>。sessionStorage のキー <code>guapp.checkout</code> を読み、保存済みの入力があれば内側の <code>CheckoutFormInner</code> に渡す。ハイドレーションが終わるまでは保存済みの入力を渡さず（ダミー値のフォームのまま）、終わったら 1 回だけ作り直す。</p>
+    <p class="stop-say">外側の CheckoutForm は、前回の入力が sessionStorage に残っていれば読み出して、内側の CheckoutFormInner に渡します。確認画面から戻ってきたときに入力が消えないようにするためです。</p>
+    <p class="stop-next">次へ: 同じファイルの <code>CheckoutFormInner</code>（<kbd>⌘⇧O</kbd> で関数名を入力）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="...DEMO_CHECKOUT_FORM" data-layer="screen">
+    <p class="stop-see">入力値の初期化。<code>{ ...DEMO_CHECKOUT_FORM, ...(session?.form ?? {}) }</code> の順なので、保存済みの入力があればダミー値より優先される。</p>
+    <p class="stop-say">入力欄の初期値は、保存された入力があればそれ、無ければデモ用のダミー値です。講義用のサイトなので、本物の個人情報は入れさせたくありません。</p>
+    <p class="stop-next">次へ: <code>DEMO_CHECKOUT_FORM</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/demo-defaults.ts::DEMO_CHECKOUT_FORM" data-focus="デモ 太郎" data-layer="screen">
+    <p class="stop-see">架空の値（氏名「デモ 太郎」、メール <code>demo@example.com</code> など）。注意書きの文言 <code>DEMO_NOTICE_TITLE</code>・<code>DEMO_NOTICE_BODY</code> は同じファイルの下にあり、お届け先の見出しの直下に環境を問わず常時出る。</p>
+    <p class="stop-say">ダミー値はすべて架空です。メールアドレスは example.com で、注意書きも環境を問わず常に画面に出しています。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>validateCheckoutForm(values)</code> を検索し、<code>CheckoutForm.tsx</code> の結果を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx#L132-176" data-focus="const errs = validateCheckoutForm(values);" data-layer="screen">
+    <p class="stop-see"><code>onSubmit</code>。送信中なら何もしない。検査でエラーが出たら、赤字を表示して最初のエラー欄にフォーカスし、そこで処理を終える。</p>
+    <p class="stop-say">「確認画面へ」を押すと、まず入力を検査します。エラーがあれば赤字を出して、最初のエラー欄にフォーカスし、ここで止めます。</p>
+    <p class="stop-next">次へ: <code>validateCheckoutForm</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/checkout-validation.ts::validateCheckoutForm" data-focus="/^[0-9]{7}$/.test(postal)" data-layer="screen">
+    <p class="stop-see">氏名 50 文字以内、郵便番号 7 桁、電話 10〜11 桁、メールの形式、住所は結合後 200 文字以内。ハイフンと空白は <code>digitsOnly</code> が落としてから数える。FastAPI の <code>OrderCreateIn</code> と同じ規則。</p>
+    <p class="stop-say">検査の規則は、サーバー側の Pydantic と同じにしてあります。画面で先に赤字を出し、サーバーでも同じ規則でもう一度検査します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>CheckoutForm.tsx</code> に戻り、<code>onSubmit</code> の <code>prepareCheckout</code> を探す（<kbd>⌘⇧F</kbd> で <code>await prepareCheckout()</code> でも可）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx#L132-176" data-focus="const prepare = await prepareCheckout();" data-layer="screen">
+    <p class="stop-see">検査を通ったときだけ <code>prepareCheckout()</code> を呼ぶ。成功すると応答と入力値を保存して <code>/checkout/confirm</code> へ移る（④ で見る）。</p>
+    <p class="stop-say">検査を通ったら prepareCheckout を呼びます。確認画面に出す金額と、注文確定用の冪等キーを取りに行く呼び出しです。</p>
+    <p class="stop-next">次へ: <code>prepareCheckout</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::prepareCheckout" data-focus="/api/checkout/prepare" data-layer="screen">
+    <p class="stop-see">POST <code>/api/checkout/prepare</code>。本文なしで <code>post</code> を呼ぶだけの 1 行。</p>
+    <p class="stop-say">ブラウザが呼ぶのは、同じサイトの /api/checkout/prepare だけです。FastAPI のアドレスはブラウザには見えません。</p>
+    <p class="stop-next">次へ: <code>post</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="[CSRF_HEADER]: csrf" data-layer="screen">
+    <p class="stop-see"><code>ensureCsrfToken()</code> で Cookie <code>csrf_token</code> を読み（無ければ GET <code>/api/cart</code> で発行させる）、ヘッダー <code>X-CSRF-Token</code> に載せる。<code>credentials: "same-origin"</code>。失敗は <code>OrderApiError</code>（status と本文）で投げる。</p>
+    <p class="stop-say">POST なので CSRF トークンをヘッダーに載せます。トークンの検証は、このあと BFF で行います。</p>
+    <p class="stop-next">次へ: URL は文字列なので <kbd>F12</kbd> では飛べません。<kbd>⌘P</kbd> で <code>api/checkout/prepare/route</code> と入力して開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/checkout/prepare/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff">
+    <p class="stop-see">BFF の Route Handler。最初に CSRF を検証し、通らなければ 403 <code>forbidden</code> を返して FastAPI へは進まない。通れば <code>proxyOrderRequest</code> にパス <code>/checkout/prepare</code> を渡す。</p>
+    <p class="stop-say">BFF の Route Handler です。最初に CSRF を検証して、通らなければ 403 で止めます。通ったら、取り次ぎ関数に FastAPI 側のパス /checkout/prepare を渡します。</p>
+    <p class="stop-next">次へ: 検証の中身は <code>verifyCsrf</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf" data-focus="isCsrfValid(cookieValue, headerValue)" data-layer="bff">
+    <p class="stop-see">Cookie の値とヘッダーの値を <code>isCsrfValid</code> で比べる（Double Submit Cookie。両方あり、43 文字の形で、一致するときだけ通す）。不一致は 403 <code>{"code":"forbidden"}</code>。</p>
+    <p class="stop-say">Cookie とヘッダーの値が一致したときだけ通します。別のサイトからの送信では、この 2 つを揃えられません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>prepare/route.ts</code> に戻り、<code>proxyOrderRequest</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="[FORWARDED_FOR_HEADER]: clientIp(request)" data-layer="bff">
+    <p class="stop-see">Cookie <code>cart_token</code> を <code>X-Cart-Token</code> に載せ、<code>X-Forwarded-For</code> に <code>clientIp</code> が決めた利用者 IP を載せる（利用者が送ってきた値は転送しない）。メソッドは POST、本文は <code>{}</code>、待ち時間は 15 秒。</p>
+    <p class="stop-say">カートのトークンと利用者の IP をヘッダーに載せて、FastAPI を呼びます。利用者が付けた X-Forwarded-For は信用せず、BFF が決めた値だけを送ります。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="X-Internal-Token" data-layer="bff">
+    <p class="stop-see">URL は <code>API_BASE_URL</code> ＋ <code>/api/v1</code> ＋ パスで、結果は POST <code>/api/v1/checkout/prepare</code>。ここで <code>X-Internal-Token</code> を付ける。接続できない・時間切れは <code>UpstreamUnavailableError</code> になり、BFF は 503 <code>upstream_unavailable</code> を返す。</p>
+    <p class="stop-say">ここで内部トークンを付けて、FastAPI の POST /api/v1/checkout/prepare を呼びます。ここから先がバックエンドです。</p>
+    <p class="stop-next">次へ（③）: パスは文字列なので <kbd>F12</kbd> では飛べません。<kbd>⌘⇧F</kbd> で <code>verify_internal_token</code> を検索し、<code>main.py</code> の結果を開く</p>
+  </li>
+</ol>
+
+<h3 id="r05-backend">③ バックエンドの処理</h3>
+
+<p>prepare は読み取りだけで、DB には何も書きません。カートの状態を確かめ、金額を計算し、冪等キーを作って返します。</p>
+
+<ol class="route" data-title="順路：FastAPI の prepare から金額計算まで">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="Depends(verify_internal_token)" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下の全ルーターに <code>verify_internal_token</code> が掛かる。続けて <code>checkout.router</code>・<code>orders.router</code> を登録している。health だけは外（<code>create_app</code> 側）。</p>
+    <p class="stop-say">FastAPI は、/api/v1 配下のすべてのルーターに内部トークンの検証を付けています。BFF 以外からは入れません。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="raise AppError(401" data-layer="api">
+    <p class="stop-see">期待値が未設定、ヘッダーが無い、または不一致なら 401 <code>unauthorized</code>。比較は <code>hmac.compare_digest</code>。設定漏れのときは全リクエストを拒否する側に倒している。</p>
+    <p class="stop-say">内部トークンが無い、または違うときは 401 です。環境変数を設定し忘れたときも、すべて拒否します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/checkout.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/checkout.py::prepare" data-focus="return await checkout_service.prepare(session, x_cart_token)" data-layer="api">
+    <p class="stop-see"><code>prefix="/checkout"</code> と <code>"/prepare"</code> で POST <code>/api/v1/checkout/prepare</code>。ヘッダー <code>X-Cart-Token</code> を受けてサービスに渡すだけ。<code>response_model=PrepareOut</code>。</p>
+    <p class="stop-say">ルーターは薄く作ってあり、カートのトークンを受け取ってサービスに渡すだけです。</p>
+    <p class="stop-next">次へ: <code>checkout_service.prepare</code> の <code>prepare</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/checkout.py::prepare" data-focus="if cart.status != CartStatus.active:" data-layer="service">
+    <p class="stop-see"><code>prepare</code> の順番。(1) カートを特定（404）(2) active でなければ 409 <code>already_ordered</code>（注文番号付き）(3) 設定を読む (4) 明細を取得、空なら 409 <code>empty_cart</code> (5) 在庫状態が <code>ok</code> でない明細があれば 409 <code>out_of_stock</code> (6) 金額計算 (7) 冪等キー発行。</p>
+    <p class="stop-say">prepare は、まずカートを特定します。注文済みのカート、空のカート、在庫のない明細は 409 で弾きます。そのあとで金額を計算し、冪等キーを付けて返します。</p>
+    <p class="stop-next">次へ: 1 つ目の <code>resolve_existing_cart</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/checkout.py::resolve_existing_cart" data-focus="raise AppError(404" data-layer="service">
+    <p class="stop-see">既存のカートだけを返す。トークンが無い・形が合わない・DB に無いなら 404 <code>not_found</code>。ここでは新しいカートは作らない（作るのは GET <code>/cart</code>）。</p>
+    <p class="stop-say">カートが見つからないときは 404 です。確認画面の段階で、新しいカートを勝手に作ることはしません。</p>
+    <p class="stop-next">次へ: <code>services/checkout.py</code> の <code>prepare</code> に戻り、<code>carts_repo.fetch_lines</code> の <code>fetch_lines</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::fetch_lines" data-focus=".join(Variant, Variant.id == CartItem.variant_id)" data-layer="repo">
+    <p class="stop-see">カート明細・バリエーション・商品を結合した 1 本の SELECT。単価は <code>products.price_incl_tax</code>（現在の値）、在庫は <code>variants.stock</code>、公開フラグ、最初の画像のパス。</p>
+    <p class="stop-say">明細は 1 回の SELECT でまとめて読みます。単価は、その時点の商品マスタの値を使います。</p>
+    <p class="stop-next">次へ: <code>services/checkout.py</code> に戻り、<code>calc_totals</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/pricing.py::calc_totals" data-focus="shipping_fee = calc_shipping_fee(" data-layer="service">
+    <p class="stop-see">明細 0 件は 409 <code>empty_cart</code>。小計 → 送料（小計が閾値以上なら 0、未満なら設定値）→ 合計 → 内税（合計 × 10 ÷ 110 の円未満切り捨て）。税率・送料・閾値は <code>system_settings</code> の値。</p>
+    <p class="stop-say">金額は、小計、送料、合計、内税の順にサーバーで計算します。送料の閾値と税率は、設定テーブルの値です。画面側では計算しません。</p>
+    <p class="stop-next">次へ: <code>services/checkout.py</code> に戻り、<code>new_idempotency_key</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/checkout.py::new_idempotency_key" data-focus="secrets.token_urlsafe(32)" data-layer="service">
+    <p class="stop-see">32 バイトの乱数を base64url にした 43 文字。<code>prepare</code> の時点では DB に保存しない。最初に保存されるのは、注文確定の <code>INSERT orders</code>（6 章）。</p>
+    <p class="stop-say">冪等キーは、ここで 43 文字の乱数として作るだけで、DB には保存しません。注文を確定するときに、初めて orders テーブルに入ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/cart.py</code> を開く（読むテーブルの確認）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/cart.py::Cart" data-focus="status: Mapped[CartStatus]" data-layer="db">
+    <p class="stop-see">prepare が読むのは <code>carts</code>（<code>status</code> は active か ordered）・<code>cart_items</code>・<code>variants</code>・<code>products</code>・<code>product_images</code>・<code>system_settings</code>。書き込みはしない。</p>
+    <p class="stop-say">prepare はこれらのテーブルを読むだけで、何も書き込みません。</p>
+    <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開く</p>
+  </li>
+</ol>
+
+<p>エラーの分岐は次のとおりです。<code>prepare</code> は本文を受け取らないので、400 は返りません。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>状態</th><th>code</th><th>条件</th><th>判定する場所</th><th>本文</th></tr></thead>
+<tbody>
+<tr><td>401</td><td><code>unauthorized</code></td><td><code>X-Internal-Token</code> が無い・不一致</td><td><a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a></td><td><code>{code}</code></td></tr>
+<tr><td>404</td><td><code>not_found</code></td><td><code>X-Cart-Token</code> が無い・形が不正・未知</td><td><a class="ref" data-ref="apps/api/app/services/checkout.py::resolve_existing_cart">resolve_existing_cart</a></td><td><code>{code}</code></td></tr>
+<tr><td>409</td><td><code>already_ordered</code></td><td>カートが active でない（注文済み）</td><td><a class="ref" data-ref="apps/api/app/services/checkout.py::prepare">prepare</a></td><td><code>{code, order_number}</code>（番号が見つからなければ null）</td></tr>
+<tr><td>409</td><td><code>empty_cart</code></td><td>明細が 0 件</td><td>prepare</td><td><code>{code}</code></td></tr>
+<tr><td>409</td><td><code>out_of_stock</code></td><td>在庫状態が ok でない明細がある（在庫不足・在庫 0・非公開）</td><td>prepare（<code>cart_rules.stock_status</code>）</td><td><code>{code, items:[variant_id…]}</code></td></tr>
+<tr><td>500</td><td><code>internal_error</code></td><td><code>system_settings</code> のキー欠落・型不正（設定の投入漏れ）。本文は固定文言 <code>{code, message}</code></td><td><a class="ref" data-ref="apps/api/app/services/settings.py::get_public_settings">get_public_settings</a></td><td><code>{code, message}</code></td></tr>
+<tr><td>403</td><td><code>forbidden</code></td><td>CSRF の Cookie とヘッダーが不一致（BFF）</td><td><a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a></td><td><code>{code}</code></td></tr>
+<tr><td>503</td><td><code>upstream_unavailable</code></td><td>FastAPI に接続できない・15 秒を超えた（BFF）</td><td>proxyOrderRequest</td><td><code>{code}</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r05-display">④ 応答から表示まで</h3>
+
+<ol class="route" data-title="順路：応答から確認画面の表示まで">
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::PrepareOut" data-focus="idempotency_key: str = Field(" data-layer="api">
+    <p class="stop-see">応答の形（Pydantic の <code>PrepareOut</code>）。<code>idempotency_key</code>・<code>items</code>・<code>subtotal</code>・<code>shipping_fee</code>・<code>total</code>・<code>tax_included</code>・<code>tax_rate</code>（<code>"0.10"</code> の文字列）・<code>free_shipping_threshold</code>。<code>cart_id</code> は含まない。</p>
+    <p class="stop-say">FastAPI は、明細、小計、送料、合計、内税、税率、送料無料の閾値、冪等キーを返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="return Response.json(result.data, { status: result.status, headers });" data-layer="bff">
+    <p class="stop-see">成功は FastAPI の本文をそのまま返す（<code>Cache-Control: no-store</code>）。エラーは <code>result.error</code> を同じ status で返す。接続不可は 503、想定外の例外は 500。</p>
+    <p class="stop-say">成功のときは、FastAPI の応答をそのまま画面に返します。エラーのときは、整形したコードだけを返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/api.ts</code> を開き、<code>sanitizeErrorBody</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::sanitizeErrorBody" data-focus="ALLOWED_ERROR_DETAIL_KEYS.has(key)" data-layer="bff">
+    <p class="stop-see">エラー本文は <code>code</code> と、許可した詳細キー（<code>fields</code>・<code>items</code>・<code>amounts</code>・<code>order_number</code> など）だけを通す。SQL やスタックトレースが画面に出ないようにする整形。</p>
+    <p class="stop-say">エラーの本文は、コードと、あらかじめ許可した詳細だけを通します。内部の情報が画面に漏れないようにするためです。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="if (!res.ok) {" data-layer="screen">
+    <p class="stop-see">失敗（<code>!res.ok</code>）は <code>OrderApiError(status, 本文, Retry-After の秒数)</code> を throw。成功は <code>{ status, data }</code> を返し、<code>prepareCheckout</code> は <code>data</code> だけを返す。</p>
+    <p class="stop-say">クライアント関数は、成功なら応答の本文を返し、失敗なら status と本文を入れたエラーを投げます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/types.ts</code> を開き、<code>PrepareResponse</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/types.ts::PrepareResponse" data-focus="idempotency_key: string;" data-layer="screen">
+    <p class="stop-see">応答の TypeScript の型。FastAPI の <code>PrepareOut</code> を手で写してある（自動生成ではない）。</p>
+    <p class="stop-say">応答の型は、FastAPI の定義を見ながら手で合わせています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>CheckoutForm.tsx</code> に戻り、<code>saveCheckoutSession</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx#L132-176" data-focus="saveCheckoutSession({ form: values, prepare });" data-layer="screen">
+    <p class="stop-see">成功したら、入力値 <code>values</code> と応答 <code>prepare</code> を保存し、<code>router.push("/checkout/confirm")</code> で確認画面へ移る。</p>
+    <p class="stop-say">応答が返ったら、入力値と一緒に保存して、確認画面へ移ります。</p>
+    <p class="stop-next">次へ: <code>saveCheckoutSession</code> にカーソルを置いて <kbd>F12</kbd>、その中の <code>write</code> へもう一度 <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/checkout-session.ts::write" data-focus="s.setItem(key, JSON.stringify(value))" data-layer="screen">
+    <p class="stop-see"><code>sessionStorage</code> のキー <code>guapp.checkout</code> に JSON で保存。タブを閉じれば消える。localStorage にも、サーバーにも置かない。容量超過や無効化の例外は握りつぶす（復元できなければ /checkout に戻す）。</p>
+    <p class="stop-say">お届け先とメールは、タブを閉じれば消える sessionStorage にだけ置きます。サーバーに保存するのは、注文を確定したときです。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>app/checkout/confirm/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/checkout/confirm/page.tsx::CheckoutConfirmPage" data-focus="&lt;OrderConfirm imageBaseUrl={getImageBaseUrl()} /&gt;" data-layer="screen">
+    <p class="stop-see">確認画面のページ。画像の基準 URL だけサーバーから渡し、本体は <code>OrderConfirm</code>。</p>
+    <p class="stop-say">確認画面のページです。本体は OrderConfirm で、画像の基準 URL だけサーバーから渡しています。</p>
+    <p class="stop-next">次へ: <code>OrderConfirm</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="router.replace(" data-layer="screen">
+    <p class="stop-see">sessionStorage から入力値と <code>prepare</code> を復元して表示する。復元できない（URL を直接開いた・<code>prepare</code> を捨てた後）なら <code>/checkout</code> へ <code>replace</code>。冪等キーは hidden の input に入れ、画面には出さない。</p>
+    <p class="stop-say">確認画面は、保存した入力値と prepare の応答を復元して表示します。復元できないときは、注文手続きに戻します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>components/OrderSummary.tsx</code> を開き、<code>AmountSummary</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderSummary.tsx::AmountSummary" data-focus="うち消費税" data-layer="screen">
+    <p class="stop-see">小計・送料（0 円は「無料」）・合計・うち消費税を縦に並べる。値は <code>prepare</code> の値をそのまま表示し、画面では計算しない。</p>
+    <p class="stop-say">金額は、サーバーが計算した値をそのまま表示します。「うち消費税」も、サーバーが逆算した値です。</p>
+    <p class="stop-next">次へ（エラーのとき）: 下の順路へ</p>
+  </li>
+</ol>
+
+<ol class="route" data-title="順路：prepare が失敗したときの画面の出し分け">
+  <li class="stop" data-ref="apps/web/components/CheckoutForm.tsx#L146-175" data-focus="const route = routeOrderError(status, body);" data-layer="screen">
+    <p class="stop-see"><code>catch</code> で status と本文を取り出し、<code>routeOrderError</code> が返す <code>route.kind</code> で <code>switch</code>。どの分岐でも最後に <code>setSubmitting(false)</code> でボタンを戻す。</p>
+    <p class="stop-say">失敗したときは、status と本文を、戻し先を決める関数に渡します。戻し先の種類によって、トーストの出し方と遷移先が変わります。</p>
+    <p class="stop-next">次へ: <code>routeOrderError</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/order-errors.ts::routeOrderError" data-focus="status === 404" data-layer="screen">
+    <p class="stop-see">応答 → 戻し先の対応表（純粋関数）。404 と 409 の <code>out_of_stock</code>・<code>empty_cart</code> はカートへ、<code>already_ordered</code> は注文番号があれば完了画面へ、403・503・その他はその場に留まる。</p>
+    <p class="stop-say">戻し先は 1 つの関数にまとめてあります。在庫切れと空のカートはカートへ、注文済みは完了画面へ移します。</p>
+  </li>
+</ol>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>応答</th><th>戻し先（<code>route.kind</code>）</th><th>画面の動き</th></tr></thead>
+<tbody>
+<tr><td>404 <code>not_found</code></td><td>cart</td><td>トースト「カートの情報が無効になりました。もう一度カートからお進みください」→ <code>/cart</code></td></tr>
+<tr><td>409 <code>out_of_stock</code></td><td>cart</td><td>トースト「在庫切れの商品があります」→ <code>/cart?oos=variant_id,…</code>（該当明細を強調）</td></tr>
+<tr><td>409 <code>empty_cart</code></td><td>cart</td><td>トースト「カートに商品が入っていません」→ <code>/cart</code></td></tr>
+<tr><td>409 <code>already_ordered</code>（注文番号あり）</td><td>complete</td><td>入力の保存を消し、トースト「このカートはすでに注文済みです」→ <code>/orders/complete?n=番号</code>。番号なしならカートへ</td></tr>
+<tr><td>403 <code>forbidden</code></td><td>stay</td><td>その場に留まり、トースト「ページを再読み込みしてからもう一度お試しください」</td></tr>
+<tr><td>503・その他</td><td>stay</td><td>その場に留まり、トースト「サーバーに接続できません。時間をおいてお試しください」または「処理に失敗しました。時間をおいてお試しください」</td></tr>
+<tr><td>400 <code>validation_error</code></td><td>field_errors</td><td><code>mapServerFieldErrors</code> で入力欄の赤字にする分岐。prepare は本文を取らないので 400 は返らず、この分岐は 6 章の注文確定で使われる（コードを読んだ範囲の判断で、prepare で通るかは実行して確かめていない）</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r05-test">⑤ テスト 1 本の説明</h3>
+
+<p><strong>推し:</strong> <span class="tid">IT-021-01</span> <span class="req">F-013</span> <span class="tstat pass">✅ 通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span></p>
+
+<div class="table-wrap">
+<table>
+<tbody>
+<tr><th>仕様（テスト設計書 4 章）</th><td>IT-021-01 ／ DS-API-021 ／ 正常 ／ 「POST /checkout/prepare」→「明細・小計・送料・合計・内税・idempotency_key が返る。金額は DS-PRC-021 と一致」</td></tr>
+<tr><th>この仕様が守るもの</th><td>確認画面に出す金額と冪等キーを、サーバーが計算して決めること。画面では計算しないので、ここが崩れると確認画面の金額も壊れる。</td></tr>
+<tr><th>テストコード</th><td><a class="ref" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_01_amounts_match_pricing_and_key_is_43_chars">test_it_021_01_amounts_match_pricing_and_key_is_43_chars</a></td></tr>
+<tr><th>実行条件</th><td>MySQL（<code>guapp_test</code>）と seed が必要。環境変数 <code>DATABASE_URL_TEST</code> が無いと全件スキップする（CI の現状）。</td></tr>
+</tbody>
+</table>
+</div>
+
+<ol>
+<li><strong>準備:</strong> 新しいカートを作り、単価 1,990 円と 2,990 円の商品を 1 点ずつ入れる（<span class="loc" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_01_amounts_match_pricing_and_key_is_43_chars" data-focus="await oh.add_item(client, token, v2990, 1)"></span> まで）。</li>
+<li><strong>実行:</strong> 本物の FastAPI アプリに対して POST <code>/api/v1/checkout/prepare</code> を呼ぶ（ヘルパー <code>oh.prepare</code>）。</li>
+<li><strong>確認:</strong>
+  <ol>
+    <li>応答のキーが <code>PREPARE_KEYS</code> の 8 個ちょうどで、明細のキーも決まった 11 個（<span class="loc" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_01_amounts_match_pricing_and_key_is_43_chars" data-focus="assert set(body) == PREPARE_KEYS"></span>）。</li>
+    <li>冪等キーが正規表現で 43 文字の base64url に一致する。</li>
+    <li>金額が小計 4,980・送料 550・合計 5,530・内税 502 に一致する（<span class="loc" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_01_amounts_match_pricing_and_key_is_43_chars" data-focus="(4980, 550, 5530)"></span>）。<code>calc_totals</code> の結果との照合に加えて、期待値の数字も直接書いてある。</li>
+    <li>もう一度呼ぶと、金額は同じで冪等キーは別の値になる。</li>
+    <li>2,990 円をもう 1 点足して小計 7,970 円にすると送料が 0 になる。応答に <code>cart_id</code> は含まれない。</li>
+  </ol>
+</li>
+</ol>
+
+<p><strong>予備:</strong> <span class="tid">UT-VAL-01</span> ／ <a class="ref" data-ref="apps/api/tests/unit/test_ut_val_order_input.py::test_ut_val_01_postal_code_6_or_8_digits_rejected">test_ut_val_01_postal_code_6_or_8_digits_rejected</a> <span class="tstat pass">✅ 通過（ローカル・CI とも）</span></p>
+<p>仕様は「郵便番号 6 桁・8 桁（ハイフン付き 7 桁は可）、電話に英字、メールに @ 無し → 400 <code>validation_error</code>、fields に項目名と reason」。テストは <code>OrderCreateIn</code> に <code>100000</code>・<code>10000012</code>・<code>100-000</code>・<code>abcdefg</code> を渡して、どれも <code>ship_postal_code</code> だけが検証エラーになることを確かめる。画面側の検査（<code>validateCheckoutForm</code>）と同じ規則を、サーバー側で確かめるテスト。単体テストなので CI でも動く。</p>
+
+<h3 id="r05-compare">⑥ 仕様書との突き合わせ</h3>
+
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述（ID・該当箇所）</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr>
+<td>prepare の金額と冪等キー</td>
+<td><span class="tid">IT-021-01</span>（4 章）「金額は DS-PRC-021 と一致」</td>
+<td>小計 4,980・送料 550・合計 5,530・内税 502。7,970 円で送料 0（<a class="ref" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_01_amounts_match_pricing_and_key_is_43_chars">test_it_021_01…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>空カート・在庫切れの 409</td>
+<td><span class="tid">IT-021-02</span>（4 章）「空カート、在庫切れ明細を含むカート → 409」</td>
+<td><code>empty_cart</code>、在庫 1 に数量 2 で <code>out_of_stock</code> の items、公開を外した商品も <code>out_of_stock</code>（<a class="ref" data-ref="apps/api/tests/integration/test_it_021_checkout.py::test_it_021_02_empty_cart_and_out_of_stock_are_409">test_it_021_02_empty_cart…</a>）。仕様に無い 404 と <code>already_ordered</code> も別テストで確認</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>金額の計算規則</td>
+<td><span class="tid">UT-021-01</span>〜<span class="tid">05</span>（5.1 章）。例: 1,990×2 → 小計 3,980・送料 550・合計 4,530・内税 411</td>
+<td>4,989 → 550、4,990 → 0、4,991 → 0。<code>tax_rate</code> 0.08、float・bool・None などは <code>TypeError</code>（<a class="ref" data-ref="apps/api/tests/unit/test_ut_021_pricing.py">test_ut_021_pricing.py</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>入力形式（郵便番号・電話・メール）</td>
+<td><span class="tid">UT-VAL-01</span>（5.1 章）</td>
+<td>郵便番号 4 通りを拒否、ハイフン・空白は除去して可、電話の英字・メールの @ 無しを拒否（<a class="ref" data-ref="apps/api/tests/unit/test_ut_val_order_input.py::test_ut_val_01_postal_code_6_or_8_digits_rejected">test_ut_val_01_postal_code…</a>）。ルーター経由で 400 と fields の確認もある</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>入力の境界</td>
+<td><span class="tid">UT-VAL-02</span>（5.1 章）氏名 1・50・51 文字、住所 200・201、電話 9・12 桁</td>
+<td>氏名 1・50 可、51 不可。空白だけは不可。住所 200 可・201 不可。電話 9・12 桁不可、10・11 桁可（<a class="ref" data-ref="apps/api/tests/unit/test_ut_val_order_input.py::test_ut_val_02_name_51_rejected_and_blank_rejected">test_ut_val_02_name_51…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>確認画面の表示</td>
+<td><span class="tid">ST-F013-01</span>（3.1 章）明細・金額・配送先・メール・受け取り方法・支払い方法</td>
+<td>手動 <span class="tstat manual">🖐 2026-09-18 合格</span>。自動は <a class="ref" data-ref="apps/web/tests/ut-web-02-03.order-confirm.test.tsx#L105-125" data-focus="amount-summary">ut-web-02-03 の 1 本目</a>（<span class="tstat pass">✅ 通過</span>）が同じ項目を確認</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>必須・形式エラーの赤字</td>
+<td><span class="tid">ST-F013-02</span>（3.1 章）「400 <code>validation_error</code> の項目が画面で赤字表示され、確認画面へ進めない」</td>
+<td>手動 <span class="tstat manual">🖐 2026-09-24 合格</span>。画面操作で出る赤字は、サーバーの 400 ではなく <code>validateCheckoutForm</code> のもの。400 の項目を赤字にする経路（<code>mapServerFieldErrors</code>）は関数のテストだけで、フォームを送信して確かめる自動テストは無い（<a class="ref" data-ref="apps/web/tests/checkout-validation.test.ts">checkout-validation.test.ts</a>）</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>ダミー初期値・注意書き</td>
+<td>テスト設計書（P1 本編・P2 追補a・公開追補）に対応する ID が見当たらない。設計は DS-DEC-47</td>
+<td>4 本がある（<a class="ref" data-ref="apps/web/tests/checkout-form.demo-defaults.test.tsx">checkout-form.demo-defaults.test.tsx</a>）。API 側にも <code>test_demo_dec_47_dummy_shipping_values_pass_validation</code>。いずれも <span class="tstat pass">✅ 通過</span></td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>画面側の入力検査</td>
+<td>テスト設計書に Web 側の検証テストの ID が無い（UT-VAL は FastAPI 側だけ）</td>
+<td>14 本（<a class="ref" data-ref="apps/web/tests/checkout-validation.test.ts">checkout-validation.test.ts</a>）。<span class="tstat pass">✅ 通過</span></td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>IT を CI で回す</td>
+<td>1.2 章「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」</td>
+<td>CI の api は <code>200 passed, 100 skipped</code>。<code>ci.yml</code> に <code>DATABASE_URL_TEST</code> が無く、IT-021-01・02 を含む結合テスト 100 件が全件スキップ。ローカルは全件通過<span class="tstat ciskip">⏭ CI ではスキップ</span></td>
+<td class="ng">ng</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn"><p>コード解説書 9 章 D3 のとおり、結合テスト（IT-021-01・02 を含む 100 件）は CI で実行されていません。環境変数を 1 行足す修正は、今は入れていません。ローカルでは api 300 件・web 228 件のすべてが通っています（2026-10-03 15:47、手元の MySQL）。</p></div>
+
+<h3 id="r05-qa">詰まりそうな質問</h3>
+
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>なぜ prepare を別の API にしているのですか</summary>
+  <div class="qa-body">
+    <p>確認画面に出す金額を、画面ではなくサーバーで計算するためです。prepare が金額と冪等キーを返し、注文確定のときに、画面に出した金額をサーバーが再計算した値と照合します（6 章）。冪等キーは prepare のたびに新しく作るので、金額が変わった場合や決済に失敗した場合は、prepare を呼び直して新しいキーで注文し直せます。</p>
+    <div class="followup"><p class="followup-q">追撃: 冪等キーはいつ DB に入りますか</p><p>prepare の時点では入りません。注文確定の最初の INSERT（<code>orders.idempotency_key</code>、UNIQUE）で初めて保存されます。</p></div>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>お届け先をサーバーに保存せず sessionStorage に置くのはなぜですか</summary>
+  <div class="qa-body">
+    <p>注文を確定するまでは、注文の実体が無いためです。確認画面に渡すだけなので、タブを閉じれば消える sessionStorage にだけ置いていて、localStorage にもサーバーにも保存していません。サーバーに入るのは、注文確定で orders にコピーされるときです。</p>
+    <p>意見: sessionStorage は同じオリジンの JavaScript から読めます。XSS があれば読まれうる点は、この方式の弱みだと思います。氏名にスクリプトタグを入れても実行されないことは、手動の ST-SEC-05（2026-09-24 合格）で確認しています。コード全体を調べて XSS の経路が無いと確かめたわけではありません。</p>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>フォームのテストが少ないようですが</summary>
+  <div class="qa-body">
+    <p>CheckoutForm の自動テストは、ダミー初期値の 4 本と、検査関数の 14 本です。フォームを送信して prepare を呼び、確認画面へ移るところまでの自動テストは無く、手動の ST-F013-01・02 と AT-01 で確認しています（コード解説書 9 章 C2）。部品テストを足すのは P2 の中で行う予定です。</p>
+  </div>
+</details>
+</section>

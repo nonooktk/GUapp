@@ -1,0 +1,318 @@
+<section id="r00" data-title="この手引きの使い方">
+<h2>0. この手引きの使い方</h2>
+
+<p>コードレビュー当日に、VS Code を見ながら説明するための手引きです。レビュワーが機能を 1 つ指定したら、その機能の章を開き、書いてある順に IDE でコードをたどります。各章の停留所には <code>path:行</code> が出ているので、そのまま <kbd>⌘P</kbd> に貼って開けます。</p>
+<div class="note fact"><p>この章の数字と状態は 2026-10-03 時点です。基準にしたコミットは、ページ上部の「対象コミット」です。</p></div>
+
+<h3 id="r00-flow">レビューの進め方と、この手引きの章の並び</h3>
+<p>レビューは次の ①〜⑥ の順に進みます。各章（1〜10 章）の小見出しも、同じ順に並んでいます。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>順</th><th>レビューでやること</th><th>各章の小見出し</th></tr></thead>
+<tbody>
+<tr><td>①</td><td>レビュワーが機能を 1 つ指定する</td><td>この章の「機能 × テストの早見表」と「指定のされ方の言い換え表」で章を選ぶ。各章の冒頭は「指定のされ方と 30 秒版」</td></tr>
+<tr><td>②</td><td>指定された機能を Frontend のコードから説明し、リクエスト先のバックエンドを示すまで</td><td>② 画面からバックエンドへ</td></tr>
+<tr><td>③</td><td>対象のエンドポイントが、バックエンドでどう処理するか</td><td>③ バックエンドの処理（エラーの分岐つき）</td></tr>
+<tr><td>④</td><td>response として戻ってきたところから、Frontend に表示されるまで</td><td>④ 応答から表示まで</td></tr>
+<tr><td>⑤</td><td>対象の機能について、テストの仕様を 1 つ選び、そのテストコードが何を確認しているか</td><td>⑤ テスト 1 本の説明</td></tr>
+<tr><td>⑥</td><td>テストの条件がテスト仕様書どおりか、レビュワーと突き合わせる</td><td>⑥ 仕様書との突き合わせ。最後に「詰まりそうな質問」</td></tr>
+</tbody>
+</table>
+</div>
+<p>当日は次の順に動きます。</p>
+<ol>
+  <li>指定を聞く。</li>
+  <li>この章の早見表か言い換え表で、章を開く。</li>
+  <li>章の冒頭の「30 秒版」を言う。</li>
+  <li>順路（②③④）を IDE でたどる。停留所の「コピー」で <code>path:行</code> を取り、<kbd>⌘P</kbd> に貼る。</li>
+  <li>テスト 1 本（⑤）を説明する。</li>
+  <li>突き合わせ表（⑥）をレビュワーと見て、判定が緑（一致）でない行は、事実だけを言う。</li>
+</ol>
+
+<h3 id="r00-notyet">いま通っていないもの</h3>
+<p>先に正直に言えるよう、いま動いていないもの、テストが無いもの、未実装のものを並べます。テストと公開環境に関わるものは、解説書 第 9 章（<a href="GU_ECsite_コード解説.html#s09" target="_blank" rel="noopener noreferrer">既知の弱点と対処予定</a>）に、場所・原因・返し方がまとまっています。</p>
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>項目</th><th>状態</th><th>中身</th><th>触れる章</th></tr></thead>
+<tbody>
+<tr>
+  <td>結合テスト 100 件が CI で全件スキップ</td>
+  <td><span class="tstat ciskip">⏭ CI ではスキップ</span></td>
+  <td><span class="loc" data-ref=".github/workflows/ci.yml" data-focus="DATABASE_URL: mysql+asyncmy"></span> の <code>env</code> に <code>DATABASE_URL_TEST</code> が無い。結合テストの <span class="loc" data-ref="apps/api/tests/integration/conftest.py" data-focus="ENV_KEY = &quot;DATABASE_URL_TEST&quot;"></span> は、この変数が未設定だと全件スキップする。CI は <code>200 passed, 100 skipped</code>。ローカルでは 300 件すべて通過する。同時実行・在庫の取り合い・二重注文・CORS・スキーマの検証は結合テスト側にあるので、これらが壊れても CI は緑になる</td>
+  <td>全章の ⑤・⑥（IT を挙げるとき）。特に r06（二重注文・在庫）</td>
+</tr>
+<tr>
+  <td>画面側のコンポーネントに専用テストが無い</td>
+  <td><span class="tstat none">— テストなし</span></td>
+  <td><code>apps/web/tests</code> を <code>grep</code> して確認した（2026-10-03）。専用テストが無いのは <code>CartView</code>・<code>OrderComplete</code>・<code>ProductsGrid</code>・<code>ProductCard</code>・<code>OrderSummary</code>・<code>CategoryNav</code>・<code>Footer</code>・<code>Price</code>・<code>LoadError</code>。<code>ConfirmDialog</code> と <code>Toast</code> は単独のテストが無く、<code>OrderConfirm</code>・<code>PurchasePanel</code> などのテストの中で動くだけ。<code>CheckoutForm</code> は初期値と入力検査のテストだけで、送信とエラー分岐は未テスト。ページ本体（<code>app/**/page.tsx</code>）のテストも無い</td>
+  <td>r01（ProductsGrid）・r04（CartView）・r05（CheckoutForm）・r06（ConfirmDialog・Toast）・r07（OrderComplete）・r09（contents の 2 ページ）</td>
+</tr>
+<tr>
+  <td>BFF の <code>/api/products</code> のテストが無い</td>
+  <td><span class="tstat none">— テストなし</span></td>
+  <td><code>apps/web/tests</code> に <code>@/app/api/products/route</code> を読み込むテストは 0 件（<code>grep</code> で確認）。BFF 10 本のうち、テストがあるのは cart・cart/items・cart/items/[id]・checkout/prepare・orders・orders/[n]/lookup・search・search/suggest の 8 本で、無いのは <span class="loc" data-ref="apps/web/app/api/products/route.ts::GET" data-focus="apiFetch&lt;ProductListResponse&gt;"></span> と <code>/api/health</code></td>
+  <td>r01</td>
+</tr>
+<tr>
+  <td>会員の方（ログイン）・店舗受け取り</td>
+  <td><span class="tstat notimpl">未実装</span></td>
+  <td>注文手続きで選べない。画面は無効で、「P2 対応予定」のバッジが付く（<span class="loc" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="title=&quot;会員の方&quot;"></span>、<span class="loc" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutFormInner" data-focus="title=&quot;店舗受け取り&quot;"></span>）。購入はゲストだけ</td>
+  <td>r05</td>
+</tr>
+<tr>
+  <td>お気に入り・会員のアイコン、クーポン欄</td>
+  <td><span class="tstat notimpl">未実装</span></td>
+  <td>ヘッダーの「お気に入り」「会員」はリンク先が <code>#</code> のまま（<span class="loc" data-ref="apps/web/components/Header.tsx" data-focus="aria-label=&quot;お気に入り&quot;"></span>）。クーポンコードの欄は無効で「P3 で対応予定」と出る</td>
+  <td>r05</td>
+</tr>
+<tr>
+  <td>決済はスタブ</td>
+  <td><span class="tstat notimpl">スタブ</span></td>
+  <td><a class="ref" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter">StubPaymentAdapter</a> は、環境変数 <code>PAYMENT_STUB_RESULT</code>（ok か ng）の値をそのまま返すだけ。カード情報は扱わない</td>
+  <td>r06</td>
+</tr>
+<tr>
+  <td>メールはスタブ</td>
+  <td><span class="tstat notimpl">スタブ</span></td>
+  <td><a class="ref" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter">OutboxMailAdapter</a> はメールを送らず、<code>apps/api/.mail-outbox/</code> に注文番号のファイルとして書く。本文には宛先・氏名・住所・電話が平文で入る</td>
+  <td>r06・r07</td>
+</tr>
+<tr>
+  <td>公開環境で、注文照会のレート制限が全員で 1 つの枠になる</td>
+  <td><span class="tstat fail">❌ 設定漏れ（未修正）</span></td>
+  <td>web の <code>TRUSTED_PROXY_HOPS</code> の既定は 0。設計書は App Service 配下で 1 と決めているが、web のアプリ設定を投入する <span class="loc" data-ref="scripts/azure-deploy/02-settings.sh#L110-118" data-focus="&quot;name&quot;: &quot;APP_ENV&quot;"></span> の一覧に無い（2026-10-03 に確認）。0 のときは利用者の IP を使わず、送信元が全員 127.0.0.1 になるため、100 回/時の枠を全員で分け合う</td>
+  <td>r07</td>
+</tr>
+<tr>
+  <td>レート制限がワーカーごと</td>
+  <td><span class="tstat none">— 設計書で既知</span></td>
+  <td><a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a> はプロセス内のメモリで数える。api は <span class="loc" data-ref="scripts/azure-deploy/config.sh" data-focus="--workers 2"></span> で動くため、ワーカーごとに別々に数え、同じ IP でも 1 時間に最大 200 回まで通る</td>
+  <td>r07・r08</td>
+</tr>
+<tr>
+  <td>決済 NG の 2 段コミットで在庫が戻らない穴</td>
+  <td><span class="tstat none">— 設計書で既知</span></td>
+  <td>決済 NG は、先に注文を「決済失敗」で COMMIT し、そのあと別のトランザクションで在庫とカートを戻す（<span class="loc" data-ref="apps/api/app/services/orders.py::_confirm" data-focus="# 6-ng:"></span>）。その間にプロセスが落ちると、在庫が引かれたままになる</td>
+  <td>r06</td>
+</tr>
+<tr>
+  <td>main の必須チェックが gitleaks だけ</td>
+  <td><span class="tstat fail">❌ 未設定</span></td>
+  <td>GitHub の Ruleset で必須のステータスチェックは gitleaks だけで、api-test・web-test が落ちたままでもマージできる。これは解説書 第 9 章 D1 の記載（2026-09-29 に GitHub の設定を読んで確認した内容）によるもので、今回は GitHub を見ていない</td>
+  <td>全章</td>
+</tr>
+<tr>
+  <td>lint を CI で回していない</td>
+  <td><span class="tstat none">— 未実施</span></td>
+  <td><code>ci.yml</code> に ruff・eslint の実行が無く、<code>.pre-commit-config.yaml</code> にも無い（2026-10-03 に <code>grep</code> で確認）。手元で実行した結果は第 9 章 C4 に記載</td>
+  <td>全章</td>
+</tr>
+<tr>
+  <td>カバレッジ未計測</td>
+  <td><span class="tstat none">— 未計測</span></td>
+  <td><code>apps/api/pyproject.toml</code>・<code>apps/web/package.json</code>・<code>vitest.config.mts</code> のいずれにも、カバレッジの設定が無い（<code>grep</code> で確認）</td>
+  <td>全章</td>
+</tr>
+<tr>
+  <td>api の App Service にアクセス制限が無い</td>
+  <td><span class="tstat fail">❌ 設計と違う</span></td>
+  <td>設計書（本編 1 章、DS-DEC-27）は、api の App Service を web の送信 IP だけに許可する方針。<code>scripts/azure-deploy/</code> にその設定が無い。api の URL は公開されたままで、防御は内部トークンだけ。Azure 上の実際の設定は確認していない</td>
+  <td>r10</td>
+</tr>
+<tr>
+  <td>P2-a の手動テストの実施記録が無い</td>
+  <td><span class="tstat none">— 実施記録なし</span></td>
+  <td>AT-09〜12、ST-F003・F028・F030 系、ST-SEC-12〜14 は、<code>docs/05_検収/</code> に個別の実施記録が無い。公開環境の確認記録（2026-09-25）に、検索・お知らせ・Basic 認証・帯の確認が一部ある</td>
+  <td>r08・r09・r10</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-tests">テストの状態</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>対象</th><th>結果</th><th>いつ・どこで</th></tr></thead>
+<tbody>
+<tr><td>api（手元）</td><td><span class="tstat pass">✅ 通過（ローカル）</span> 300 件すべて通過（unit 200・integration 100）。失敗 0・スキップ 0</td><td>2026-10-03 15:47。ローカルの MySQL</td></tr>
+<tr><td>web（手元）</td><td><span class="tstat pass">✅ 通過（ローカル）</span> 228 件すべて通過。失敗 0・スキップ 0</td><td>2026-10-03 15:47</td></tr>
+<tr><td>api（CI の最新）</td><td><span class="tstat ciskip">⏭ CI ではスキップ</span> <code>200 passed, 100 skipped</code></td><td>GitHub Actions。結合テストの 100 件が全件スキップ</td></tr>
+<tr><td>web（CI の最新）</td><td><span class="tstat pass">✅ 通過（CI）</span> 228 件通過</td><td>GitHub Actions</td></tr>
+<tr><td>手動の受け入れテスト 8 件（AT-01〜08）</td><td><span class="tstat manual">🖐 手動で合格（2026-09-18）</span> 8 件とも合格</td><td>2026-09-18 に実施。AT-07 は初回に不合格で、2026-09-24 の再実施で合格。AT-08 も同日の再実施で合格。<code>docs/05_検収/ST-AT実施記録_正常系_20260918.md</code></td></tr>
+<tr><td>システムテスト 40 件（P1）</td><td><span class="tstat manual">🖐 手動で合格（2026-09-24）</span> 40 件とも合格</td><td>2026-09-18 に 18 件（正常系）、2026-09-24 に 22 件（異常・境界・セキュリティ）。<code>docs/05_検収/ST-AT実施記録_正常系_20260918.md</code>、<code>ST実施記録_異常境界_20260924.md</code></td></tr>
+<tr><td>公開環境の確認</td><td><span class="tstat manual">🖐 手動で合格（2026-09-25）</span> Basic 認証・帯・商品閲覧・検索・お知らせ・カート・注文確定 1 件など</td><td><code>docs/05_検収/公開環境_確認記録_20260925.md</code>（13 章）</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-legend">状態バッジの凡例</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>バッジ</th><th>意味</th></tr></thead>
+<tbody>
+<tr><td><span class="tstat pass">✅ 通過</span></td><td>自動テストが手元で通っている。unit と web のテストは CI でも実行される</td></tr>
+<tr><td><span class="tstat ciskip">⏭ CI ではスキップ</span></td><td>手元では通っているが、CI では実行されない（結合テスト）。integration のテストには「通過」とこのバッジを並べる</td></tr>
+<tr><td><span class="tstat fail">❌ 失敗</span></td><td>テストが失敗している、または直っていない不具合がある。いまテストの失敗は 0 件で、この手引きでは直っていない不具合・設定漏れに使う</td></tr>
+<tr><td><span class="tstat manual">🖐 手動で合格</span></td><td>手動のテストで合格した記録がある。日付を添える</td></tr>
+<tr><td><span class="tstat none">— テストなし</span></td><td>テスト設計書にあるのにテストコードが無い、またはテスト・実施記録が無い。設計書で受容した弱点や未実施の項目にも、ひとことを添えて使う</td></tr>
+<tr><td><span class="tstat notimpl">未実装</span></td><td>機能が作られていない。画面では無効になっている。スタブもこの色で、ひとことを添える</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-map">機能 × テストの早見表</h3>
+<p>行は機能、列は主な画面・BFF・FastAPI のエンドポイント・推しのテスト（自動）です。章の名前を押すと、その章へ移ります。「BFF なし」は、Server Component が FastAPI を直接呼ぶ機能です。</p>
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>機能（章）</th><th>主な画面</th><th>BFF</th><th>FastAPI のエンドポイント</th><th>推しのテスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr>
+  <td><a href="#r01">r01 商品一覧を表示する</a></td>
+  <td><a class="ref" data-ref="apps/web/components/ProductsGrid.tsx::ProductsGrid">ProductsGrid</a>、<code>app/products/page.tsx</code>、<code>app/page.tsx</code></td>
+  <td><code>GET /api/products</code>（もっと見る）。初回表示は BFF なし</td>
+  <td><code>GET /api/v1/products</code>（DS-API-002）、<code>GET /api/v1/categories</code></td>
+  <td><span class="tid">IT-001-01</span> <span class="tid">IT-002-01</span> <span class="tid">IT-002-02</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ CI スキップ</span> <span class="tstat none">— 画面・BFF のテストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r02">r02 商品詳細と色・サイズの選択</a></td>
+  <td><a class="ref" data-ref="apps/web/components/PurchasePanel.tsx::PurchasePanel">PurchasePanel</a>、<code>app/products/[id]/page.tsx</code></td>
+  <td>なし</td>
+  <td><code>GET /api/v1/products/{product_id}</code>（DS-API-003）</td>
+  <td><span class="tid">IT-003-01</span> <span class="tid">IT-003-02</span> <span class="tid">UT-WEB-08</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span></td>
+</tr>
+<tr>
+  <td><a href="#r03">r03 カートに入れる</a></td>
+  <td><code>PurchasePanel</code> → <a class="ref" data-ref="apps/web/lib/client/cart-api.ts::addCartItem">addCartItem</a></td>
+  <td><code>POST /api/cart/items</code></td>
+  <td><code>POST /api/v1/cart/items</code>（DS-API-011）</td>
+  <td><span class="tid">UT-011-01</span> <span class="tid">IT-011-01</span> <span class="tid">IT-011-03</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span></td>
+</tr>
+<tr>
+  <td><a href="#r04">r04 カートの数量変更と削除</a></td>
+  <td><a class="ref" data-ref="apps/web/components/CartView.tsx::CartView">CartView</a>、<code>app/cart/page.tsx</code></td>
+  <td><code>GET /api/cart</code>、<code>PATCH</code>・<code>DELETE /api/cart/items/{id}</code></td>
+  <td><code>GET /api/v1/cart</code>、<code>PATCH</code>・<code>DELETE /api/v1/cart/items/{item_id}</code>（DS-API-010・012・013）</td>
+  <td><span class="tid">IT-010-01</span> <span class="tid">IT-012-01</span> <span class="tid">UT-WEB-01</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span> <span class="tstat none">— CartView のテストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r05">r05 注文手続き（入力 → 確認画面へ）</a></td>
+  <td><a class="ref" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutForm">CheckoutForm</a>、<code>app/checkout/page.tsx</code></td>
+  <td><code>POST /api/checkout/prepare</code></td>
+  <td><code>POST /api/v1/checkout/prepare</code>（DS-API-021）</td>
+  <td><span class="tid">UT-021-02</span> <span class="tid">IT-021-01</span> <span class="tid">UT-VAL-01</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span> <span class="tstat none">— 送信・エラー分岐のテストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r06">r06 購入ボタンで注文を確定する</a></td>
+  <td><a class="ref" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm">OrderConfirm</a>、<code>app/checkout/confirm/page.tsx</code></td>
+  <td><code>POST /api/orders</code></td>
+  <td><code>POST /api/v1/orders</code>（DS-API-022）</td>
+  <td><span class="tid">IT-014-01</span> <span class="tid">UT-WEB-02</span> <span class="tid">UT-WEB-03</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span> <span class="tstat none">— ConfirmDialog・Toast は専用テストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r07">r07 注文完了画面と注文照会</a></td>
+  <td><a class="ref" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete">OrderComplete</a>、<code>app/orders/complete/page.tsx</code></td>
+  <td><code>POST /api/orders/{orderNumber}/lookup</code></td>
+  <td><code>POST /api/v1/orders/{order_number}/lookup</code>（DS-API-023）</td>
+  <td><span class="tid">IT-023-01</span> <span class="tid">IT-023-02</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ CI スキップ</span> <span class="tstat none">— OrderComplete のテストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r08">r08 商品検索とサジェスト</a></td>
+  <td><a class="ref" data-ref="apps/web/components/SearchBox.tsx::SearchBox">SearchBox</a>、<code>SearchResults</code>、<code>app/search/page.tsx</code></td>
+  <td><code>GET /api/search/suggest</code>、<code>GET /api/search</code>（もっと見る）。結果の初回表示は BFF なし</td>
+  <td><code>GET /api/v1/search/suggest</code>（DS-API-004a）、<code>GET /api/v1/search</code>（DS-API-004）</td>
+  <td><span class="tid">UT-SEARCH-05</span> <span class="tid">UT-SEARCH-04</span> <span class="tid">IT-004-08</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span></td>
+</tr>
+<tr>
+  <td><a href="#r09">r09 FAQ・お知らせ・静的ページ</a></td>
+  <td><a class="ref" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage">ContentDetailPage</a>、<code>ContentsPage</code>、<code>app/page.tsx</code> のお知らせ欄</td>
+  <td>なし</td>
+  <td><code>GET /api/v1/contents</code>（DS-API-005）、<code>GET /api/v1/contents/{slug}</code>（DS-API-006）</td>
+  <td><span class="tid">UT-CONTENT-02</span> <span class="tid">IT-005-02</span> <span class="tid">IT-006-04</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat ciskip">⏭ IT は CI スキップ</span> <span class="tstat none">— 画面のテストなし</span></td>
+</tr>
+<tr>
+  <td><a href="#r10">r10 Basic 認証と公開期間の帯</a></td>
+  <td><a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy</a>、<a class="ref" data-ref="apps/web/components/DemoPeriodBanner.tsx::DemoPeriodBanner">DemoPeriodBanner</a></td>
+  <td><code>proxy.ts</code> が全ページと <code>/api/*</code> を判定（FastAPI には届かない）</td>
+  <td>なし</td>
+  <td><span class="tid">UT-WEB-09</span> <span class="tid">UT-WEB-10</span> <span class="tid">ST-SEC-16</span>〜<span class="tid">18</span></td>
+  <td><span class="tstat pass">✅ 通過</span> <span class="tstat manual">🖐 手動で合格（2026-09-25）</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-asked">指定のされ方の言い換え表</h3>
+<p>レビュワーが言いそうな表現と、近い章です。この演習の機能名と違う言い方をされたときに引きます。</p>
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>レビュワーが言いそうな表現</th><th>近い章</th><th>ひとこと</th></tr></thead>
+<tbody>
+<tr><td>「POS を読み込んで商品を表示する機能」</td><td><a href="#r01">r01 商品一覧を表示する</a></td><td>この演習に POS の連携は無い。商品は MySQL の seed を FastAPI が返す（<code>GET /api/v1/products</code>）</td></tr>
+<tr><td>「購入ボタンを押す」「注文を確定する」</td><td><a href="#r06">r06 購入ボタンで注文を確定する</a></td><td>確認画面の「注文を確定する」とダイアログの「確定する」</td></tr>
+<tr><td>「カートに入れるボタン」「カートに追加」</td><td><a href="#r03">r03 カートに入れる</a></td><td>購入パネルの追加ボタン。色とサイズを選ぶまでは無効</td></tr>
+<tr><td>「商品をクリックして詳細を見る」</td><td><a href="#r02">r02 商品詳細と色・サイズの選択</a></td><td>色・サイズの選択と、在庫の表示も含む</td></tr>
+<tr><td>「カテゴリで絞り込む」「性別で絞る」</td><td><a href="#r01">r01</a></td><td><code>/products?gender=…&amp;category=…</code></td></tr>
+<tr><td>「もっと見る」「ページング」</td><td><a href="#r01">r01</a>（一覧）、<a href="#r08">r08</a>（検索結果）</td><td>どちらも 24 件ずつ。BFF を通る</td></tr>
+<tr><td>「在庫を確認する」「在庫切れの表示」</td><td><a href="#r02">r02</a>（表示）、<a href="#r06">r06</a>（確定時の引き当て）</td><td>在庫 0 の色・サイズを選ぶと、ボタンが無効になる。確定時は条件付き更新で守る</td></tr>
+<tr><td>「数量を変える」「カートから削除」</td><td><a href="#r04">r04 カートの数量変更と削除</a></td><td>明細は 10 点、カート全体は 50 点まで</td></tr>
+<tr><td>「送料・合計の計算」「税の計算」</td><td><a href="#r05">r05</a>（金額の計算）、<a href="#r04">r04</a>（カートの小計）</td><td>金額は API が計算する（prepare）。画面は表示するだけ</td></tr>
+<tr><td>「入力チェック」「バリデーション」</td><td><a href="#r05">r05 注文手続き（入力 → 確認画面へ）</a></td><td>画面側の検査と、API の検査の 2 段</td></tr>
+<tr><td>「確認画面」「注文内容の確認」</td><td><a href="#r05">r05</a>（金額の取得）→ <a href="#r06">r06</a>（表示と確定）</td><td>確認画面の中身は <code>sessionStorage</code> に保存した prepare の応答</td></tr>
+<tr><td>「二重注文を防ぐ」「連打したら」</td><td><a href="#r06">r06 購入ボタンで注文を確定する</a></td><td>画面は送信中はボタンを無効にし、API は冪等キーの一意制約で防ぐ</td></tr>
+<tr><td>「決済」「決済に失敗したら」</td><td><a href="#r06">r06</a></td><td>決済はスタブ。失敗は <code>PAYMENT_STUB_RESULT=ng</code> で再現する</td></tr>
+<tr><td>「確認メールを送る」</td><td><a href="#r06">r06</a>、<a href="#r07">r07</a></td><td>メールはスタブ。<code>.mail-outbox/</code> にファイルを書く</td></tr>
+<tr><td>「注文完了画面」「注文を照会する」</td><td><a href="#r07">r07 注文完了画面と注文照会</a></td><td>注文番号とメールの一致で照会。100 回/時/IP のレート制限</td></tr>
+<tr><td>「ログイン」「会員登録」「マイページ」</td><td>未実装</td><td>注文手続きの「会員の方」は無効（P2 対応予定）。ゲスト購入だけ</td></tr>
+<tr><td>「商品を検索する」「検索ボックス」</td><td><a href="#r08">r08 商品検索とサジェスト</a></td><td>商品名・説明・カテゴリ名の部分一致</td></tr>
+<tr><td>「入力中に候補が出る」「オートコンプリート」</td><td><a href="#r08">r08</a></td><td>300 ミリ秒待って、最大 5 件</td></tr>
+<tr><td>「検索結果が 0 件のとき」</td><td><a href="#r08">r08</a></td><td>「もしかして」とおすすめカテゴリ</td></tr>
+<tr><td>「FAQ」「お知らせ」「利用規約」</td><td><a href="#r09">r09 FAQ・お知らせ・静的ページ</a></td><td>BFF なし。Server Component が FastAPI を直接呼ぶ</td></tr>
+<tr><td>「認証」「アクセス制限」「サイトを守る仕組み」</td><td><a href="#r10">r10 Basic 認証と公開期間の帯</a></td><td>全ページにかかる。内部トークンと CSRF は解説書 第 4 章</td></tr>
+<tr><td>「Cookie」「匿名カート」「カートのトークン」</td><td><a href="#r03">r03</a>、<a href="#r04">r04</a></td><td>匿名カートトークンの Cookie（<code>cart_token</code>）。解説書 第 4 章も参照</td></tr>
+<tr><td>「管理画面」「商品を登録する」「在庫を更新する」</td><td>この演習には無い</td><td>管理画面は作っていない。解説書 第 8 章（<a href="GU_ECsite_コード解説.html#s08" target="_blank" rel="noopener noreferrer">まだ作っていないもの</a>）</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r00-keys">VS Code の操作の早見</h3>
+<p>Mac の VS Code の既定のキー割り当てです。手元に入っている VS Code 1.139.1 の既定の定義と照らして確認しました。キー割り当てを自分で変えている場合は、この表と合いません。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>操作</th><th>キー（Mac の既定）</th><th>使いどころ</th></tr></thead>
+<tbody>
+<tr><td>ファイルを開く</td><td><kbd>⌘P</kbd></td><td>ファイル名の一部を打つ。<code>path:行</code> を貼ると、その行で開く。停留所の「コピー」ボタンで <code>path:行</code> を取れる</td></tr>
+<tr><td>ファイル内の関数へ</td><td><kbd>⌘⇧O</kbd></td><td>同じファイル内で、関数名の一部を打って移動する</td></tr>
+<tr><td>ワークスペース全体で関数・クラスへ</td><td><kbd>⌘T</kbd></td><td>別ファイルの関数名だけ分かるとき。言語サーバー（Python・TypeScript）が動いているときに使える</td></tr>
+<tr><td>定義へ移動</td><td><kbd>F12</kbd></td><td>関数名にカーソルを置く。ノート PC では <kbd>Fn</kbd> を併用する設定のことがある</td></tr>
+<tr><td>参照を探す</td><td><kbd>⇧F12</kbd></td><td>呼び出し元の一覧を出す</td></tr>
+<tr><td>戻る・進む</td><td><kbd>⌃-</kbd>（進むは <kbd>⌃⇧-</kbd>）</td><td><kbd>F12</kbd> で飛んだあと、元の場所へ戻る。<kbd>⌥←</kbd> は既定では単語単位でカーソルを動かす操作で、戻る操作ではない</td></tr>
+<tr><td>全体検索</td><td><kbd>⌘⇧F</kbd></td><td>URL 文字列・テスト ID・文言を探す</td></tr>
+<tr><td>行へ移動</td><td><kbd>⌃G</kbd></td><td>行番号を入れる。<kbd>⌘G</kbd> は行へ移動ではなく「次を検索」。<kbd>⌘P</kbd> のあとに <code>:行</code> を続けても同じ</td></tr>
+</tbody>
+</table>
+</div>
+<p>VS Code は、リポジトリのルート（<code>GUapp</code>）のフォルダを開いておきます。<code>path:行</code> は、そのルートからの相対パスです。</p>
+
+<h3 id="r00-find">F12 で飛べない箇所の探し方</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>場面</th><th>やり方</th></tr></thead>
+<tbody>
+<tr><td>BFF から FastAPI へ</td><td>BFF が FastAPI を呼ぶ箇所は URL の文字列なので、<kbd>F12</kbd> では飛べない。<kbd>⌘⇧F</kbd> でパスを検索する。BFF の <code>apiFetch</code> が <code>/api/v1</code> を自動で付けるため、BFF のコードに書かれたパスは <code>/search/suggest</code> のように <code>/api/v1</code> が無い。FastAPI のデコレータ側も <code>@router.get("/search/suggest"</code> の形で、<code>/api/v1</code> は付いていない。<code>/api/v1/…</code> で検索すると、テストや設計書が先に出る</td></tr>
+<tr><td>FastAPI のルーターの登録</td><td><a class="ref" data-ref="apps/api/app/main.py::build_protected_router">build_protected_router</a> が、<code>/api/v1</code> の接頭辞を付けて、各ルーターを <code>include_router</code> で登録している。ルーターのファイルが分からないときは、ここを見る</td></tr>
+<tr><td>Server Component から FastAPI へ</td><td>BFF を通らない機能（商品詳細・結果ページ・contents）は、<code>lib/server/*.ts</code> の関数 → <code>apiFetch</code> の順に <kbd>F12</kbd> で進み、そのあとは上の「BFF から FastAPI へ」と同じ</td></tr>
+<tr><td>テストを探す</td><td>テスト ID で全文検索する。api のテストは、コメントに大文字（<code>UT-SEARCH-05</code>）、関数名に小文字とアンダースコア（<code>ut_search_05</code>）で出る。web のテストは、ファイル名（<code>ut-web-09</code>）に ID が入っている。<kbd>⌘⇧F</kbd> の検索欄の下にある「…」（検索の詳細を切り替える）で、検索対象のフォルダを <code>apps/api/tests</code> か <code>apps/web/tests</code> に絞れる</td></tr>
+<tr><td><kbd>F12</kbd> が効かない</td><td>言語サーバーがまだ起動していないことがある。<kbd>⌘T</kbd> で関数名を打つか、<kbd>⌘⇧F</kbd> で <code>def 関数名</code>・<code>function 関数名</code> を検索する</td></tr>
+</tbody>
+</table>
+</div>
+</section>

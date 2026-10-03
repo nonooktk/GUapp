@@ -1,0 +1,194 @@
+<section id="r08" data-title="商品検索とサジェスト">
+<h2>8. 商品検索とサジェスト</h2>
+
+<h3 id="r08-start">指定のされ方と 30 秒版</h3>
+<p class="asked">「商品を検索する機能」「検索ボックスに入力して候補を出す機能」「検索結果を表示する機能」「該当商品が 0 件のときの表示」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>ヘッダーの検索欄に入力すると、300 ミリ秒待ってから候補を取りに行き、Enter で検索結果ページに移ります。候補も検索結果も、Next.js から FastAPI の検索 API を呼んでいます。商品名・説明・カテゴリ名の部分一致で探して、公開商品だけを新着順に返します。0 件のときは、言い換え辞書の候補とおすすめカテゴリを添えます。全角半角やひらがなカタカナの違いは、データベースの照合順序に任せています。</p>
+</div>
+<div class="note fact"><p>検索 API にレート制限はありません。ADR-0003 で見送り、公開環境でも ADR-0004 の判断で実装していません。Basic 認証を知らない人は <code>/api/*</code> に届かない、という前提に立っています。</p></div>
+
+<h3 id="r08-s2">② 画面からバックエンドへ</h3>
+<p>経路は 2 本あります。入力中の候補は、BFF を経由します。結果ページの初回表示は、Server Component が BFF を通さず FastAPI を直接呼びます。まず候補の経路から見ます。</p>
+<ol class="route" data-title="順路：検索ボックスから候補 API 呼び出しまで">
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="scheduleSuggest(next)" data-layer="screen">
+    <p class="stop-see">入力欄の <code>onChange</code>。文字が変わるたびに <code>scheduleSuggest</code> を呼ぶ。</p>
+    <p class="stop-say">検索欄に文字を打つたびに、候補を取りに行く予約を入れ直します。</p>
+    <p class="stop-next">次へ: <code>scheduleSuggest</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="fetchSuggestions(term, controller.signal)" data-layer="screen">
+    <p class="stop-see"><code>setTimeout</code> の中。前の予約と前の通信を止め、300 ミリ秒（<code>DEBOUNCE_MS</code>）たってから <code>fetchSuggestions</code> を呼ぶ。</p>
+    <p class="stop-say">入力が 300 ミリ秒止まったときだけ呼びます。打っている途中の通信は中止します。候補が取れなくても、検索自体は Enter で続けられるので、エラーは無視しています。</p>
+    <p class="stop-next">次へ: <code>fetchSuggestions</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/search-api.ts::fetchSuggestions" data-focus="getJson&lt;SuggestResponse&gt;" data-layer="screen">
+    <p class="stop-see">ブラウザから <code>GET /api/search/suggest?q=…</code> を呼ぶ行。</p>
+    <p class="stop-say">ブラウザが話すのは Next.js だけです。FastAPI は直接呼びません。読み取りだけなので CSRF トークンは付けていません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/api/search/suggest/route.ts</code> を開く（URL 文字列なので F12 では飛べない）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/search/suggest/route.ts::GET" data-focus="apiFetch&lt;SuggestResponse&gt;" data-layer="bff">
+    <p class="stop-see">BFF の <code>GET</code>。<code>q</code> だけを FastAPI の <code>/search/suggest</code> に渡す。</p>
+    <p class="stop-say">Next.js が取り次ぎます。受け取るクエリは <code>q</code> だけです。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="reqHeaders.set(&quot;X-Internal-Token&quot;" data-layer="bff">
+    <p class="stop-see"><code>apiFetch</code>。内部トークンのヘッダを付けて FastAPI の <code>/api/v1</code> 配下を呼ぶ。接続できなければ 5 秒で <code>UpstreamUnavailableError</code>。</p>
+    <p class="stop-say">FastAPI を呼ぶときは、BFF が内部トークンを付けます。ブラウザには見えません。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>/search/suggest</code> を検索（コード側のパスには <code>/api/v1</code> が付いていない）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/search.py::suggest" data-focus="search_service.suggest_products" data-layer="api">
+    <p class="stop-see">FastAPI のルーター <code>suggest</code>（<code>GET /api/v1/search/suggest</code>、DS-API-004a）。サービスを呼ぶ行。</p>
+    <p class="stop-say">ここからがバックエンドで、リクエストの届く先です。ルーターは受け取って返すだけで、判断はサービスに任せています。</p>
+    <p class="stop-next">次へ: <code>suggest_products</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+</ol>
+<p>次は、Enter か候補の選択で結果ページへ移る経路です。結果ページの初回表示では、ブラウザではなく Next.js のサーバー側が FastAPI を直接呼びます（設計仕様書 P2 追補a 1 章）。</p>
+<ol class="route" data-title="順路：Enter から検索結果ページが API を呼ぶまで">
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="router.push(" data-layer="screen">
+    <p class="stop-see"><code>goToSearch</code>。空白を落とした検索語で <code>/search?q=…</code> へ移る。</p>
+    <p class="stop-say">Enter でも候補の選択でも、商品詳細ではなく検索結果ページに移ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/search/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/search/page.tsx::SearchPage" data-focus="getSearch({ q, page, per_page: 24 })" data-layer="screen">
+    <p class="stop-see">Server Component の <code>SearchPage</code>。<code>q</code> は 100 文字で切り、空白だけなら API を呼ばない。</p>
+    <p class="stop-say">結果ページは Next.js のサーバー側で FastAPI を呼びます。BFF を挟まないので、通信が 1 段少なくなります。</p>
+    <p class="stop-next">次へ: <code>getSearch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/search.ts::getSearch" data-focus="apiFetch&lt;SearchResponse&gt;" data-layer="bff">
+    <p class="stop-see"><code>getSearch</code>。<code>q・page・per_page</code> のクエリ文字列を作って <code>apiFetch</code> を呼ぶ。</p>
+    <p class="stop-say">候補のときと同じ <code>apiFetch</code> を使います。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/search&quot;</code> を検索（<code>routers/search.py</code> を開く）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/search.py::search" data-focus="search_service.search_products" data-layer="api">
+    <p class="stop-see">ルーター <code>search</code>（<code>GET /api/v1/search</code>、DS-API-004）。</p>
+    <p class="stop-say">ここが検索 API の入口です。検索語の長さの制約もここで掛けています。</p>
+    <p class="stop-next">次へ: <code>search_products</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+</ol>
+<p>「もっと見る」だけは BFF を通ります。<span class="loc" data-ref="apps/web/components/SearchResults.tsx::SearchResults" data-focus="fetchSearchPage(query, page + 1)"></span> から <span class="loc" data-ref="apps/web/app/api/search/route.ts::GET" data-focus="apiFetch&lt;SearchResponse&gt;"></span> へ進み、ページ番号だけを差し替えて同じ <code>/search</code> を呼びます。</p>
+
+<h3 id="r08-s3">③ バックエンドの処理</h3>
+<ol class="route" data-title="順路：検索語の整形から SQL まで">
+  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="term = _validate_query(q)" data-layer="service">
+    <p class="stop-see">サービス <code>search_products</code> の先頭。検索語を検査して整える。</p>
+    <p class="stop-say">最初に検索語を整えます。空なら 400 を返して、ここで終わります。</p>
+    <p class="stop-next">次へ: <code>_validate_query</code> から <code>normalize_search_term</code> へ <kbd>F12</kbd> を 2 回</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/search.py::normalize_search_term" data-focus="unicodedata.normalize(&quot;NFKC&quot;, term)" data-layer="service">
+    <p class="stop-see">前後の空白を落とし、NFKC 正規化、連続空白の整理、空チェック、100 文字の判定。</p>
+    <p class="stop-say">この正規化は、一致判定のためのものではありません。目的は、空白の整理と長さの判定、それから言い換え辞書を引くときの表記そろえです。一致の判定はデータベースの照合順序に任せています（DS-DEC-34）。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>repositories/search.py</code> の <code>build_match_condition</code> へ（別ファイル）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/search.py::build_match_condition" data-focus="Product.name.contains(term, autoescape=True)" data-layer="repo">
+    <p class="stop-see">商品名・説明・カテゴリ名の部分一致を OR でつなぐ条件。カテゴリ名は <code>product_categories</code> 経由のサブクエリ。</p>
+    <p class="stop-say"><code>%</code> と <code>_</code> は SQLAlchemy の autoescape に任せ、自前のエスケープは書いていません。SQL は文字列連結で作っていません。</p>
+    <p class="stop-next">次へ: <kbd>⇧F12</kbd> で呼び出し元（<code>search_published</code>）を見る</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/search.py::search_published" data-focus="summary_select().where(condition)" data-layer="repo">
+    <p class="stop-see">件数を数える SQL と、新着順で 1 ページ分を取る SQL。どちらも公開商品だけ（<code>published_filter</code>）。</p>
+    <p class="stop-say">公開商品に絞ったうえで、新着順に 24 件ずつ取ります。総件数は別の SQL で数えます。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>search_products</code> に戻り <code>total == 0</code> の分岐へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/search.py::search_products" data-focus="if total == 0:" data-layer="service">
+    <p class="stop-see">0 件のときだけ、類似キーワードとおすすめカテゴリを作る分岐。</p>
+    <p class="stop-say">0 件のときだけ 2 つを添えます。言い換え辞書の候補は、実際に 1 件以上ヒットするものだけを残します。おすすめカテゴリは、商品数の多い子カテゴリの上位 3 件です。</p>
+  </li>
+</ol>
+<p>サジェストは <span class="loc" data-ref="apps/api/app/services/search.py::suggest_products" data-focus="search_repo.suggest_names"></span> から <span class="loc" data-ref="apps/api/app/repositories/search.py::suggest_names" data-focus="Product.name.startswith(term, autoescape=True)"></span> へ進みます。同じ検査を通したあと、商品名の前方一致を id 順に最大 5 件取り、足りなければ部分一致で補います（<span class="loc" data-ref="apps/api/app/repositories/search.py::suggest_names" data-focus="remaining = limit - len(out)"></span>）。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>状況</th><th>どこで判定するか</th><th>応答</th><th>画面側の扱い</th></tr></thead>
+<tbody>
+<tr><td><code>q</code> が空文字、または 101 文字以上</td><td>ルーターの <code>Query(min_length, max_length)</code></td><td>400 <code>validation_error</code>（<code>fields</code> は <code>q</code>。空は <code>required</code>、長すぎは <code>too_long</code>）</td><td>入力欄は <code>maxLength=100</code>。結果ページも 100 文字で切るので、通常は出ない</td></tr>
+<tr><td><code>q</code> が空白だけ</td><td><code>normalize_search_term</code> が <code>EmptySearchTermError</code> → <code>AppError</code></td><td>400 <code>validation_error</code>（<code>reason</code> は <code>format</code>）</td><td>結果ページは <code>q.trim()</code> が空なら API を呼ばず「検索語を入力してください。」</td></tr>
+<tr><td>内部トークンが無い・違う</td><td><code>verify_internal_token</code></td><td>401 <code>unauthorized</code></td><td>BFF が必ず付けるので、通常は起きない</td></tr>
+<tr><td>FastAPI に接続できない（5 秒でタイムアウト）</td><td><code>apiFetch</code> が <code>UpstreamUnavailableError</code></td><td>BFF は 503 <code>upstream_unavailable</code></td><td>結果ページは「検索結果を読み込めませんでした」、候補は何も出さない</td></tr>
+<tr><td>DB の例外など</td><td>未捕捉例外のハンドラ</td><td>500 <code>internal_error</code>（固定文言。詳細はログだけ）</td><td>結果ページは読み込み失敗の表示</td></tr>
+<tr><td>該当が 0 件</td><td>エラーではない</td><td>200、<code>total</code> は 0。<code>similar_keywords</code>・<code>recommended_categories</code> が入る</td><td>「該当する商品が見つかりませんでした。」に続けて 2 つを表示</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r08-s4">④ 応答から表示まで</h3>
+<ol class="route" data-title="順路：応答が候補と結果ページに出るまで">
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="setItems(res.items)" data-layer="screen">
+    <p class="stop-see">候補の応答を受けたところ。<code>items</code> を state に入れ、1 件以上なら一覧を開く。</p>
+    <p class="stop-say">BFF から戻った候補を state に入れます。0 件なら一覧は開きません。</p>
+    <p class="stop-next">次へ: 同じファイルの下の <code>role="listbox"</code> へスクロール</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/SearchBox.tsx::SearchBox" data-focus="{open &amp;&amp; items.length &gt; 0 &amp;&amp; (" data-layer="screen">
+    <p class="stop-see">候補一覧（<code>role="listbox"</code>）の描画。各候補は <code>role="option"</code>。</p>
+    <p class="stop-say">候補は最大 5 件です。クリックすると、入力欄の blur より先に選択を確定させて、結果ページへ移ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/search/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/search/page.tsx::SearchPage" data-focus="&lt;SearchResults" data-layer="screen">
+    <p class="stop-see">結果ページで、見出し・件数のあとに <code>SearchResults</code> へ応答を渡す。</p>
+    <p class="stop-say">FastAPI の応答をそのまま、結果の一覧を描く部品に渡します。見出しには正規化後の検索語と件数を出します。</p>
+    <p class="stop-next">次へ: <code>SearchResults</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/SearchResults.tsx::SearchResults" data-focus="if (total === 0) {" data-layer="screen">
+    <p class="stop-see">0 件の分岐。「もしかして」（類似キーワード）と「おすすめのカテゴリ」。0 件でなければ下のグリッドと「もっと見る」。</p>
+    <p class="stop-say">0 件のときは、ほかの探し方を案内します。類似キーワードが空なら「もしかして」の見出し自体を出しません。検索語に HTML が入っていても、React の標準のエスケープで文字として表示されます。</p>
+  </li>
+</ol>
+
+<h3 id="r08-s5">⑤ テスト 1 本の説明</h3>
+<p>推しのテストは、サジェストの並び（前方一致が先、足りなければ部分一致で補う）を確かめる <span class="tid">UT-SEARCH-05</span> です。 <span class="tstat pass">✅ 通過（ローカル）</span> unit のため CI でも実行されます。</p>
+<ul>
+  <li>テスト: <a class="ref" data-ref="apps/api/tests/unit/test_ut_search_rules.py::test_ut_search_05_prefix_first_then_contains_fills_up_to_5">test_ut_search_05_prefix_first_then_contains_fills_up_to_5</a>（テスト設計書 P2 追補a 5.1）</li>
+  <li>前提: SQLite のインメモリ DB に、「パ」で始まる商品 3 件（パーカーA・パーカーB・パンツC）と、「パ」を途中に含むだけの商品 4 件を入れる。</li>
+  <li>操作: <span class="loc" data-ref="apps/api/tests/unit/test_ut_search_rules.py::test_ut_search_05_prefix_first_then_contains_fills_up_to_5" data-focus="suggest_names(session, term=&quot;パ&quot;, limit=5)"></span> を呼ぶ。</li>
+  <li>確認: <span class="loc" data-ref="apps/api/tests/unit/test_ut_search_rules.py::test_ut_search_05_prefix_first_then_contains_fills_up_to_5" data-focus="assert ids[:3] == [p1, p2, p3]"></span> で前方一致の 3 件が先頭、合計 5 件、重複なし、残り 2 件は部分一致の商品。</li>
+</ul>
+<p>実装側は <a class="ref" data-ref="apps/api/app/repositories/search.py::suggest_names">suggest_names</a> です。前方一致だけで 5 件に達する場合の結果は、<span class="tid">UT-SEARCH-05</span> の 2 本目（<code>test_ut_search_05_prefix_alone_reaching_limit_skips_contains</code>）が見ています。部分一致の SQL を発行しないこと自体は、確認していません。</p>
+<div class="note fact"><p>SQLite は MySQL の照合順序を再現しません。そのため、ひらがなで検索してカタカナの商品が見つかること、「ハンツ」で「パンツ」が見つかることは、このテストでは確かめられません。<span class="tid">IT-004-08</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_004_004a_search.py::test_it_004_08_dakuten_and_kana_type_are_absorbed_by_db_collation">test_it_004_08…</a>）が MySQL で確かめています。<span class="tstat pass">✅ 通過（ローカル）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span></p></div>
+
+<h3 id="r08-s6">⑥ 仕様書との突き合わせ</h3>
+<p>基準は <code>docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md</code>（以下「P2 追補a」）と、設計仕様書 P2 追補a です。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>確認する条件</th><th>仕様書</th><th>テスト・コードの実際</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>空白の整理 <span class="tid">UT-SEARCH-01</span></td><td>全角空白を含む前後・連続空白を整理する。表記変換の検証ではない</td><td>4 ケース（前後の全角空白、内部の全角空白、連続半角空白、前後の半角空白）で <code>normalize_search_term</code> を確認</td><td class="ok">一致</td></tr>
+<tr><td>長さの境界 <span class="tid">UT-SEARCH-03</span></td><td>正規化後の文字数で 100 は通り、101 はエラー。文字数が変わる全角文字のケースを 1 件</td><td>「あ」100／101 文字に加え、NFKC で 1 文字が 4 文字になるローマ数字で 25／26 文字を確認</td><td class="ok">一致</td></tr>
+<tr><td>LIKE のワイルドカード <span class="tid">UT-SEARCH-04</span></td><td>生成する SQL に <code>autoescape=True</code> 相当の <code>LIKE … ESCAPE</code> が入る</td><td><code>%</code>・<code>_</code> それぞれで、コンパイル結果に <code>ESCAPE '/'</code> と <code>50/%off</code>・<code>a/_b</code> があることを確認</td><td class="ok">一致</td></tr>
+<tr><td>サジェストの並び <span class="tid">UT-SEARCH-05</span></td><td>前方一致 3 件・部分一致 4 件（重複あり）で、前方 3 件が先頭、重複を除いた 2 件を補って 5 件</td><td>同じ構成のデータで先頭 3 件・合計 5 件・重複なしを確認（SQLite）</td><td class="ok">一致</td></tr>
+<tr><td>サジェスト：前方一致の優先 <span class="tid">IT-004a-01</span></td><td>入力語は「パ」。前方一致が部分一致より先頭に来る</td><td>入力語は「オ」で、前方一致 2 件だけが返り補充は空であることを確認。「先頭に来る」ことの確認は <span class="tid">UT-SEARCH-05</span> が受け持つ</td><td class="warn">入力語が違う</td></tr>
+<tr><td>全角半角・かな・濁点 <span class="tid">IT-004-08</span>・<span class="tid">ST-F003-07</span></td><td>DB 照合に任せる。「しゃつ」でシャツ系が、「ハンツ」でパンツ系 4 件が見つかる（既知の制限）</td><td>「しゃつ」は 1 件以上、「ハンツ」は seed のパンツ系 4 件と一致することを確認（MySQL）。画面に注意書きは出さない（仕様どおり）</td><td class="ok">一致</td></tr>
+<tr><td>ワイルドカードの文字扱い <span class="tid">IT-004-05</span></td><td><code>100%_off</code> などでエラーにならず、全件ヒットにもならない</td><td><code>100%_off</code>・<code>under_score</code>・<code>_</code>・<code>\</code> が 0 件、<code>%</code> はエラーにならないことを確認</td><td class="ok">一致</td></tr>
+<tr><td>0 件の代替導線 <span class="tid">IT-004-06</span></td><td><code>total=0</code>、類似キーワードは辞書にあり 1 件以上ヒットするものだけ、おすすめカテゴリは 3 件以内で件数の降順</td><td>「ｽﾆｰｶｰ」で確認。辞書候補ありのケース（<code>IT-004-06b</code>）と同数のタイブレーク（<span class="tid">IT-004-07</span>）も別に確認</td><td class="ok">一致</td></tr>
+<tr><td>1 ページの件数の上限</td><td>API は <code>per_page</code> 最大 48（P2 追補a 4.0・4.1）</td><td>API は最大 48。BFF（<code>app/api/search/route.ts</code>）と結果ページは 24 に丸めて呼ぶ</td><td class="warn">画面側は 24 止まり</td></tr>
+<tr><td>重複の除き方（DS-PRC-004 手順 3）</td><td><code>DISTINCT</code> で取得する</td><td>DISTINCT は付けていない。カテゴリ一致をサブクエリ（<code>IN</code>）で判定しており行が重ならない。MySQL は、SELECT に無い列での並べ替えと DISTINCT の併用を許さない（エラー 3065。コメントに記載）</td><td class="warn">設計と実装の差（コメントで申し送り済み）</td></tr>
+<tr><td>候補・結果ページ・もっと見るの画面テスト</td><td>AT-09・AT-10、ST-F003-01〜06 を手順書で実施（P2 追補a 7 章）</td><td>画面の自動テストはある（<code>search-box</code>・<code>search-panel</code>・<code>search-results</code>・<code>it-bff-004.search-route</code>）。手順書の実施記録は <code>docs/05_検収/</code> に無い（公開環境の確認記録に <code>/search?q=ジャケット</code> が 200 という記載のみ）</td><td class="warn">実施記録なし</td></tr>
+<tr><td>レート制限</td><td>P2-a では設計しない（ADR-0003）</td><td>実装なし</td><td class="ok">一致</td></tr>
+</tbody>
+</table>
+</div>
+<p>状態: <span class="tstat pass">✅ 通過（ローカル）</span> UT-SEARCH-01〜07 は unit なので CI でも実行。IT-004・IT-004a は <span class="tstat pass">✅ 通過（ローカル）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span>。AT-09・AT-10 と手順書の ST は <span class="tstat none">— 実施記録なし</span>。</p>
+
+<h3 id="r08-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>「ハンツ」で「パンツ」が出るのは不具合ではないですか</summary>
+  <div class="qa-body">
+    <p>不具合ではなく、設計で受け入れた制限です（DS-DEC-34、案 A）。MySQL 8.4 の照合順序 <code>utf8mb4_0900_ai_ci</code> が、全角半角・ひらがなカタカナ・清音濁音・半濁音を同じ文字として扱います。ローカルの MySQL 8.4 で実際に比較して確認しています（設計仕様書 P2 追補a 4.4）。</p>
+    <p>アプリ側で二重に正規化すると、DB 任せの利点が消えます。そのため DB の挙動をそのまま仕様にしました。ST-F003-07 と <span class="tid">IT-004-08</span> で確認しています。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: 区別したい場合はどうしますか</p>
+      <p>意見: 照合順序を変えるか、検索の列だけ別の照合順序にする方法が考えられます。他の画面の検索結果にも影響するので、変える前に影響範囲を見る必要があると思います。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>検索 API にレート制限が無いのはなぜですか</summary>
+  <div class="qa-body">
+    <p>ADR-0003 で見送りました。理由は、公開商品を読むだけで個人情報を含まないこと、当時は Azure に公開しておらず実害が出る状況ではなかったこと、置き場所の設計がスコープを圧迫することです。</p>
+    <p>公開するにあたり ADR-0004（2026-09-25）で再判断し、見送りを維持しました。サイト全体に Basic 認証をかけていて、知らない人は <code>/api/*</code> に届かないためです。この判断は Basic 認証がかかっている間に限ります。認証を外す一般公開に切り替えるなら、ADR-0003 をもう一度見直します。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: 入れるなら、どこにどう入れますか</p>
+      <p>意見: 既存の <code>SlidingWindowRateLimiter</code> は注文照会用で、プロセス内のメモリで数えます。API は <code>--workers 2</code> で動くので、そのまま流用するとワーカーごとに別々に数えることになります。共有ストアに置くか、App Service 側の制限に任せる案を比べることになると思います。</p>
+    </div>
+  </div>
+</details>
+</section>

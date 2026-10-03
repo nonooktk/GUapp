@@ -116,6 +116,9 @@ code{font-family:var(--mono);font-size:.9em;background:var(--navy-soft);padding:
 .code-view code,pre.code code{background:none;padding:0;font-size:inherit;border-radius:0}
 .code-view .cl{display:block;padding-right:20px}
 .code-view .cl::before{content:attr(data-n);display:inline-block;position:sticky;left:0;box-sizing:content-box;width:3.6em;padding:0 .9em 0 .6em;margin-right:14px;text-align:right;color:var(--code-gutter);background:var(--code-gutter-bg);border-right:1px solid var(--line);user-select:none;-webkit-user-select:none}
+/* 注目行（data-focus で指定した行）。色だけに頼らず、左の太線と行番号の太字でも示す */
+.code-view .cl.is-focus{background:var(--amber-soft)}
+.code-view .cl.is-focus::before{color:var(--amber);font-weight:700;box-shadow:inset 4px 0 0 var(--amber)}
 .drawer-empty{padding:16px;color:var(--ink-3)}
 @media (max-width:719.98px){
   .drawer{top:auto;left:0;right:0;bottom:0;width:100%;height:88vh;height:88dvh;border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -10px 30px var(--shadow);transform:translateY(100%)}
@@ -274,10 +277,10 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-si
 <p>このページは、IDE でリポジトリを開いたときに見えるフォルダとファイルに、「何が入っているか・どんな中身か・いつ開くか」を付けた地図です。対象は git 管理下の 356 ファイル・104 フォルダで、コードの詳細は解説書の各章とコード参照に移れます。</p><p>ルート直下のファイルは設定が中心で、アプリのコードは <code>apps/</code> の下にあります。<code>README.md</code> は引き継ぎメモ、<code>.env.example</code> は環境変数の見本（値は空）、<code>docker-compose.yml</code> は Mac 用のローカル MySQL、<code>.gitignore</code>・<code>.pre-commit-config.yaml</code>・<code>.gitleaks.toml</code>・<code>.gitleaksignore</code>・<code>.secrets.baseline</code> は秘密を commit させないための検査、<code>.gitattributes</code> は改行コードの設定です。<code>.claude/</code> は AI エージェント向けの設定です。</p>
   </div>
   <div class="meta">
-    <span>ツリー <a href="https://github.com/nonooktk/GUapp/commit/6129e65509af415f47868cdbebbe7411dd86110d" target="_blank" rel="noopener noreferrer"><code>6129e65</code></a></span>
+    <span>ツリー <a href="https://github.com/nonooktk/GUapp/commit/24a6537bda9d3c85505d1fab023b49eb01c71550" target="_blank" rel="noopener noreferrer"><code>24a6537</code></a></span>
     <span>コード <a href="https://github.com/nonooktk/GUapp/commit/2b9c87d8e9356d6064d9a315d032bebd7f9fb3a8" target="_blank" rel="noopener noreferrer"><code>2b9c87d</code></a></span>
-    <span>フォルダ 104 ／ ファイル 356</span>
-    <span>作成 2026-09-29</span>
+    <span>フォルダ 106 ／ ファイル 363</span>
+    <span>作成 2026-10-03</span>
     <span>リポジトリ <a href="https://github.com/nonooktk/GUapp" target="_blank" rel="noopener noreferrer">nonooktk/GUapp</a></span>
   </div>
   <div class="head-actions">
@@ -328,7 +331,7 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-si
 <li><strong>秘匿値は git に無い。</strong><code>.env</code> 系は git 管理外で、環境変数の名前は <code>.env.example</code> と各 README の表で分かる。CI やテストのダミー値には行内に <code>pragma: allowlist secret</code> が付いており、<code>git grep -n "allowlist secret"</code> で一覧できる。</li>
 </ol></div></section>
 
-<footer>GUapp リポジトリ地図 ／ ツリー 6129e65・コード 2b9c87d ／ 作成 2026-09-29。コードのプレビューは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
+<footer>GUapp リポジトリ地図 ／ ツリー 24a6537・コード 2b9c87d ／ 作成 2026-10-03。コードのプレビューは対象コミットの内容で、GitHub のパーマリンクと一致します。</footer>
 </main>
 </div>
 <div class="visually-hidden" id="live" aria-live="polite"></div>
@@ -1456,16 +1459,16 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-si
 "start":1,
 "end":30,
 "lang":"markdown",
-"url":"https://github.com/nonooktk/GUapp/blob/6129e65509af415f47868cdbebbe7411dd86110d/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/README.md#L1-L30",
+"url":"https://github.com/nonooktk/GUapp/blob/24a6537bda9d3c85505d1fab023b49eb01c71550/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/README.md#L1-L30",
 "note":""
 },
 "docs/05_解説/code-guide/build.py::resolve_ref":{
 "path":"docs/05_解説/code-guide/build.py",
 "symbol":"resolve_ref",
-"start":467,
-"end":510,
+"start":489,
+"end":521,
 "lang":"python",
-"url":"https://github.com/nonooktk/GUapp/blob/6129e65509af415f47868cdbebbe7411dd86110d/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/build.py#L467-L510",
+"url":"https://github.com/nonooktk/GUapp/blob/24a6537bda9d3c85505d1fab023b49eb01c71550/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/build.py#L489-L521",
 "note":""
 },
 "scripts/azure-db/README.md#L1-30":{
@@ -3299,9 +3302,9 @@ footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);font-si
 "path":"docs/05_解説/code-guide/README.md",
 "symbol":"",
 "start":1,
-"end":196,
+"end":312,
 "lang":"markdown",
-"url":"https://github.com/nonooktk/GUapp/blob/6129e65509af415f47868cdbebbe7411dd86110d/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/README.md#L1-L196",
+"url":"https://github.com/nonooktk/GUapp/blob/24a6537bda9d3c85505d1fab023b49eb01c71550/docs/05_%E8%A7%A3%E8%AA%AC/code-guide/README.md#L1-L312",
 "note":""
 },
 "scripts/azure-db/README.md":{
@@ -7451,11 +7454,13 @@ Azure MySQL 接続（ADR-0002）に関するテストのみ、ID を `IT-AZ-nn` 
 `az resource list -g rg-001-gen12 --query "[?contains(name,'guapp')]"` の結果（要約）:
 
 | リソース種別 | 名前 | リージョン | SKU／Kind |</script>
-<script type="text/plain" data-snippet="docs/05_解説/code-guide/README.md#L1-30"># GUapp コード解説書 組み立て基盤
+<script type="text/plain" data-snippet="docs/05_解説/code-guide/README.md#L1-30"># GUapp コード解説書・リポジトリ地図 組み立て基盤
 
 コードレビュー中に読む解説書 HTML を、`content/*.html`（本文）と `template.html`（外枠・CSS・JS）から組み立てる。
 本文中のコード参照（関数名など）をクリックすると、右からドロワーが開き、該当コードを行番号付きで表示する。
 フロー図の各ステップも同様にクリックでコードが開く。「流れを再生」で処理の順番がアニメーションで追える。
+
+同じ `build.py` に `--map` を付けると、IDE の横に開いて「どこに何があって、どういう中身か」を引く **リポジトリ地図**（`GU_ECsite_リポジトリ地図.html`）を組み立てる。作り方は末尾の「リポジトリ地図」を参照。
 
 ## 使い方
 
@@ -7474,13 +7479,11 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 - `content/00-` で始まるファイルは `--include-sample` のときだけ取り込む
 - 標準出力に章数・参照数・ユニークスニペット数・出力サイズを出す
 - 検証用の追加オプション: `--content-dir <dir>`（本文ディレクトリの差し替え）、`--out <path>`（出力先の差し替え）
+- `--map-url <URL>`: ヘッダーの「リポジトリ地図」リンクの向き先（既定: `GU_ECsite_リポジトリ地図.html`。同じフォルダ）
 
 本番の再ビルド前には `git fetch origin` で `origin/main` を最新にする。
 
-## ファイル構成
-
-| パス | 役割 |
-|---|---|</script>
+## ファイル構成</script>
 <script type="text/plain" data-snippet="docs/05_解説/code-guide/build.py::resolve_ref">def resolve_ref(ref: str, git: GitFiles) -> dict:
     """data-ref 文字列をスニペット辞書に解決する。失敗時は ResolveError。"""
     symbol = ""
@@ -7513,18 +7516,7 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
             lines = git.lines(path)
             start, end = 1, max(len(lines), 1)
 
-    code = "\n".join(lines[start - 1 : end])
-    url = f"{REPO_URL}/blob/{git.sha}/{quote(path, safe='/')}#L{start}-L{end}"
-    return {
-        "path": path,
-        "symbol": symbol,
-        "start": start,
-        "end": end,
-        "lang": lang_of(path),
-        "code": code,
-        "url": url,
-        "note": "",
-    }</script>
+    return make_snippet(path, symbol, start, end, lines, git)</script>
 <script type="text/plain" data-snippet="scripts/azure-db/README.md#L1-30"># scripts/azure-db — 講義の Azure MySQL への接続
 
 講義サーバー `gen12-mysql-pos.mysql.database.azure.com`（スキーマ `guapp_nonooktk`）に、
@@ -32007,11 +31999,13 @@ Node のモジュール解決はどれだけ深い場所からでも最終的に
 - 未実施: `/checkout/confirm` のブラウザ目視確認（13.1 節参照。統括判断で追加実施可）。
 - `99-delete.sh`・`90-stop.sh`・seed は実行していない。リソースは稼働中のため課金は継続している。
 - レビュワーへの URL・資格情報の共有はまだ行っていない（本報告後、統括の判断で共有可否を決める）。</script>
-<script type="text/plain" data-snippet="docs/05_解説/code-guide/README.md"># GUapp コード解説書 組み立て基盤
+<script type="text/plain" data-snippet="docs/05_解説/code-guide/README.md"># GUapp コード解説書・リポジトリ地図 組み立て基盤
 
 コードレビュー中に読む解説書 HTML を、`content/*.html`（本文）と `template.html`（外枠・CSS・JS）から組み立てる。
 本文中のコード参照（関数名など）をクリックすると、右からドロワーが開き、該当コードを行番号付きで表示する。
 フロー図の各ステップも同様にクリックでコードが開く。「流れを再生」で処理の順番がアニメーションで追える。
+
+同じ `build.py` に `--map` を付けると、IDE の横に開いて「どこに何があって、どういう中身か」を引く **リポジトリ地図**（`GU_ECsite_リポジトリ地図.html`）を組み立てる。作り方は末尾の「リポジトリ地図」を参照。
 
 ## 使い方
 
@@ -32030,6 +32024,7 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 - `content/00-` で始まるファイルは `--include-sample` のときだけ取り込む
 - 標準出力に章数・参照数・ユニークスニペット数・出力サイズを出す
 - 検証用の追加オプション: `--content-dir <dir>`（本文ディレクトリの差し替え）、`--out <path>`（出力先の差し替え）
+- `--map-url <URL>`: ヘッダーの「リポジトリ地図」リンクの向き先（既定: `GU_ECsite_リポジトリ地図.html`。同じフォルダ）
 
 本番の再ビルド前には `git fetch origin` で `origin/main` を最新にする。
 
@@ -32038,9 +32033,15 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 | パス | 役割 |
 |---|---|
 | `build.py` | 組み立てスクリプト（標準ライブラリのみ） |
-| `template.html` | 外枠。CSS・JS・ヘッダー・目次。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` |
+| `template.html` | 解説書の外枠。CSS・JS・ヘッダー・目次。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{SNIPPETS_CODE}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` `{{MAP_URL}}`。`{{PARTIAL:名前}}` は `partials/名前` の中身に置き換わる |
 | `content/NN-*.html` | 本文。ファイル名順に連結される |
 | `content/00-sample.html` | 動作確認用サンプル（`--include-sample` のときだけ入る） |
+| `partials/tokens.css` | デザイントークン（ライト/ダークの色・フォント）。解説書と地図で共通 |
+| `partials/drawer.css` | コード参照チップ・コードドロワー・hljs の CSS。共通 |
+| `partials/drawer.js` | コード参照・ドロワー・ホバーのツールチップ・hljs 読み込みの JS。共通（IIFE の中に差し込む） |
+| `map/template-map.html` | 地図の外枠（CSS・JS・ヘッダー・全体図・ツリー・説明パネル） |
+| `map/descriptions.json` | 地図の説明データの本番ファイル（説明担当が作る） |
+| `map/sample.json` | 地図の動作確認用サンプル（最終出力には使わない） |
 
 ## 本文の書き方の約束
 
@@ -32202,7 +32203,114 @@ Tab で移動し、Enter / Space で開ける（JS が `role="button" tabindex="
 - TS の `Class.method`、Python 以外のシンボル指定（yaml 等）は未対応。必要なら `#L` 範囲で指定する
 - `type X = {...} | {...}` のように波括弧の後ろへ式が続く型は、最初の `}` の行で終わる
 - スニペットは全件を HTML に埋め込むため、参照数が増えるとファイルが大きくなる
-- ヘッダーの目次（狭い画面）は全 h3 を展開する。広い画面のサイドバーは現在の章の h3 だけを展開する</script>
+- スニペットのコード本体は JSON に入れず、`<script type="text/plain" data-snippet="キー">` に原文のまま置く（JSON 化すると `"` が `\"` になるなど原文と違う文字列になり、detect-secrets がリポジトリ本体では出ない誤検知を出したため）。メタ情報（path・行範囲・URL など）は `<script type="application/json" id="snippets-data">` に 1 件ずつ改行して置く。script の終端・HTML コメントに見える並びだけ、`<` の直後にバックスラッシュを 1 つ足して埋め込み、ページ側で 1 つ引いて戻す（可逆）
+- ヘッダーの目次（狭い画面）は全 h3 を展開する。広い画面のサイドバーは現在の章の h3 だけを展開する
+
+---
+
+# リポジトリ地図（`--map`）
+
+IDE のエクスプローラーの横に開いて、フォルダ・ファイルごとに「何が入っていて、どう使うか」を引く HTML。ツリーは git から自動で作り、説明は JSON から差し込む。
+
+## 作り方
+
+```bash
+python3 docs/05_解説/code-guide/build.py --map                                   # 説明は map/descriptions.json
+python3 docs/05_解説/code-guide/build.py --map --map-data docs/05_解説/code-guide/map/sample.json   # 動作確認（サンプル）
+python3 docs/05_解説/code-guide/build.py --map --check                          # 出力を書かず検証だけ
+python3 docs/05_解説/code-guide/build.py --map --tree-commit HEAD --commit <SHA> --guide-url GU_ECsite_コード解説.html
+```
+
+- 出力: `docs/05_解説/GU_ECsite_リポジトリ地図.html`（`--out` で差し替え可）
+- `--map-data`: 説明データ。既定 `code-guide/map/descriptions.json`。無ければ exit 1
+- `--tree-commit`: ツリー（フォルダ・ファイルの一覧）を作るコミット。既定 `HEAD`（ブランチ上の新しい docs も載る）。`git ls-tree -r -l -z` で読むので日本語パスもそのまま扱える
+- `--commit`: プレビュー（中身）を読むコミット。既定 `origin/main` の完全 SHA。`--tree-commit` にだけあって `--commit` に無いファイルは、ツリー側のコミットから読む（GitHub リンクもそのコミットを指す）
+- `--guide-url`: 地図から解説書へのリンク先。既定 `GU_ECsite_コード解説.html`（同じフォルダ）。説明データの `guide` の値（例 `s03-cart`）は `<guide-url>#<id>` のリンクになる
+- `--content-dir`: `guide` の id を照合する解説書の本文（既定 `code-guide/content`）
+- 解説書のヘッダーから地図へ飛ぶリンクは、解説書のビルドで `--map-url` を指定する。地図を先に作り、解説書も作り直すと両方向でつながる
+
+標準出力に、ディレクトリ数・ファイル数・説明ありのディレクトリ数/全体・プレビュー埋め込みファイル数・出力サイズを出す。
+
+## 検証
+
+| 種別 | 内容 | 結果 |
+|---|---|---|
+| エラー | `nodes` のキーがツリーに無い | exit 1（一覧を表示） |
+| エラー | `blocks` の `path` がツリーに無い、`layer` が値の候補外、`id` が空・重複 | exit 1 |
+| エラー | `ref`（`nodes[*].ref` と、説明 HTML 中の `data-ref`）が解決できない | exit 1 |
+| 警告 | 説明の無いディレクトリ（件数つき。`collapse` 配下は除く） | exit 0 |
+| 警告 | `key_files` がツリーに無い、`collapse` の `path` がディレクトリに無い、`guide` の id が解説書に無い | exit 0 |
+
+パスは前後の `/` と先頭の `./` を取って解釈する。
+
+## descriptions.json のスキーマ
+
+```json
+{
+  "intro_html": "<p>ページ冒頭のリード（任意）</p>",
+  "blocks": [
+    {"id": "web", "path": "apps/web", "title": "apps/web", "subtitle": "画面と BFF（Next.js）", "summary": "1〜2 文", "layer": "web"}
+  ],
+  "nodes": {
+    "apps/web": {
+      "role": "一言の役割（ツリーの行の右に薄く出す。20 字以内目安）",
+      "body_html": "<p>中身の説明。HTML 可（p, ul, li, code, strong, a.ref）</p>",
+      "open_when": ["こういうときに開く", "..."],
+      "key_files": ["apps/web/proxy.ts", "apps/web/lib/server/api.ts"],
+      "guide": ["s01", "s03-cart"]
+    },
+    "apps/web/proxy.ts": {"role": "...", "body_html": "...", "ref": "apps/web/proxy.ts::proxy"}
+  },
+  "collapse": [{"path": "apps/web/public/products", "label": "商品画像 31 枚（ファイル名は商品 ID）"}],
+  "tips_html": "<h3>IDE で探すときのコツ</h3><p>...</p>"
+}
+```
+
+| キー | 意味 |
+|---|---|
+| `intro_html` | ページ冒頭のリード。省略時は既定の一文 |
+| `blocks[]` | 全体図のカード。IDE のルートの並び（フォルダ→名前順）に自動で並べ替える。`path` が `""`（または `.`）のブロックはルート直下のファイル用で、最後に置く。`layer` は `web` `api` `docs` `scripts` `ci` `root`（色分け）。中身の小さなラベル（サブフォルダ名）はツリーから自動で取る。ファイル 60 件以上のブロックは大きめに表示する |
+| `nodes{パス}` | フォルダ・ファイルの説明。キーはリポジトリルートからの相対パス。全項目が任意 |
+| `nodes.*.role` | 一言の役割。ツリーの行に薄く出る。説明パネルでは見出し的に出る |
+| `nodes.*.body_html` | 本文の HTML。`<a class="ref" data-ref="path::Symbol">名前</a>` は解説書と同じ記法で解決され、クリックでコードドロワーが開く |
+| `nodes.*.open_when` | 「こういうときに開く」の箇条書き（プレーンテキスト） |
+| `nodes.*.key_files` | 「主なファイル」。押すとツリーでそのファイルを選択する。ツリーに無いパスはリンク無しで出す |
+| `nodes.*.guide` | 解説書の id（章 `sNN`、見出し `sNN-xxx`）。「解説書の関連章」に新しいタブのリンクで出る |
+| `nodes.*.ref` | ファイルの「主な関数を見る」ボタンで開く `data-ref` 記法の参照 |
+| `collapse[]` | 子を展開せず 1 行（ラベル＋件数）にまとめるディレクトリ |
+| `tips_html` | ページ下部のコツ。省略可 |
+
+説明の無いノードでも、件数・拡張子の内訳・行数は自動集計して出す。
+
+## ページの動き
+
+- 全体図のカード（とサブフォルダの小さなラベル）を押すと、下のツリーで該当フォルダまで開いてスクロール・選択し、右パネルに説明を出す
+- ツリー: フォルダ→ファイルの順、名前順。先頭ドットのファイルも出る。↑↓ で移動、← で閉じる（閉じていれば親へ）、→ で開く（開いていれば最初の子へ）、Enter で選択、Home/End で先頭・末尾。行の右に `role` と、フォルダは配下のファイル数
+- 絞り込み: パスの部分一致（スペース区切りは AND、全角半角・大文字小文字を区別しない）。ヒットした行とその祖先だけ表示し、Esc で解除
+- 説明パネル: パンくず（各段を押すとその階層を選択）、`role`、本文、こういうときに開く、主なファイル、解説書の関連章、件数・拡張子の内訳（フォルダ）または行数・サイズ（ファイル）、中身を見る・主な関数を見る・GitHub・パスをコピー。760px 未満はパネルがツリーの下に来るので、ツリー上部の「説明へ ↓」で移動できる
+- 選択状態はページ内だけで持つ。URL のハッシュにパスは入れない
+
+## プレビュー（中身を見る）の対象
+
+ファイルの中身を埋め込むのは、テキストで 200KB 以下の次のもの。
+
+- `apps/**`（ただし `apps/api/tests/**`・`apps/web/tests/**`・`apps/web/public/**` を除く）、`scripts/**`、`tools/**`、`.github/**`
+- `docs/**/*.md`
+- ルートの `README.md`・`docker-compose.yml`・`.pre-commit-config.yaml`・`.gitignore`・`.gitattributes`
+
+対象外（説明と行数だけ表示し、理由を出す）: `.env*`（中身は読まず、行数も出さない）、`.secrets.baseline`・`.gitleaks.toml`・`.gitleaksignore`、テスト、画像、docx などのバイナリ、`.html`（解説書・地図の出力）、200KB 超（例: `uv.lock`）、上記以外のファイル（`.claude/` など）。
+
+## 秘密検査
+
+出力 HTML は `gitleaks detect --no-git --source <file> --redact` と `pre-commit run detect-secrets --files <file>` を通す。埋め込みコードを原文のまま置く理由は、上の「既知の制限」のとおり。40 桁の SHA 単体も検知されるため、地図のデータでは GitHub の URL の形で持つ。説明データに新しい文字列を足して検出が出たら、まず誤検知かどうかを確認し、プレビュー対象から外す（`PREVIEW_*` 定数と `preview_reason()`）。
+
+## 既知の制限（地図）
+
+- ツリーは `--tree-commit` の内容、プレビューは `--commit` の内容で、作業ツリーの未コミットの変更は載らない
+- `collapse` したディレクトリの中は、ツリーからは辿れない（絞り込みで中のパスにヒットすると、その 1 行が出る）
+- 行数はテキストファイルのみ。`.env*` と画像・バイナリは出さない
+- ブロックの並びは「フォルダ→名前順」の近似（IDE 側の並べ替え設定が違うと一致しない）
+- ハイライトは cdnjs の highlight.js 11.9.0 に依存する（読み込めない環境では素のテキスト）</script>
 <script type="text/plain" data-snippet="scripts/azure-db/README.md"># scripts/azure-db — 講義の Azure MySQL への接続
 
 講義サーバー `gen12-mysql-pos.mysql.database.azure.com`（スキーマ `guapp_nonooktk`）に、
@@ -35108,14 +35216,14 @@ for i, src in enumerate(blocks, start=1):
 <script type="application/json" id="map-data">{
 "repo":"https://github.com/nonooktk/GUapp",
 "tree":{
-"blob":"https://github.com/nonooktk/GUapp/blob/6129e65509af415f47868cdbebbe7411dd86110d/",
-"dir":"https://github.com/nonooktk/GUapp/tree/6129e65509af415f47868cdbebbe7411dd86110d"
+"blob":"https://github.com/nonooktk/GUapp/blob/24a6537bda9d3c85505d1fab023b49eb01c71550/",
+"dir":"https://github.com/nonooktk/GUapp/tree/24a6537bda9d3c85505d1fab023b49eb01c71550"
 },
 "code":{
 "blob":"https://github.com/nonooktk/GUapp/blob/2b9c87d8e9356d6064d9a315d032bebd7f9fb3a8/",
 "dir":"https://github.com/nonooktk/GUapp/tree/2b9c87d8e9356d6064d9a315d032bebd7f9fb3a8"
 },
-"files":[[".claude/launch.json",391,17,"out",0],[".claude/settings.json",782,28,"out",0],[".env.example",1761,null,"env",0],[".gitattributes",487,24,"",0],[".github/dependabot.yml",928,33,"",0],[".github/pull_request_template.md",760,22,"",0],[".github/workflows/ci.yml",10528,248,"",0],[".github/workflows/\u0073ecrets-scan.yml",730,28,"",0],[".gitignore",1195,57,"",0],[".gitleaks.toml",652,15,"\u0073ecret",0],[".gitleaksignore",1213,11,"\u0073ecret",0],[".pre-commit-config.yaml",1872,43,"",0],[".\u0073ecrets.baseline",2597,133,"\u0073ecret",0],["README.md",9995,115,"",0],["apps/api/.gitignore",151,2,"",0],["apps/api/.python-version",5,1,"",0],["apps/api/README.md",9672,139,"",0],["apps/api/alembic.ini",998,50,"",0],["apps/api/alembic/env.py",2954,86,"",0],["apps/api/alembic/script.py.mako",749,28,"",0],["apps/api/alembic/versions/0001_p1_initial.py",18503,389,"",0],["apps/api/alembic/versions/371a338f4624_p2a_contents.py",2683,71,"",0],["apps/api/app/__init__.py",0,0,"",0],["apps/api/app/adapters/__init__.py",136,1,"",0],["apps/api/app/adapters/mail.py",3029,89,"",0],["apps/api/app/adapters/payment.py",1418,44,"",0],["apps/api/app/core/__init__.py",0,0,"",0],["apps/api/app/core/config.py",2625,60,"",0],["apps/api/app/core/db.py",2191,72,"",0],["apps/api/app/core/errors.py",6699,158,"",0],["apps/api/app/core/logging.py",4246,99,"",0],["apps/api/app/core/rate_limit.py",2337,67,"",0],["apps/api/app/core/security.py",2152,52,"",0],["apps/api/app/core/testing_hooks.py",2412,88,"",0],["apps/api/app/main.py",2863,69,"",0],["apps/api/app/models/__init__.py",1861,78,"",0],["apps/api/app/models/base.py",1927,59,"",0],["apps/api/app/models/cart.py",1870,60,"",0],["apps/api/app/models/catalog.py",4408,126,"",0],["apps/api/app/models/content.py",1668,48,"",0],["apps/api/app/models/order.py",5700,139,"",0],["apps/api/app/models/system.py",1732,48,"",0],["apps/api/app/repositories/__init__.py",309,5,"",0],["apps/api/app/repositories/carts.py",6172,182,"",0],["apps/api/app/repositories/contents.py",1633,40,"",0],["apps/api/app/repositories/orders.py",8237,253,"",0],["apps/api/app/repositories/products.py",7781,247,"",0],["apps/api/app/repositories/search.py",4132,96,"",0],["apps/api/app/repositories/settings.py",647,18,"",0],["apps/api/app/routers/__init__.py",0,0,"",0],["apps/api/app/routers/cart.py",2131,66,"",0],["apps/api/app/routers/catalog.py",1794,48,"",0],["apps/api/app/routers/checkout.py",748,20,"",0],["apps/api/app/routers/content.py",1432,40,"",0],["apps/api/app/routers/health.py",975,28,"",0],["apps/api/app/routers/orders.py",2067,54,"",0],["apps/api/app/routers/search.py",1459,37,"",0],["apps/api/app/routers/settings.py",780,22,"",0],["apps/api/app/routers/testing.py",1197,33,"",0],["apps/api/app/schemas/__init__.py",1079,35,"",0],["apps/api/app/schemas/cart.py",1353,53,"",0],["apps/api/app/schemas/catalog.py",1668,77,"",0],["apps/api/app/schemas/content.py",869,35,"",0],["apps/api/app/schemas/order.py",4200,141,"",0],["apps/api/app/schemas/search.py",1048,35,"",0],["apps/api/app/schemas/settings.py",384,11,"",0],["apps/api/app/seed.py",9218,259,"",0],["apps/api/app/seed_data.py",18477,489,"",0],["apps/api/app/services/__init__.py",129,1,"",0],["apps/api/app/services/cart.py",6192,147,"",0],["apps/api/app/services/cart_rules.py",1833,48,"",0],["apps/api/app/services/catalog.py",3726,118,"",0],["apps/api/app/services/checkout.py",3110,83,"",0],["apps/api/app/services/content.py",3061,70,"",0],["apps/api/app/services/order_number.py",1247,28,"",0],["apps/api/app/services/order_state.py",1398,34,"",0],["apps/api/app/services/orders.py",17159,411,"",0],["apps/api/app/services/pricing.py",3720,98,"",0],["apps/api/app/services/search.py",7678,203,"",0],["apps/api/app/services/settings.py",2045,51,"",0],["apps/api/openapi.json",43332,1680,"",0],["apps/api/pyproject.toml",975,40,"",0],["apps/api/ruff.toml",292,12,"",0],["apps/api/tests/__init__.py",0,0,"test",0],["apps/api/tests/conftest.py",2435,87,"test",0],["apps/api/tests/integration/__init__.py",0,0,"test",0],["apps/api/tests/integration/concurrency_helpers.py",5043,113,"test",0],["apps/api/tests/integration/conftest.py",5100,133,"test",0],["apps/api/tests/integration/live_server.py",5090,142,"test",0],["apps/api/tests/integration/order_helpers.py",4588,141,"test",0],["apps/api/tests/integration/test_it_001_003_catalog.py",8065,181,"test",0],["apps/api/tests/integration/test_it_004_004a_search.py",11542,255,"test",0],["apps/api/tests/integration/test_it_005_006_contents.py",6810,164,"test",0],["apps/api/tests/integration/test_it_010_013_cart.py",15533,383,"test",0],["apps/api/tests/integration/test_it_014_04_stock_race.py",7453,165,"test",0],["apps/api/tests/integration/test_it_014_concurrency.py",5738,125,"test",0],["apps/api/tests/integration/test_it_014_orders.py",15217,319,"test",0],["apps/api/tests/integration/test_it_020_settings.py",1336,38,"test",0],["apps/api/tests/integration/test_it_021_checkout.py",4472,119,"test",0],["apps/api/tests/integration/test_it_023_lookup.py",3471,87,"test",0],["apps/api/tests/integration/test_it_060_061_cors.py",3315,87,"test",0],["apps/api/tests/integration/test_it_schema_and_seed.py",4999,115,"test",0],["apps/api/tests/unit/__init__.py",0,0,"test",0],["apps/api/tests/unit/test_ut_011_cart_rules.py",2481,73,"test",0],["apps/api/tests/unit/test_ut_014_order_number_state.py",3081,90,"test",0],["apps/api/tests/unit/test_ut_014_reserve_stock.py",5466,146,"test",0],["apps/api/tests/unit/test_ut_021_pricing.py",3441,92,"test",0],["apps/api/tests/unit/test_ut_adapters_and_rate_limit.py",3556,98,"test",0],["apps/api/tests/unit/test_ut_app_production_docs_and_hooks.py",6203,165,"test",0],["apps/api/tests/unit/test_ut_concurrency_helpers.py",4064,110,"test",0],["apps/api/tests/unit/test_ut_content_rules.py",2328,65,"test",0],["apps/api/tests/unit/test_ut_cors.py",1498,37,"test",0],["apps/api/tests/unit/test_ut_dbconf_01_pool_config.py",3162,79,"test",0],["apps/api/tests/unit/test_ut_search_rules.py",9103,232,"test",0],["apps/api/tests/unit/test_ut_sec_01_mask_filter.py",4284,107,"test",0],["apps/api/tests/unit/test_ut_sec_02_error_handler.py",10153,291,"test",0],["apps/api/tests/unit/test_ut_sec_03_http_exception_shape.py",2356,59,"test",0],["apps/api/tests/unit/test_ut_seed_data.py",3973,87,"test",0],["apps/api/tests/unit/test_ut_val_order_input.py",9363,220,"test",0],["apps/api/uv.lock",205794,1072,"big",0],["apps/web/.gitignore",628,45,"",0],["apps/web/README.md",20237,218,"",0],["apps/web/app/api/cart/items/[id]/route.ts",1872,48,"",0],["apps/web/app/api/cart/items/route.ts",1250,28,"",0],["apps/web/app/api/cart/route.ts",706,14,"",0],["apps/web/app/api/checkout/prepare/route.ts",661,16,"",0],["apps/web/app/api/health/route.ts",1065,25,"",0],["apps/web/app/api/orders/[orderNumber]/lookup/route.ts",1489,31,"",0],["apps/web/app/api/orders/route.ts",2036,53,"",0],["apps/web/app/api/products/route.ts",1901,43,"",0],["apps/web/app/api/search/route.ts",1951,44,"",0],["apps/web/app/api/search/suggest/route.ts",1257,28,"",0],["apps/web/app/cart/page.tsx",2422,54,"",0],["apps/web/app/checkout/confirm/page.tsx",954,29,"",0],["apps/web/app/checkout/page.tsx",772,21,"",0],["apps/web/app/contents/[slug]/page.tsx",3130,81,"",0],["apps/web/app/contents/page.tsx",3291,82,"",0],["apps/web/app/favicon.ico",25931,null,"image",0],["apps/web/app/globals.css",3276,82,"",0],["apps/web/app/layout.tsx",3035,66,"",0],["apps/web/app/not-found.tsx",682,15,"",0],["apps/web/app/orders/complete/page.tsx",877,20,"",0],["apps/web/app/page.tsx",5337,122,"",0],["apps/web/app/products/[id]/page.tsx",5049,127,"",0],["apps/web/app/products/page.tsx",3134,79,"",0],["apps/web/app/search/page.tsx",2576,69,"",0],["apps/web/components/AllMenu.tsx",6133,158,"",0],["apps/web/components/Breadcrumb.tsx",1313,38,"",0],["apps/web/components/Button.tsx",3052,78,"",0],["apps/web/components/CartProvider.tsx",2752,72,"",0],["apps/web/components/CartView.tsx",10787,262,"",0],["apps/web/components/CategoryNav.tsx",2866,70,"",0],["apps/web/components/CheckoutForm.tsx",14394,355,"",0],["apps/web/components/ConfirmDialog.tsx",3499,107,"",0],["apps/web/components/DemoPeriodBanner.tsx",928,20,"",0],["apps/web/components/Footer.tsx",1393,34,"",0],["apps/web/components/Form.tsx",3612,100,"",0],["apps/web/components/Header.tsx",7128,166,"",0],["apps/web/components/HeaderWithCart.tsx",670,16,"",0],["apps/web/components/LoadError.tsx",461,8,"",0],["apps/web/components/OrderComplete.tsx",7906,188,"",0],["apps/web/components/OrderConfirm.tsx",9255,215,"",0],["apps/web/components/OrderSummary.tsx",5464,144,"",0],["apps/web/components/Price.tsx",948,23,"",0],["apps/web/components/ProductCard.tsx",2262,50,"",0],["apps/web/components/ProductsGrid.tsx",3039,88,"",0],["apps/web/components/PurchasePanel.tsx",7614,177,"",0],["apps/web/components/SearchBox.tsx",7601,222,"",0],["apps/web/components/SearchPanel.tsx",2931,90,"",0],["apps/web/components/SearchResults.tsx",4895,142,"",0],["apps/web/components/Toast.tsx",3552,107,"",0],["apps/web/eslint.config.mjs",465,18,"",0],["apps/web/lib/basic-auth.ts",3288,83,"",0],["apps/web/lib/cart-messages.ts",1675,36,"",0],["apps/web/lib/checkout-session.ts",2372,65,"",0],["apps/web/lib/checkout-validation.ts",7641,183,"",0],["apps/web/lib/client-ip.ts",4625,88,"",0],["apps/web/lib/client/cart-api.ts",3784,93,"",0],["apps/web/lib/client/order-api.ts",2877,67,"",0],["apps/web/lib/client/search-api.ts",1375,31,"",0],["apps/web/lib/client/use-session-item.ts",1478,45,"",0],["apps/web/lib/cookie.ts",2847,71,"",0],["apps/web/lib/csrf-validation.ts",1337,29,"",0],["apps/web/lib/datetime.ts",1977,45,"",0],["apps/web/lib/demo-banner.ts",2002,49,"",0],["apps/web/lib/demo-defaults.ts",1889,29,"",0],["apps/web/lib/env-validation.ts",3840,86,"",0],["apps/web/lib/format.ts",833,19,"",0],["apps/web/lib/gender.ts",664,20,"",0],["apps/web/lib/image.ts",727,13,"",0],["apps/web/lib/order-errors.ts",5989,104,"",0],["apps/web/lib/server/api.ts",3971,114,"",0],["apps/web/lib/server/cart-proxy.ts",3501,82,"",0],["apps/web/lib/server/catalog.ts",3290,87,"",0],["apps/web/lib/server/contents.ts",972,23,"",0],["apps/web/lib/server/csrf.ts",2055,39,"",0],["apps/web/lib/server/env.ts",715,19,"",0],["apps/web/lib/server/order-proxy.ts",3446,62,"",0],["apps/web/lib/server/search.ts",1366,35,"",0],["apps/web/lib/types.ts",6141,248,"",0],["apps/web/next.config.ts",237,8,"",0],["apps/web/package.json",903,37,"",0],["apps/web/pnpm-lock.yaml",181840,5422,"",0],["apps/web/pnpm-workspace.yaml",51,3,"",0],["apps/web/postcss.config.mjs",94,7,"",0],["apps/web/proxy.ts",2349,49,"",0],["apps/web/public/products/001/1.jpg",74,null,"image",0],["apps/web/public/products/002/1.jpg",74,null,"image",0],["apps/web/public/products/003/1.jpg",74,null,"image",0],["apps/web/public/products/004/1.jpg",74,null,"image",0],["apps/web/public/products/005/1.jpg",74,null,"image",0],["apps/web/public/products/006/1.jpg",74,null,"image",0],["apps/web/public/products/007/1.jpg",74,null,"image",0],["apps/web/public/products/008/1.jpg",74,null,"image",0],["apps/web/public/products/009/1.jpg",74,null,"image",0],["apps/web/public/products/010/1.jpg",74,null,"image",0],["apps/web/public/products/011/1.jpg",74,null,"image",0],["apps/web/public/products/012/1.jpg",74,null,"image",0],["apps/web/public/products/013/1.jpg",74,null,"image",0],["apps/web/public/products/014/1.jpg",74,null,"image",0],["apps/web/public/products/015/1.jpg",74,null,"image",0],["apps/web/public/products/016/1.jpg",74,null,"image",0],["apps/web/public/products/017/1.jpg",74,null,"image",0],["apps/web/public/products/018/1.jpg",74,null,"image",0],["apps/web/public/products/019/1.jpg",74,null,"image",0],["apps/web/public/products/020/1.jpg",74,null,"image",0],["apps/web/public/products/021/1.jpg",74,null,"image",0],["apps/web/public/products/022/1.jpg",74,null,"image",0],["apps/web/public/products/023/1.jpg",74,null,"image",0],["apps/web/public/products/024/1.jpg",74,null,"image",0],["apps/web/public/products/025/1.jpg",74,null,"image",0],["apps/web/public/products/026/1.jpg",74,null,"image",0],["apps/web/public/products/027/1.jpg",74,null,"image",0],["apps/web/public/products/028/1.jpg",74,null,"image",0],["apps/web/public/products/029/1.jpg",74,null,"image",0],["apps/web/public/products/030/1.jpg",74,null,"image",0],["apps/web/public/products/031/1.jpg",74,null,"image",0],["apps/web/scripts/gen-placeholders.mjs",3059,81,"",0],["apps/web/tests/at-07.all-menu.test.tsx",7349,149,"test",0],["apps/web/tests/bff.api-error-shape.test.ts",1011,21,"test",0],["apps/web/tests/bff.cart-route.test.ts",9661,227,"test",0],["apps/web/tests/cart-messages.test.ts",2137,37,"test",0],["apps/web/tests/checkout-form.demo-defaults.test.tsx",3650,76,"test",0],["apps/web/tests/checkout-validation.test.ts",6349,132,"test",0],["apps/web/tests/csrf-validation.test.ts",2843,63,"test",0],["apps/web/tests/datetime.test.ts",1446,30,"test",0],["apps/web/tests/it-bff-004.search-route.test.ts",4888,107,"test",0],["apps/web/tests/it-bff-01-02.orders-route.test.ts",13065,268,"test",0],["apps/web/tests/order-errors.test.ts",4792,95,"test",0],["apps/web/tests/search-box.test.tsx",6326,140,"test",0],["apps/web/tests/search-panel.test.tsx",4110,94,"test",0],["apps/web/tests/search-results.test.tsx",5381,139,"test",0],["apps/web/tests/setup.ts",286,8,"test",0],["apps/web/tests/st-sec-07.cookie.test.ts",2319,50,"test",0],["apps/web/tests/st-sec-xff.client-ip.test.ts",6074,109,"test",0],["apps/web/tests/stubs/server-only.ts",133,2,"test",0],["apps/web/tests/ui.design-parts.test.tsx",4523,90,"test",0],["apps/web/tests/ut-web-01.cart-provider.test.tsx",3217,86,"test",0],["apps/web/tests/ut-web-01.header.test.tsx",2057,37,"test",0],["apps/web/tests/ut-web-02-03.order-confirm.test.tsx",11177,253,"test",0],["apps/web/tests/ut-web-04.format.test.ts",1315,38,"test",0],["apps/web/tests/ut-web-05.env-validation.test.ts",2630,62,"test",0],["apps/web/tests/ut-web-08.purchase-panel.test.tsx",4268,92,"test",0],["apps/web/tests/ut-web-09.basic-auth.test.ts",3878,89,"test",0],["apps/web/tests/ut-web-09.proxy-basic-auth.test.ts",3754,83,"test",0],["apps/web/tests/ut-web-10.demo-banner.test.ts",2463,66,"test",0],["apps/web/tests/ut-web-10.demo-period-banner.test.tsx",1273,25,"test",0],["apps/web/tsconfig.json",666,34,"",0],["apps/web/vitest.config.mts",747,22,"",0],["docker-compose.yml",1797,39,"",0],["docs/00_計画/ADR/ADR-0001_P2の4分割.md",6240,63,"",0],["docs/00_計画/ADR/ADR-0002_講義MySQLへのスキーマ追加と資格情報の管理.md",4187,52,"",0],["docs/00_計画/ADR/ADR-0003_検索APIのレート制限の見送り.md",7422,66,"",0],["docs/00_計画/ADR/ADR-0004_レビュー用のAppService公開.md",10418,66,"",0],["docs/00_計画/ADR/README.md",4254,54,"",0],["docs/00_計画/P1実装プラン_20260917.md",16103,126,"",0],["docs/00_計画/P2_事前レビュー観点_v1.md",7103,48,"",0],["docs/00_計画/実装フェーズ計画.md",15089,124,"",0],["docs/00_計画/実装前レビュー記録_20260917.md",7382,71,"",0],["docs/00_計画/引継ぎメモ_20260924.md",16996,198,"",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_ai_v2.1_20260821.docx",47360,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_noai_20260821.docx",267258,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.3_20260826.docx",51205,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.4_20260906.docx",51605,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_ai_v1_20260825.docx",52947,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_noai_雛形_20260824.docx",43961,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.2_20260826.docx",61675,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.3_20260906.docx",62857,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v2_20260907.docx",1181717,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md",76322,887,"",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P2追補a_draft-v1.md",87244,688,"",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_noai_雛形_20260825.docx",40416,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_公開追補_draft-v1.md",26925,198,"",0],["docs/03_設計仕様書/付録_GUサイト調査_20260918.md",15730,130,"",0],["docs/03_設計仕様書/付録_デザイン基準_v1.md",21680,188,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v1_20260907.docx",56031,null,"binary",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md",37999,283,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md",24745,188,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md",10106,97,"",0],["docs/05_検収/README再現確認_20260918.md",15154,94,"",0],["docs/05_検収/ST-AT実施記録_正常系_20260918.md",35378,121,"",0],["docs/05_検収/ST実施記録_異常境界_20260924.md",32451,115,"",0],["docs/05_検収/ST実施記録_異常境界_20260924_windows.md",30244,135,"",0],["docs/05_検収/公開環境_確認記録_20260925.md",31304,330,"",0],["docs/05_解説/GU_ECsite_コード解説.html",1973374,3570,"html",1],["docs/05_解説/GU_ECsite_設計・テスト設計_解説.html",36456,322,"html",0],["docs/05_解説/code-guide/README.md",10802,196,"",1],["docs/05_解説/code-guide/build.py",25557,712,"out",1],["docs/05_解説/code-guide/content/00-sample.html",8632,125,"html",1],["docs/05_解説/code-guide/content/01-overview.html",15817,228,"html",1],["docs/05_解説/code-guide/content/02-reading-order.html",11343,126,"html",1],["docs/05_解説/code-guide/content/03-features.html",67857,669,"html",1],["docs/05_解説/code-guide/content/04-crosscutting.html",58114,325,"html",1],["docs/05_解説/code-guide/content/05-data-model.html",25927,167,"html",1],["docs/05_解説/code-guide/content/06-dev-process.html",20252,158,"html",1],["docs/05_解説/code-guide/content/07-run-and-deploy.html",27845,199,"html",1],["docs/05_解説/code-guide/content/08-not-yet.html",16437,93,"html",1],["docs/05_解説/code-guide/content/09-known-weaknesses.html",26454,222,"html",1],["docs/05_解説/code-guide/content/10-file-index.html",70354,147,"html",1],["docs/05_解説/code-guide/content/11-qa.html",40147,230,"html",1],["docs/05_解説/code-guide/content/12-glossary.html",14485,127,"html",1],["docs/05_解説/code-guide/template.html",47407,869,"html",1],["scripts/azure-db/README.md",7752,145,"",0],["scripts/azure-db/check_connection.py",3574,86,"",0],["scripts/azure-db/fetch-ca.sh",3020,61,"",0],["scripts/azure-db/with-azure-db.sh",5842,118,"",0],["scripts/azure-deploy/01-create.sh",5248,113,"",0],["scripts/azure-deploy/02-settings.sh",7516,157,"",0],["scripts/azure-deploy/03-db-firewall.sh",2424,52,"",0],["scripts/azure-deploy/04-deploy-api.sh",2597,64,"",0],["scripts/azure-deploy/05-deploy-web.sh",8095,121,"",0],["scripts/azure-deploy/06-migrate-seed.sh",2133,45,"",0],["scripts/azure-deploy/90-stop.sh",1154,23,"",0],["scripts/azure-deploy/99-delete.sh",3240,67,"",0],["scripts/azure-deploy/README.md",5944,93,"",0],["scripts/azure-deploy/config.sh",4721,84,"",0],["scripts/hooks/forbid_dotenv.py",741,24,"",0],["scripts/mutation-check/README.md",5612,60,"",0],["scripts/mutation-check/cases.json",3027,68,"",0],["scripts/mutation-check/mutate.py",3399,83,"",0],["scripts/mutation-check/result-20260918-162633.md",1252,17,"",0],["scripts/mutation-check/result-20260918.md",2320,21,"",0],["scripts/mutation-check/run.ps1",19699,337,"",0],["scripts/mysql-docker/README.md",2769,60,"",0],["scripts/mysql-local/README.md",6875,109,"",0],["scripts/mysql-local/common.ps1",5042,99,"",0],["scripts/mysql-local/docker-init/01_create_test_db.sql",436,5,"",0],["scripts/mysql-local/setup.ps1",8215,159,"",0],["scripts/mysql-local/start.ps1",330,7,"",0],["scripts/mysql-local/status.ps1",1431,35,"",0],["scripts/mysql-local/stop.ps1",1595,29,"",0],["tools/docs/README.md",1214,14,"",0],["tools/docs/build_sd_docx.py",11130,252,"",0],["tools/docs/build_td_docx.py",10550,239,"",0],["tools/docs/fix_docx.py",3154,69,"",0],["tools/docs/render_mermaid.py",1375,27,"",0]],
+"files":[[".claude/launch.json",391,17,"out",0],[".claude/settings.json",782,28,"out",0],[".env.example",1761,null,"env",0],[".gitattributes",487,24,"",0],[".github/dependabot.yml",928,33,"",0],[".github/pull_request_template.md",760,22,"",0],[".github/workflows/ci.yml",10528,248,"",0],[".github/workflows/\u0073ecrets-scan.yml",730,28,"",0],[".gitignore",1195,57,"",0],[".gitleaks.toml",652,15,"\u0073ecret",0],[".gitleaksignore",1213,11,"\u0073ecret",0],[".pre-commit-config.yaml",1872,43,"",0],[".\u0073ecrets.baseline",2597,133,"\u0073ecret",0],["README.md",9995,115,"",0],["apps/api/.gitignore",151,2,"",0],["apps/api/.python-version",5,1,"",0],["apps/api/README.md",9672,139,"",0],["apps/api/alembic.ini",998,50,"",0],["apps/api/alembic/env.py",2954,86,"",0],["apps/api/alembic/script.py.mako",749,28,"",0],["apps/api/alembic/versions/0001_p1_initial.py",18503,389,"",0],["apps/api/alembic/versions/371a338f4624_p2a_contents.py",2683,71,"",0],["apps/api/app/__init__.py",0,0,"",0],["apps/api/app/adapters/__init__.py",136,1,"",0],["apps/api/app/adapters/mail.py",3029,89,"",0],["apps/api/app/adapters/payment.py",1418,44,"",0],["apps/api/app/core/__init__.py",0,0,"",0],["apps/api/app/core/config.py",2625,60,"",0],["apps/api/app/core/db.py",2191,72,"",0],["apps/api/app/core/errors.py",6699,158,"",0],["apps/api/app/core/logging.py",4246,99,"",0],["apps/api/app/core/rate_limit.py",2337,67,"",0],["apps/api/app/core/security.py",2152,52,"",0],["apps/api/app/core/testing_hooks.py",2412,88,"",0],["apps/api/app/main.py",2863,69,"",0],["apps/api/app/models/__init__.py",1861,78,"",0],["apps/api/app/models/base.py",1927,59,"",0],["apps/api/app/models/cart.py",1870,60,"",0],["apps/api/app/models/catalog.py",4408,126,"",0],["apps/api/app/models/content.py",1668,48,"",0],["apps/api/app/models/order.py",5700,139,"",0],["apps/api/app/models/system.py",1732,48,"",0],["apps/api/app/repositories/__init__.py",309,5,"",0],["apps/api/app/repositories/carts.py",6172,182,"",0],["apps/api/app/repositories/contents.py",1633,40,"",0],["apps/api/app/repositories/orders.py",8237,253,"",0],["apps/api/app/repositories/products.py",7781,247,"",0],["apps/api/app/repositories/search.py",4132,96,"",0],["apps/api/app/repositories/settings.py",647,18,"",0],["apps/api/app/routers/__init__.py",0,0,"",0],["apps/api/app/routers/cart.py",2131,66,"",0],["apps/api/app/routers/catalog.py",1794,48,"",0],["apps/api/app/routers/checkout.py",748,20,"",0],["apps/api/app/routers/content.py",1432,40,"",0],["apps/api/app/routers/health.py",975,28,"",0],["apps/api/app/routers/orders.py",2067,54,"",0],["apps/api/app/routers/search.py",1459,37,"",0],["apps/api/app/routers/settings.py",780,22,"",0],["apps/api/app/routers/testing.py",1197,33,"",0],["apps/api/app/schemas/__init__.py",1079,35,"",0],["apps/api/app/schemas/cart.py",1353,53,"",0],["apps/api/app/schemas/catalog.py",1668,77,"",0],["apps/api/app/schemas/content.py",869,35,"",0],["apps/api/app/schemas/order.py",4200,141,"",0],["apps/api/app/schemas/search.py",1048,35,"",0],["apps/api/app/schemas/settings.py",384,11,"",0],["apps/api/app/seed.py",9218,259,"",0],["apps/api/app/seed_data.py",18477,489,"",0],["apps/api/app/services/__init__.py",129,1,"",0],["apps/api/app/services/cart.py",6192,147,"",0],["apps/api/app/services/cart_rules.py",1833,48,"",0],["apps/api/app/services/catalog.py",3726,118,"",0],["apps/api/app/services/checkout.py",3110,83,"",0],["apps/api/app/services/content.py",3061,70,"",0],["apps/api/app/services/order_number.py",1247,28,"",0],["apps/api/app/services/order_state.py",1398,34,"",0],["apps/api/app/services/orders.py",17159,411,"",0],["apps/api/app/services/pricing.py",3720,98,"",0],["apps/api/app/services/search.py",7678,203,"",0],["apps/api/app/services/settings.py",2045,51,"",0],["apps/api/openapi.json",43332,1680,"",0],["apps/api/pyproject.toml",975,40,"",0],["apps/api/ruff.toml",292,12,"",0],["apps/api/tests/__init__.py",0,0,"test",0],["apps/api/tests/conftest.py",2435,87,"test",0],["apps/api/tests/integration/__init__.py",0,0,"test",0],["apps/api/tests/integration/concurrency_helpers.py",5043,113,"test",0],["apps/api/tests/integration/conftest.py",5100,133,"test",0],["apps/api/tests/integration/live_server.py",5090,142,"test",0],["apps/api/tests/integration/order_helpers.py",4588,141,"test",0],["apps/api/tests/integration/test_it_001_003_catalog.py",8065,181,"test",0],["apps/api/tests/integration/test_it_004_004a_search.py",11542,255,"test",0],["apps/api/tests/integration/test_it_005_006_contents.py",6810,164,"test",0],["apps/api/tests/integration/test_it_010_013_cart.py",15533,383,"test",0],["apps/api/tests/integration/test_it_014_04_stock_race.py",7453,165,"test",0],["apps/api/tests/integration/test_it_014_concurrency.py",5738,125,"test",0],["apps/api/tests/integration/test_it_014_orders.py",15217,319,"test",0],["apps/api/tests/integration/test_it_020_settings.py",1336,38,"test",0],["apps/api/tests/integration/test_it_021_checkout.py",4472,119,"test",0],["apps/api/tests/integration/test_it_023_lookup.py",3471,87,"test",0],["apps/api/tests/integration/test_it_060_061_cors.py",3315,87,"test",0],["apps/api/tests/integration/test_it_schema_and_seed.py",4999,115,"test",0],["apps/api/tests/unit/__init__.py",0,0,"test",0],["apps/api/tests/unit/test_ut_011_cart_rules.py",2481,73,"test",0],["apps/api/tests/unit/test_ut_014_order_number_state.py",3081,90,"test",0],["apps/api/tests/unit/test_ut_014_reserve_stock.py",5466,146,"test",0],["apps/api/tests/unit/test_ut_021_pricing.py",3441,92,"test",0],["apps/api/tests/unit/test_ut_adapters_and_rate_limit.py",3556,98,"test",0],["apps/api/tests/unit/test_ut_app_production_docs_and_hooks.py",6203,165,"test",0],["apps/api/tests/unit/test_ut_concurrency_helpers.py",4064,110,"test",0],["apps/api/tests/unit/test_ut_content_rules.py",2328,65,"test",0],["apps/api/tests/unit/test_ut_cors.py",1498,37,"test",0],["apps/api/tests/unit/test_ut_dbconf_01_pool_config.py",3162,79,"test",0],["apps/api/tests/unit/test_ut_search_rules.py",9103,232,"test",0],["apps/api/tests/unit/test_ut_sec_01_mask_filter.py",4284,107,"test",0],["apps/api/tests/unit/test_ut_sec_02_error_handler.py",10153,291,"test",0],["apps/api/tests/unit/test_ut_sec_03_http_exception_shape.py",2356,59,"test",0],["apps/api/tests/unit/test_ut_seed_data.py",3973,87,"test",0],["apps/api/tests/unit/test_ut_val_order_input.py",9363,220,"test",0],["apps/api/uv.lock",205794,1072,"big",0],["apps/web/.gitignore",628,45,"",0],["apps/web/README.md",20237,218,"",0],["apps/web/app/api/cart/items/[id]/route.ts",1872,48,"",0],["apps/web/app/api/cart/items/route.ts",1250,28,"",0],["apps/web/app/api/cart/route.ts",706,14,"",0],["apps/web/app/api/checkout/prepare/route.ts",661,16,"",0],["apps/web/app/api/health/route.ts",1065,25,"",0],["apps/web/app/api/orders/[orderNumber]/lookup/route.ts",1489,31,"",0],["apps/web/app/api/orders/route.ts",2036,53,"",0],["apps/web/app/api/products/route.ts",1901,43,"",0],["apps/web/app/api/search/route.ts",1951,44,"",0],["apps/web/app/api/search/suggest/route.ts",1257,28,"",0],["apps/web/app/cart/page.tsx",2422,54,"",0],["apps/web/app/checkout/confirm/page.tsx",954,29,"",0],["apps/web/app/checkout/page.tsx",772,21,"",0],["apps/web/app/contents/[slug]/page.tsx",3130,81,"",0],["apps/web/app/contents/page.tsx",3291,82,"",0],["apps/web/app/favicon.ico",25931,null,"image",0],["apps/web/app/globals.css",3276,82,"",0],["apps/web/app/layout.tsx",3035,66,"",0],["apps/web/app/not-found.tsx",682,15,"",0],["apps/web/app/orders/complete/page.tsx",877,20,"",0],["apps/web/app/page.tsx",5337,122,"",0],["apps/web/app/products/[id]/page.tsx",5049,127,"",0],["apps/web/app/products/page.tsx",3134,79,"",0],["apps/web/app/search/page.tsx",2576,69,"",0],["apps/web/components/AllMenu.tsx",6133,158,"",0],["apps/web/components/Breadcrumb.tsx",1313,38,"",0],["apps/web/components/Button.tsx",3052,78,"",0],["apps/web/components/CartProvider.tsx",2752,72,"",0],["apps/web/components/CartView.tsx",10787,262,"",0],["apps/web/components/CategoryNav.tsx",2866,70,"",0],["apps/web/components/CheckoutForm.tsx",14394,355,"",0],["apps/web/components/ConfirmDialog.tsx",3499,107,"",0],["apps/web/components/DemoPeriodBanner.tsx",928,20,"",0],["apps/web/components/Footer.tsx",1393,34,"",0],["apps/web/components/Form.tsx",3612,100,"",0],["apps/web/components/Header.tsx",7128,166,"",0],["apps/web/components/HeaderWithCart.tsx",670,16,"",0],["apps/web/components/LoadError.tsx",461,8,"",0],["apps/web/components/OrderComplete.tsx",7906,188,"",0],["apps/web/components/OrderConfirm.tsx",9255,215,"",0],["apps/web/components/OrderSummary.tsx",5464,144,"",0],["apps/web/components/Price.tsx",948,23,"",0],["apps/web/components/ProductCard.tsx",2262,50,"",0],["apps/web/components/ProductsGrid.tsx",3039,88,"",0],["apps/web/components/PurchasePanel.tsx",7614,177,"",0],["apps/web/components/SearchBox.tsx",7601,222,"",0],["apps/web/components/SearchPanel.tsx",2931,90,"",0],["apps/web/components/SearchResults.tsx",4895,142,"",0],["apps/web/components/Toast.tsx",3552,107,"",0],["apps/web/eslint.config.mjs",465,18,"",0],["apps/web/lib/basic-auth.ts",3288,83,"",0],["apps/web/lib/cart-messages.ts",1675,36,"",0],["apps/web/lib/checkout-session.ts",2372,65,"",0],["apps/web/lib/checkout-validation.ts",7641,183,"",0],["apps/web/lib/client-ip.ts",4625,88,"",0],["apps/web/lib/client/cart-api.ts",3784,93,"",0],["apps/web/lib/client/order-api.ts",2877,67,"",0],["apps/web/lib/client/search-api.ts",1375,31,"",0],["apps/web/lib/client/use-session-item.ts",1478,45,"",0],["apps/web/lib/cookie.ts",2847,71,"",0],["apps/web/lib/csrf-validation.ts",1337,29,"",0],["apps/web/lib/datetime.ts",1977,45,"",0],["apps/web/lib/demo-banner.ts",2002,49,"",0],["apps/web/lib/demo-defaults.ts",1889,29,"",0],["apps/web/lib/env-validation.ts",3840,86,"",0],["apps/web/lib/format.ts",833,19,"",0],["apps/web/lib/gender.ts",664,20,"",0],["apps/web/lib/image.ts",727,13,"",0],["apps/web/lib/order-errors.ts",5989,104,"",0],["apps/web/lib/server/api.ts",3971,114,"",0],["apps/web/lib/server/cart-proxy.ts",3501,82,"",0],["apps/web/lib/server/catalog.ts",3290,87,"",0],["apps/web/lib/server/contents.ts",972,23,"",0],["apps/web/lib/server/csrf.ts",2055,39,"",0],["apps/web/lib/server/env.ts",715,19,"",0],["apps/web/lib/server/order-proxy.ts",3446,62,"",0],["apps/web/lib/server/search.ts",1366,35,"",0],["apps/web/lib/types.ts",6141,248,"",0],["apps/web/next.config.ts",237,8,"",0],["apps/web/package.json",903,37,"",0],["apps/web/pnpm-lock.yaml",181840,5422,"",0],["apps/web/pnpm-workspace.yaml",51,3,"",0],["apps/web/postcss.config.mjs",94,7,"",0],["apps/web/proxy.ts",2349,49,"",0],["apps/web/public/products/001/1.jpg",74,null,"image",0],["apps/web/public/products/002/1.jpg",74,null,"image",0],["apps/web/public/products/003/1.jpg",74,null,"image",0],["apps/web/public/products/004/1.jpg",74,null,"image",0],["apps/web/public/products/005/1.jpg",74,null,"image",0],["apps/web/public/products/006/1.jpg",74,null,"image",0],["apps/web/public/products/007/1.jpg",74,null,"image",0],["apps/web/public/products/008/1.jpg",74,null,"image",0],["apps/web/public/products/009/1.jpg",74,null,"image",0],["apps/web/public/products/010/1.jpg",74,null,"image",0],["apps/web/public/products/011/1.jpg",74,null,"image",0],["apps/web/public/products/012/1.jpg",74,null,"image",0],["apps/web/public/products/013/1.jpg",74,null,"image",0],["apps/web/public/products/014/1.jpg",74,null,"image",0],["apps/web/public/products/015/1.jpg",74,null,"image",0],["apps/web/public/products/016/1.jpg",74,null,"image",0],["apps/web/public/products/017/1.jpg",74,null,"image",0],["apps/web/public/products/018/1.jpg",74,null,"image",0],["apps/web/public/products/019/1.jpg",74,null,"image",0],["apps/web/public/products/020/1.jpg",74,null,"image",0],["apps/web/public/products/021/1.jpg",74,null,"image",0],["apps/web/public/products/022/1.jpg",74,null,"image",0],["apps/web/public/products/023/1.jpg",74,null,"image",0],["apps/web/public/products/024/1.jpg",74,null,"image",0],["apps/web/public/products/025/1.jpg",74,null,"image",0],["apps/web/public/products/026/1.jpg",74,null,"image",0],["apps/web/public/products/027/1.jpg",74,null,"image",0],["apps/web/public/products/028/1.jpg",74,null,"image",0],["apps/web/public/products/029/1.jpg",74,null,"image",0],["apps/web/public/products/030/1.jpg",74,null,"image",0],["apps/web/public/products/031/1.jpg",74,null,"image",0],["apps/web/scripts/gen-placeholders.mjs",3059,81,"",0],["apps/web/tests/at-07.all-menu.test.tsx",7349,149,"test",0],["apps/web/tests/bff.api-error-shape.test.ts",1011,21,"test",0],["apps/web/tests/bff.cart-route.test.ts",9661,227,"test",0],["apps/web/tests/cart-messages.test.ts",2137,37,"test",0],["apps/web/tests/checkout-form.demo-defaults.test.tsx",3650,76,"test",0],["apps/web/tests/checkout-validation.test.ts",6349,132,"test",0],["apps/web/tests/csrf-validation.test.ts",2843,63,"test",0],["apps/web/tests/datetime.test.ts",1446,30,"test",0],["apps/web/tests/it-bff-004.search-route.test.ts",4888,107,"test",0],["apps/web/tests/it-bff-01-02.orders-route.test.ts",13065,268,"test",0],["apps/web/tests/order-errors.test.ts",4792,95,"test",0],["apps/web/tests/search-box.test.tsx",6326,140,"test",0],["apps/web/tests/search-panel.test.tsx",4110,94,"test",0],["apps/web/tests/search-results.test.tsx",5381,139,"test",0],["apps/web/tests/setup.ts",286,8,"test",0],["apps/web/tests/st-sec-07.cookie.test.ts",2319,50,"test",0],["apps/web/tests/st-sec-xff.client-ip.test.ts",6074,109,"test",0],["apps/web/tests/stubs/server-only.ts",133,2,"test",0],["apps/web/tests/ui.design-parts.test.tsx",4523,90,"test",0],["apps/web/tests/ut-web-01.cart-provider.test.tsx",3217,86,"test",0],["apps/web/tests/ut-web-01.header.test.tsx",2057,37,"test",0],["apps/web/tests/ut-web-02-03.order-confirm.test.tsx",11177,253,"test",0],["apps/web/tests/ut-web-04.format.test.ts",1315,38,"test",0],["apps/web/tests/ut-web-05.env-validation.test.ts",2630,62,"test",0],["apps/web/tests/ut-web-08.purchase-panel.test.tsx",4268,92,"test",0],["apps/web/tests/ut-web-09.basic-auth.test.ts",3878,89,"test",0],["apps/web/tests/ut-web-09.proxy-basic-auth.test.ts",3754,83,"test",0],["apps/web/tests/ut-web-10.demo-banner.test.ts",2463,66,"test",0],["apps/web/tests/ut-web-10.demo-period-banner.test.tsx",1273,25,"test",0],["apps/web/tsconfig.json",666,34,"",0],["apps/web/vitest.config.mts",747,22,"",0],["docker-compose.yml",1797,39,"",0],["docs/00_計画/ADR/ADR-0001_P2の4分割.md",6240,63,"",0],["docs/00_計画/ADR/ADR-0002_講義MySQLへのスキーマ追加と資格情報の管理.md",4187,52,"",0],["docs/00_計画/ADR/ADR-0003_検索APIのレート制限の見送り.md",7422,66,"",0],["docs/00_計画/ADR/ADR-0004_レビュー用のAppService公開.md",10418,66,"",0],["docs/00_計画/ADR/README.md",4254,54,"",0],["docs/00_計画/P1実装プラン_20260917.md",16103,126,"",0],["docs/00_計画/P2_事前レビュー観点_v1.md",7103,48,"",0],["docs/00_計画/実装フェーズ計画.md",15089,124,"",0],["docs/00_計画/実装前レビュー記録_20260917.md",7382,71,"",0],["docs/00_計画/引継ぎメモ_20260924.md",16996,198,"",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_ai_v2.1_20260821.docx",47360,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_noai_20260821.docx",267258,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.3_20260826.docx",51205,null,"binary",0],["docs/01_要求仕様書/GU_ECsite_要求仕様書_withai_v2.4_20260906.docx",51605,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_ai_v1_20260825.docx",52947,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_noai_雛形_20260824.docx",43961,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.2_20260826.docx",61675,null,"binary",0],["docs/02_要件定義書/GU_ECsite_要件定義書_withai_v1.3_20260906.docx",62857,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v2_20260907.docx",1181717,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md",76322,887,"",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_P2追補a_draft-v1.md",87244,688,"",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_noai_雛形_20260825.docx",40416,null,"binary",0],["docs/03_設計仕様書/GU_ECsite_設計仕様書_公開追補_draft-v1.md",26925,198,"",0],["docs/03_設計仕様書/付録_GUサイト調査_20260918.md",15730,130,"",0],["docs/03_設計仕様書/付録_デザイン基準_v1.md",21680,188,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v1_20260907.docx",56031,null,"binary",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P1_draft-v2.md",37999,283,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md",24745,188,"",0],["docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md",10106,97,"",0],["docs/05_検収/README再現確認_20260918.md",15154,94,"",0],["docs/05_検収/ST-AT実施記録_正常系_20260918.md",35378,121,"",0],["docs/05_検収/ST実施記録_異常境界_20260924.md",32451,115,"",0],["docs/05_検収/ST実施記録_異常境界_20260924_windows.md",30244,135,"",0],["docs/05_検収/公開環境_確認記録_20260925.md",31304,330,"",0],["docs/05_解説/GU_ECsite_コード解説.html",1977300,37338,"html",1],["docs/05_解説/GU_ECsite_リポジトリ地図.html",2042427,36351,"html",1],["docs/05_解説/GU_ECsite_設計・テスト設計_解説.html",36456,322,"html",0],["docs/05_解説/code-guide/README.md",21653,312,"",1],["docs/05_解説/code-guide/build.py",50299,1274,"out",1],["docs/05_解説/code-guide/content/00-sample.html",8632,125,"html",1],["docs/05_解説/code-guide/content/01-overview.html",15817,228,"html",1],["docs/05_解説/code-guide/content/02-reading-order.html",11343,126,"html",1],["docs/05_解説/code-guide/content/03-features.html",67857,669,"html",1],["docs/05_解説/code-guide/content/04-crosscutting.html",58114,325,"html",1],["docs/05_解説/code-guide/content/05-data-model.html",25927,167,"html",1],["docs/05_解説/code-guide/content/06-dev-process.html",20252,158,"html",1],["docs/05_解説/code-guide/content/07-run-and-deploy.html",27845,199,"html",1],["docs/05_解説/code-guide/content/08-not-yet.html",16437,93,"html",1],["docs/05_解説/code-guide/content/09-known-weaknesses.html",26454,222,"html",1],["docs/05_解説/code-guide/content/10-file-index.html",70399,147,"html",1],["docs/05_解説/code-guide/content/11-qa.html",40147,230,"html",1],["docs/05_解説/code-guide/content/12-glossary.html",14485,127,"html",1],["docs/05_解説/code-guide/map/descriptions.json",169380,3345,"out",1],["docs/05_解説/code-guide/map/sample.json",2744,40,"out",1],["docs/05_解説/code-guide/map/template-map.html",43040,809,"html",1],["docs/05_解説/code-guide/partials/drawer.css",5522,60,"out",1],["docs/05_解説/code-guide/partials/drawer.js",15191,349,"out",1],["docs/05_解説/code-guide/partials/tokens.css",2409,39,"out",1],["docs/05_解説/code-guide/template.html",25071,432,"html",1],["scripts/azure-db/README.md",7752,145,"",0],["scripts/azure-db/check_connection.py",3574,86,"",0],["scripts/azure-db/fetch-ca.sh",3020,61,"",0],["scripts/azure-db/with-azure-db.sh",5842,118,"",0],["scripts/azure-deploy/01-create.sh",5248,113,"",0],["scripts/azure-deploy/02-settings.sh",7516,157,"",0],["scripts/azure-deploy/03-db-firewall.sh",2424,52,"",0],["scripts/azure-deploy/04-deploy-api.sh",2597,64,"",0],["scripts/azure-deploy/05-deploy-web.sh",8095,121,"",0],["scripts/azure-deploy/06-migrate-seed.sh",2133,45,"",0],["scripts/azure-deploy/90-stop.sh",1154,23,"",0],["scripts/azure-deploy/99-delete.sh",3240,67,"",0],["scripts/azure-deploy/README.md",5944,93,"",0],["scripts/azure-deploy/config.sh",4721,84,"",0],["scripts/hooks/forbid_dotenv.py",741,24,"",0],["scripts/mutation-check/README.md",5612,60,"",0],["scripts/mutation-check/cases.json",3027,68,"",0],["scripts/mutation-check/mutate.py",3399,83,"",0],["scripts/mutation-check/result-20260918-162633.md",1252,17,"",0],["scripts/mutation-check/result-20260918.md",2320,21,"",0],["scripts/mutation-check/run.ps1",19699,337,"",0],["scripts/mysql-docker/README.md",2769,60,"",0],["scripts/mysql-local/README.md",6875,109,"",0],["scripts/mysql-local/common.ps1",5042,99,"",0],["scripts/mysql-local/docker-init/01_create_test_db.sql",436,5,"",0],["scripts/mysql-local/setup.ps1",8215,159,"",0],["scripts/mysql-local/start.ps1",330,7,"",0],["scripts/mysql-local/status.ps1",1431,35,"",0],["scripts/mysql-local/stop.ps1",1595,29,"",0],["tools/docs/README.md",1214,14,"",0],["tools/docs/build_sd_docx.py",11130,252,"",0],["tools/docs/build_td_docx.py",10550,239,"",0],["tools/docs/fix_docx.py",3154,69,"",0],["tools/docs/render_mermaid.py",1375,27,"",0]],
 "blocks":[{"id":"web","path":"apps/web","title":"apps/web","subtitle":"画面と BFF（Next.js）","summary":"ブラウザが話す唯一の相手。ページ・ブラウザ向けの窓口（BFF）・部品・共通関数と、サイト全体の Basic 認証を持つ。","layer":"web"},{"id":"api","path":"apps/api","title":"apps/api","subtitle":"業務ルールと DB（FastAPI）","summary":"注文確定・在庫引当・金額計算などの業務ルールと DB アクセス。routers → services → repositories → models の 4 段で書かれている。","layer":"api"},{"id":"docs","path":"docs","title":"docs","subtitle":"設計・テスト文書と解説書","summary":"要求仕様書から検収記録まで V 字の工程順（00〜05）に並ぶ文書と、コード解説書の組み立て基盤。","layer":"docs"},{"id":"scripts","path":"scripts","title":"scripts","subtitle":"DB 起動・公開・検証のスクリプト","summary":"ローカル MySQL の起動、講義 DB への接続、Azure への手動デプロイ、防御外し確認、commit 時のフック。","layer":"scripts"},{"id":"ci","path":".github","title":".github","subtitle":"CI と依存更新","summary":"PR ごとに動く GitHub Actions（pytest・Vitest・ビルド・gitleaks）、Dependabot、PR テンプレート。","layer":"ci"},{"id":"tools","path":"tools","title":"tools","subtitle":"文書生成ツール","summary":"設計仕様書・テスト設計書の Markdown を docx にする作者用のスクリプト。アプリの実行には使わない。","layer":"root"}],
 "nodes":{
 ".claude":{"role":"Claude Code の設定","body_html":"<p>AI エージェント（Claude Code）向けの設定を置く。<code>launch.json<\/code> は web と api の開発サーバー起動定義で、Windows の <code>cmd<\/code> 前提。<code>settings.json<\/code> は force push や <code>reset --hard<\/code> などを実行させない deny 一覧。<\/p>","open_when":["エージェントに実行させないコマンドを確認するとき","プレビュー用の起動定義を直すとき"],"key_files":[".claude/settings.json",".claude/launch.json"]},
@@ -35415,7 +35523,9 @@ for i, src in enumerate(blocks, start=1):
 "tools/docs/build_sd_docx.py":{"role":"設計仕様書 md → docx","body_html":"<p>表・等幅ブロック・Mermaid の PNG を埋め込んだ docx を作る。入出力のパスは作者 PC の絶対パスで、先頭の定数を書き換えて使う。<\/p>","ref":"tools/docs/build_sd_docx.py#L1-20"},
 "tools/docs/build_td_docx.py":{"role":"テスト設計書 md → docx","body_html":"<p><code>build_sd_docx.py<\/code> の派生。テスト設計書 draft-v1 を docx にする。<\/p>","ref":"tools/docs/build_td_docx.py#L1-20"},
 "tools/docs/fix_docx.py":{"role":"既存 docx の修復","body_html":"<p>異常な表のインデント値の削除、表プロパティの要素順の並べ替え、空のページ番号フィールドの補完、表示モードの固定を XML を直接書き換えて行う。<\/p>","ref":"tools/docs/fix_docx.py#L1-20","open_when":["Word で開けない docx を直すとき"]},
-"tools/docs/render_mermaid.py":{"role":"Mermaid 図の PNG 化","body_html":"<p>設計仕様書の Markdown から mermaid ブロックを抜き出し、Mermaid CLI で PNG にする。<\/p>","ref":"tools/docs/render_mermaid.py#L1-20"}
+"tools/docs/render_mermaid.py":{"role":"Mermaid 図の PNG 化","body_html":"<p>設計仕様書の Markdown から mermaid ブロックを抜き出し、Mermaid CLI で PNG にする。<\/p>","ref":"tools/docs/render_mermaid.py#L1-20"},
+"docs/05_解説/code-guide/map":{"role":"リポジトリ地図の説明データ","body_html":"<p>このページ（リポジトリ地図）の説明文 <code>descriptions.json<\/code> とテンプレートが入っています。ツリーは git から自動で作り、説明だけをここに書きます。<\/p>","open_when":["フォルダやファイルの説明を直したいとき"],"key_files":["docs/05_解説/code-guide/map/descriptions.json"]},
+"docs/05_解説/code-guide/partials":{"role":"3 ページ共通の CSS・JS","body_html":"<p>解説書・地図・レビュー回答ガイドで共通に使う色の定義、コードを引き出して表示する部品などです。<code>build.py<\/code> が各ページに埋め込みます。<\/p>","open_when":["3 ページ共通の見た目や動きを直したいとき"]}
 },
 "collapse":[{"path":"apps/web/public/products","label":"商品画像 31 枚（各フォルダに 1.jpg の 1 枚。中身は 8×8 の単色 PNG）"},{"path":"apps/web/tests","label":"web のテスト 27 ファイル＋共通設定（ut-web-XX・it-bff-XX・st-sec-XX など、設計書の ID がファイル名に入る）"},{"path":"apps/api/tests/unit","label":"api の単体テスト 16 ファイル（test_ut_*.py。DB 不要）"}],
 "guide":{
@@ -35458,12 +35568,16 @@ for i, src in enumerate(blocks, start=1):
     return sn.start === sn.end ? 'L' + sn.start : 'L' + sn.start + '-' + sn.end;
   }
   function baseName(p) { return p.split('/').pop(); }
+  // build.py が data-focus（部分文字列）を実ファイルの行番号に解決して付ける属性。無ければ 0
+  function focusOf(node) { return parseInt(node.getAttribute('data-focus-line') || '0', 10) || 0; }
 
   function initRefs() {
     $$('[data-ref]').forEach(function (node) {
       var key = refKey(node);
       if (!key) { return; }
       if (!SN[key]) { node.classList.add('ref-missing'); node.title = 'コードを解決できていません: ' + key; return; }
+      // 順路の停留所（li.stop）は全面をクリック対象にしない。「コードを見る」ボタンが showRef を呼ぶ
+      if (node.classList.contains('stop')) { node.classList.add('stop-has-ref'); return; }
       node.classList.add('has-ref');
       if (!node.hasAttribute('tabindex')) { node.setAttribute('tabindex', '0'); }
       node.setAttribute('role', 'button');
@@ -35475,7 +35589,7 @@ for i, src in enumerate(blocks, start=1):
      ドロワー
   --------------------------------------------------------------- */
   var drawer, backdrop, elPath, elTitle, elRange, elNote, elBody, elCode, btnBack, btnCopy, linkGh, btnClose;
-  var cur = null;        // { key, note }
+  var cur = null;        // { key, note, focus }
   var hist = [];         // 直前に見た参照
   var opener = null;
   var copyTimer = null;
@@ -35547,16 +35661,25 @@ for i, src in enumerate(blocks, start=1):
     return raw.map(esc);
   }
 
-  function renderCode(sn) {
+  function renderCode(sn, focus) {
     var lines = highlightLines(sn);
     var html = '';
     for (var i = 0; i < lines.length; i++) {
-      html += '<span class="cl" data-n="' + (sn.start + i) + '">' + lines[i] + '\n</span>';
+      var n = sn.start + i;
+      html += '<span class="cl' + (focus && n === focus ? ' is-focus' : '') + '" data-n="' + n + '">' + lines[i] + '\n</span>';
     }
     elCode.innerHTML = html;
   }
 
-  function renderHead(sn, note) {
+  // 注目行（is-focus）が上から 1/3 あたりに来るようにスクロールする
+  function scrollToFocus() {
+    var f = elCode.querySelector('.cl.is-focus');
+    if (!f) { return; }
+    var delta = f.getBoundingClientRect().top - elBody.getBoundingClientRect().top;
+    elBody.scrollTop = Math.max(0, elBody.scrollTop + delta - Math.round(elBody.clientHeight / 3));
+  }
+
+  function renderHead(sn, note, focus) {
     var p = sn.path, idx = p.lastIndexOf('/');
     elPath.textContent = '';
     if (idx >= 0) {
@@ -35566,7 +35689,7 @@ for i, src in enumerate(blocks, start=1):
     elPath.appendChild(f);
     elTitle.textContent = sn.symbol || baseName(sn.path);
     var n = sn.end - sn.start + 1;
-    elRange.textContent = rangeText(sn) + '（' + n + ' 行）';
+    elRange.textContent = rangeText(sn) + '（' + n + ' 行）' + (focus ? ' ／ 注目 L' + focus : '');
     linkGh.setAttribute('href', sn.url);
     if (note) {
       elNote.textContent = '';
@@ -35579,10 +35702,10 @@ for i, src in enumerate(blocks, start=1):
   }
 
   function markOpen() {
-    $$('[data-ref].has-ref').forEach(function (n) {
-      var on = !!cur && refKey(n) === cur.key;
+    $$('[data-ref].has-ref, .stop.stop-has-ref').forEach(function (n) {
+      var on = !!cur && refKey(n) === cur.key && focusOf(n) === (cur.focus || 0);
       n.classList.toggle('is-open', on);
-      n.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (!n.classList.contains('stop')) { n.setAttribute('aria-expanded', on ? 'true' : 'false'); }
     });
   }
 
@@ -35591,17 +35714,19 @@ for i, src in enumerate(blocks, start=1):
     else { btnBack.setAttribute('disabled', 'disabled'); btnBack.textContent = '← 戻る'; }
   }
 
-  function showRef(key, note, openerNode, isBack) {
+  function showRef(key, note, openerNode, isBack, focus) {
     var sn = SN[key];
     if (!sn) { return; }
     hideTip();
     var wasOpen = drawer.classList.contains('is-open');
-    if (wasOpen && cur && !isBack && cur.key !== key) { hist.push(cur); }
+    focus = focus || 0;
+    if (wasOpen && cur && !isBack && (cur.key !== key || (cur.focus || 0) !== focus)) { hist.push(cur); }
     if (!wasOpen) { hist = []; opener = openerNode || document.activeElement; }
-    cur = { key: key, note: note || sn.note || '' };
-    renderHead(sn, cur.note);
-    renderCode(sn);
+    cur = { key: key, note: note || sn.note || '', focus: focus };
+    renderHead(sn, cur.note, focus);
+    renderCode(sn, focus);
     elBody.scrollTop = 0; elBody.scrollLeft = 0;
+    scrollToFocus();
     markOpen();
     updateBack();
     if (!wasOpen) {
@@ -35615,7 +35740,7 @@ for i, src in enumerate(blocks, start=1):
   function goBack() {
     if (!hist.length) { return; }
     var prev = hist.pop();
-    showRef(prev.key, prev.note, null, true);
+    showRef(prev.key, prev.note, null, true, prev.focus);
   }
 
   function closeDrawer() {
@@ -35668,7 +35793,7 @@ for i, src in enumerate(blocks, start=1):
   }
 
   function openFromNode(node) {
-    showRef(refKey(node), node.getAttribute('data-note') || '', node, false);
+    showRef(refKey(node), node.getAttribute('data-note') || '', node, false, focusOf(node));
   }
 
   function initRefEvents() {
@@ -35717,7 +35842,8 @@ for i, src in enumerate(blocks, start=1):
     var sn = SN[refKey(node)];
     if (!sn) { return; }
     if (!tip) { tip = el('div', { 'class': 'ref-tip', role: 'tooltip' }); document.body.appendChild(tip); }
-    tip.textContent = sn.path + ':' + rangeText(sn);
+    var fl = focusOf(node);
+    tip.textContent = fl ? sn.path + ':' + fl : sn.path + ':' + rangeText(sn);
     tip.hidden = false;
     var r = node.getBoundingClientRect();
     var tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -35768,7 +35894,7 @@ for i, src in enumerate(blocks, start=1):
     highlightPres();
     if (cur && SN[cur.key]) {
       var st = elBody.scrollTop, sl = elBody.scrollLeft;
-      renderCode(SN[cur.key]);
+      renderCode(SN[cur.key], cur.focus);
       elBody.scrollTop = st; elBody.scrollLeft = sl;
     }
   }

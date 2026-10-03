@@ -1,0 +1,355 @@
+<section id="r04" data-title="カートの数量変更と削除">
+<h2>4. カートの数量を変える・削除する</h2>
+<p class="asked">「カート画面で数量を変える」「カートから商品を削除する」「カート画面を表示する」「送料無料の案内（4,990 円以上で無料）はどこで決まるか」「合計金額はどう決まるか」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>カート画面を最初に開くときは、Cookie に <code>cart_token</code> がある場合だけ、サーバー側のページが BFF を通らずに、FastAPI の <code>GET /api/v1/cart</code> を直接呼びます。数量の変更と削除は、ブラウザの CartView から BFF の <code>PATCH</code> と <code>DELETE /api/cart/items/{id}</code> を呼びます。BFF は CSRF を検証して、FastAPI に取り次ぎます。FastAPI は、自分のカートの明細かどうかと、数量の上限（1 明細 10 点、合計 50 点）を調べて更新し、明細・小計・送料・合計を作り直して、カート全体を返します。画面はその応答で全体を置き換え、ヘッダーのバッジも更新します。送料は、小計が閾値以上なら 0 円です。閾値と送料は <code>system_settings</code> の値です。</p>
+</div>
+<h3 id="r04-front">② 画面からバックエンドへ</h3>
+<p>この章の経路は 3 本です。画面を開くときは、Server Component が BFF を通さずに FastAPI を直接呼びます。数量変更と削除は、ブラウザから BFF を通ります。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>経路</th><th>呼ぶ側</th><th>途中で通る場所</th><th>FastAPI の呼び先</th></tr></thead>
+<tbody>
+<tr><td>A. カート画面の初回表示</td><td>サーバー側のページ（<code>cart/page.tsx</code>）</td><td><code>lib/server/catalog.ts</code> → <code>apiFetch</code>。<strong>BFF は通らない</strong></td><td><code>GET /api/v1/cart</code>、<code>GET /api/v1/settings/public</code></td></tr>
+<tr><td>B. 数量変更</td><td>ブラウザ（CartView）</td><td><code>PATCH /api/cart/items/{id}</code>（BFF）→ <code>proxyCartRequest</code></td><td><code>PATCH /api/v1/cart/items/{item_id}</code></td></tr>
+<tr><td>C. 削除</td><td>ブラウザ（CartView。確認ダイアログのあと）</td><td><code>DELETE /api/cart/items/{id}</code>（BFF）→ <code>proxyCartRequest</code></td><td><code>DELETE /api/v1/cart/items/{item_id}</code></td></tr>
+</tbody>
+</table>
+</div>
+<ol class="route" data-title="順路 A：カート画面の初回表示から FastAPI まで（Server Component が直接呼ぶ）">
+  <li class="stop" data-ref="apps/web/app/cart/page.tsx::CartPage" data-focus="const result = await getCartFromCookie();" data-layer="screen">
+    <p class="stop-see">Cookie があれば、Server Component が最初のカートを取る。結果は 3 通り。Cookie が無い（<code>null</code>）なら空のカート、成功なら <code>initialCart</code>、失敗（非 2xx・接続不可）なら <code>refetchOnMount</code>（ブラウザで取り直す）。</p>
+    <p class="stop-say">カート画面を最初に開くときは、サーバー側のページが、Cookie にあるトークンでカートを取って描画します。Cookie が無い人には、カートを作らずに空のカートを出します。</p>
+    <p class="stop-next">次へ: <code>getCartFromCookie</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getCartFromCookie" data-focus="return apiFetch&lt;Cart&gt;(&quot;/cart&quot;, { headers: cartTokenHeaders(token) });" data-layer="bff">
+    <p class="stop-see"><code>cookies()</code> から <code>cart_token</code> を読み、<code>X-Cart-Token</code> に載せて FastAPI の <code>GET /cart</code> を直接呼ぶ。Cookie が無ければ呼ばない（描画中は Cookie を発行できないため）。BFF の Route Handler は通らない。</p>
+    <p class="stop-say">ここも BFF は通りません。サーバーの中から、カートのトークンをヘッダーに載せて FastAPI を呼びます。</p>
+    <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>get_cart</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::get_cart" data-focus="cart_service.get_cart(" data-layer="api">
+    <p class="stop-see"><code>GET /api/v1/cart</code>。<code>X-Cart-Token</code> を受け、サービスを呼ぶ。これがカート画面のリクエスト先。</p>
+    <p class="stop-say">リクエスト先は FastAPI の GET /api/v1/cart です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/cart/page.tsx</code> に戻り、設定を取る行（<code>getPublicSettings</code>）へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/cart/page.tsx::CartPage" data-focus="loadOrNull(getPublicSettings(), &quot;settings/public&quot;)" data-layer="screen">
+    <p class="stop-see">送料無料の閾値を <code>GET /settings/public</code>（DS-API-020）から取る。取れなければ予備値 <code>FALLBACK_FREE_SHIPPING_THRESHOLD = 4990</code> を使う。</p>
+    <p class="stop-say">カートの応答にも閾値は入っています。ただ、空のカートの表示に使うため、公開設定からも取っています。取れなかったときは、予備の 4,990 円を使います。</p>
+    <p class="stop-next">次へ: <code>getPublicSettings</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/catalog.ts::getPublicSettings" data-focus="apiFetch&lt;PublicSettings&gt;(&quot;/settings/public&quot;)" data-layer="bff">
+    <p class="stop-see"><code>apiFetch</code> で <code>/settings/public</code> を直接呼ぶ。税率・送料・閾値の 3 つが返る。</p>
+    <p class="stop-say">公開設定も、サーバーの中から直接呼びます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/settings.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/settings.py::public_settings" data-focus="get_public_settings(session)" data-layer="api">
+    <p class="stop-see"><code>GET /api/v1/settings/public</code>。<code>system_settings</code> の 3 キー（<code>tax_rate</code>・<code>shipping_fee</code>・<code>free_shipping_threshold</code>）だけを返す。</p>
+    <p class="stop-say">送料の閾値と送料は、DB の system_settings にある値で、この API が返します。</p>
+  </li>
+</ol>
+<div class="note opinion"><p>意見（コードを読んだ範囲の推測）: <code>GET /api/v1/cart</code> は、トークンが未知か注文済みのとき、カートを新しく作る（DB に書く）作りです。Server Component から呼ぶ初回表示でも同じです。ただ、ここでは Cookie を発行できないので、返ってきた新しいトークンは、次に BFF を通るまで保存されません。画面には空のカートが出るので利用者には見えませんが、空のカートの行が増えることはあります。実機では確かめていません。</p></div>
+<ol class="route" data-title="順路 B：数量セレクトから FastAPI まで（PATCH）">
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="onChange={(e) =&gt; onQuantityChange(item, Number(e.target.value))}" data-layer="screen">
+    <p class="stop-see">数量セレクト（1〜10）。変更するとすぐ <code>onQuantityChange</code> が呼ばれる。同じ数量なら何もしない。処理中（<code>busyItem</code>）は、その明細のセレクトが disabled になる。</p>
+    <p class="stop-say">数量を選び直すと、確認なしですぐに更新します。更新中は、その明細のセレクトを押せなくします。</p>
+    <p class="stop-next">次へ: <code>onQuantityChange</code> にカーソルを置いて <kbd>F12</kbd>（同じファイルの中の定義へ飛ぶ）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="apply(await updateCartItem(item.item_id, quantity));" data-layer="screen">
+    <p class="stop-see"><code>updateCartItem(item_id, quantity)</code> を呼び、戻ってきたカートで <code>apply</code>（画面の state とバッジを更新）する。成功すると、トースト「数量を変更しました」が 2.5 秒出る。失敗は <code>handleError</code> へ。</p>
+    <p class="stop-say">数量の変更は、明細の ID と新しい数量を渡して、updateCartItem を呼びます。</p>
+    <p class="stop-next">次へ: <code>updateCartItem</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::updateCartItem" data-focus="&quot;PATCH&quot;, { quantity }" data-layer="screen">
+    <p class="stop-see"><code>PATCH /api/cart/items/{itemId}</code>、本文は <code>{quantity}</code>。<code>mutate</code> を通るので、CSRF のヘッダーが付く（3 章の順路 A と同じ）。</p>
+    <p class="stop-say">送り先は、同じ Next.js の /api/cart/items/明細の ID です。</p>
+    <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/cart/items/[id]/route.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>PATCH</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::PATCH" data-focus="const denied = verifyCsrf(request);" data-layer="bff">
+    <p class="stop-see">順に、① CSRF の検証（通らなければ 403） ② <code>[id]</code> が正の整数か（違えば 404 <code>not_found</code>） ③ <code>quantity</code> が正の整数か（違えば 400 <code>validation_error</code>） ④ <code>proxyCartRequest</code> で FastAPI の <code>PATCH /cart/items/{id}</code>。</p>
+    <p class="stop-say">BFF は、CSRF、明細の ID の形、数量の形の順に確かめて、通ったものだけを FastAPI に渡します。</p>
+    <p class="stop-next">次へ: <code>proxyCartRequest</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="apiFetch&lt;Cart&gt;(path, {" data-layer="bff">
+    <p class="stop-see">3 章と同じ共通の取り次ぎ。<code>cart_token</code> Cookie を <code>X-Cart-Token</code> に載せ替え、<code>apiFetch</code> が <code>X-Internal-Token</code> を付ける。</p>
+    <p class="stop-say">カートの追加と同じ関数を使います。Cookie のトークンをヘッダーに載せ替えて、FastAPI を呼びます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>update_item</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::update_item" data-focus="cart_service.update_item(" data-layer="api">
+    <p class="stop-see"><code>@router.patch("/items/{item_id}")</code>。<code>item_id</code> はパス、本文は <code>CartItemPatchIn</code>、トークンはヘッダー。これがリクエスト先のバックエンド。</p>
+    <p class="stop-say">リクエスト先は FastAPI の PATCH /api/v1/cart/items/明細の ID で、routers/cart.py の update_item です。</p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 C：「削除」ボタンから FastAPI まで（DELETE）">
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="onClick={() =&gt; setPendingDelete(item)}" data-layer="screen">
+    <p class="stop-see">「削除」ボタンは、すぐには消さず、<code>pendingDelete</code> に入れるだけ。すると <code>ConfirmDialog</code>（「商品を削除しますか？」）が開く。キャンセルにフォーカスが当たり、Escape で閉じる。</p>
+    <p class="stop-say">削除ボタンを押しても、すぐには消えません。まず確認のダイアログを出します。</p>
+    <p class="stop-next">次へ: 同じファイルの末尾にある <code>ConfirmDialog</code> の <code>onConfirm={onConfirmDelete}</code> で、<code>onConfirmDelete</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="apply(await deleteCartItem(target.item_id));" data-layer="screen">
+    <p class="stop-see">「削除する」を押すと <code>onConfirmDelete</code> が動く。<code>deleteCartItem</code> を呼び、戻ってきたカートで置き換え、ダイアログを閉じて、トースト「{商品名} を削除しました」を出す。</p>
+    <p class="stop-say">確認で「削除する」を押したら、deleteCartItem を呼びます。</p>
+    <p class="stop-next">次へ: <code>deleteCartItem</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/cart-api.ts::deleteCartItem" data-focus="&quot;DELETE&quot;)" data-layer="screen">
+    <p class="stop-see"><code>DELETE /api/cart/items/{itemId}</code>。本文は無い。<code>mutate</code> を通るので、CSRF のヘッダーが付く。</p>
+    <p class="stop-say">送り先は、数量変更と同じ URL で、メソッドだけが DELETE です。</p>
+    <p class="stop-next">次へ: URL の文字列なので <kbd>F12</kbd> では飛べない。<kbd>⌘P</kbd> で <code>apps/web/app/api/cart/items/[id]/route.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>DELETE</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/cart/items/[id]/route.ts::DELETE" data-focus="{ method: &quot;DELETE&quot; }" data-layer="bff">
+    <p class="stop-see">PATCH と同じく、CSRF の検証と <code>[id]</code> の形の確認のあと、<code>proxyCartRequest</code> で FastAPI の <code>DELETE /cart/items/{id}</code>。取り次ぎの中身は順路 B の stop 5 と同じ。</p>
+    <p class="stop-say">削除も、CSRF と ID の形を検証してから、同じ取り次ぎの関数で FastAPI に渡します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>remove_item</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::remove_item" data-focus="cart_service.remove_item(" data-layer="api">
+    <p class="stop-see"><code>@router.delete("/items/{item_id}")</code>。これがリクエスト先のバックエンド。応答は、削除後のカート全体。</p>
+    <p class="stop-say">リクエスト先は FastAPI の DELETE /api/v1/cart/items/明細の ID で、routers/cart.py の remove_item です。</p>
+  </li>
+</ol>
+<h3 id="r04-back">③ バックエンドの処理</h3>
+<ol class="route" data-title="順路 A：内部トークンの検証から cart_items テーブルまで（数量変更の PATCH）">
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="dependencies=[Depends(verify_internal_token)]" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下のルーターすべてに <code>verify_internal_token</code> が付く。<code>cart.router</code> もここで登録される。</p>
+    <p class="stop-say">/api/v1 の下は、この 1 か所で、内部トークンの検証が必須になっています。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="hmac.compare_digest(" data-layer="api">
+    <p class="stop-see"><code>X-Internal-Token</code> が無い・一致しないと 401 <code>unauthorized</code>。</p>
+    <p class="stop-say">BFF 以外からの呼び出しは、ここで 401 になります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/routers/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>update_item</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/cart.py::update_item" data-focus="item_id: int," data-layer="api">
+    <p class="stop-see">パスの <code>item_id</code> を整数として検証し、本文を <code>CartItemPatchIn</code> で受ける。形が合わないと 400 <code>validation_error</code>。</p>
+    <p class="stop-say">ルーターは、明細の ID と本文の形を確かめて、サービスに渡すだけです。</p>
+    <p class="stop-next">次へ: <code>CartItemPatchIn</code> にカーソルを置いて <kbd>F12</kbd>（本文の型は <code>schemas/cart.py</code>）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartItemPatchIn" data-focus="quantity: int = Field(gt=0)" data-layer="api">
+    <p class="stop-see"><code>quantity</code> は 0 より大きい整数。上限（10・50）はここには書かない。</p>
+    <p class="stop-say">数量は、0 より大きい整数であることだけを、ここで確かめます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>update_item</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="item = await carts_repo.get_item(session, cart.id, item_id)" data-layer="service">
+    <p class="stop-see">順に、① <code>resolve_cart</code> で自分のカートを特定 ② <code>get_item</code> で自分のカートの明細だけを探す（他人のもの・存在しないものは rollback して 404 <code>not_found</code>） ③ <code>check_limits</code> で上限を検査（超えたら rollback して 422） ④ <code>set_item_quantity</code> と commit ⑤ <code>build_cart_response</code>。<strong>在庫の検査はしない</strong>。</p>
+    <p class="stop-say">サービスは、まず自分のカートの明細かどうか、次に上限を超えないかを調べて、数量を更新します。在庫はここでは見ません。</p>
+    <p class="stop-next">次へ: <code>get_item</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::get_item" data-focus="CartItem.id == item_id, CartItem.cart_id == cart_id" data-layer="repo">
+    <p class="stop-see">条件に <code>cart_id</code> も入れるので、他人の <code>item_id</code> を送っても見つからない（IDOR の対策。設計仕様書 7.5）。見つからなければ <code>None</code>。</p>
+    <p class="stop-say">明細の ID に加えて、自分のカートであることも条件にしています。他人のカートの明細は見つからないので、触れません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/cart.py</code> に戻り、<code>others</code> の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/cart.py::update_item" data-focus="others = await carts_repo.get_total_quantity(session, cart.id) - item.quantity" data-layer="service">
+    <p class="stop-see">上限の検査は、「他の明細の合計 + 新しい数量」で行う。</p>
+    <p class="stop-say">合計 50 点の上限は、この明細を直したあとの合計で判定します。</p>
+    <p class="stop-next">次へ: <code>check_limits</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/cart_rules.py::check_limits" data-focus="if cart_total_quantity &gt; CART_TOTAL_LIMIT:" data-layer="service">
+    <p class="stop-see">1 明細が 10 点を超えると 422（<code>limit</code> は 10）、合計が 50 点を超えると 422（<code>limit</code> は 50）。数量のセレクトは 1〜10 なので、画面から操作して引っかかるのは合計 50 点の上限だけ。</p>
+    <p class="stop-say">上限を超えるときは 422 を返して、更新はしません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/repositories/carts.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>set_item_quantity</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::set_item_quantity" data-focus=".values(quantity=quantity)" data-layer="repo">
+    <p class="stop-see"><code>UPDATE cart_items SET quantity = … WHERE id = …</code>。</p>
+    <p class="stop-say">数量を更新する SQL です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/models/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>CartItem</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/cart.py::CartItem" data-focus="quantity: Mapped[int]" data-layer="db">
+    <p class="stop-see"><code>cart_items.quantity</code>（<code>quantity &gt; 0</code> の CHECK）。<code>(cart_id, variant_id)</code> は UNIQUE。</p>
+    <p class="stop-say">数量は cart_items テーブルの quantity 列で、0 以下は DB の制約でも入りません。</p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 B：削除と、金額（小計・送料・合計）の組み立て">
+  <li class="stop" data-ref="apps/api/app/services/cart.py::remove_item" data-focus="await carts_repo.delete_item(session, item.id)" data-layer="service">
+    <p class="stop-see"><code>get_item</code> が <code>None</code> なら rollback して 404 <code>not_found</code>。あれば削除して commit し、<code>build_cart_response</code>。最後の 1 件を消すと <code>items</code> が空になり、金額は 0。</p>
+    <p class="stop-say">削除も、自分のカートの明細だと確認してから、行を消します。</p>
+    <p class="stop-next">次へ: <code>delete_item</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/carts.py::delete_item" data-focus="delete(CartItem).where(CartItem.id == item_id)" data-layer="repo">
+    <p class="stop-see"><code>DELETE FROM cart_items WHERE id = …</code>。</p>
+    <p class="stop-say">行を消す SQL です。カートそのものは残ります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/cart.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>build_cart_response</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/cart.py::build_cart_response" data-focus="totals = calc_totals(" data-layer="service">
+    <p class="stop-see">明細は <code>fetch_lines</code> で 1 クエリ。<code>line_total = unit_price * quantity</code>。金額は <code>calc_totals</code>。空のカートは金額 0（<code>empty_cart</code> の 409 は出さない）。<code>item_count</code> は数量の合計。</p>
+    <p class="stop-say">数量変更でも削除でも、最後にカート全体を作り直して返します。金額の計算はここで行い、画面側ではしません。</p>
+    <p class="stop-next">次へ: <code>calc_totals</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/pricing.py::calc_totals" data-focus="shipping_fee = calc_shipping_fee(" data-layer="service">
+    <p class="stop-see">小計 → 送料 → 合計（小計 + 送料）→ 内税の順。明細が 0 件のときは 409 <code>empty_cart</code>（<code>build_cart_response</code> は先に除いている）。金額はすべて <code>int</code>。</p>
+    <p class="stop-say">小計から送料を決めて、合計を出します。</p>
+    <p class="stop-next">次へ: <code>calc_shipping_fee</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/pricing.py::calc_shipping_fee" data-focus="return 0 if subtotal &gt;= free_shipping_threshold else shipping_fee" data-layer="service">
+    <p class="stop-see">小計が閾値以上なら 0、未満なら設定の送料。4,989 → 550、4,990 → 0。判定は<strong>小計</strong>（送料・値引き前）に対して行う。</p>
+    <p class="stop-say">送料が無料になるのは、小計が閾値以上のときです。閾値の 4,990 円ちょうども、無料です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/settings.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>get_public_settings</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/settings.py::get_public_settings" data-focus="free_shipping_threshold=_to_int(" data-layer="service">
+    <p class="stop-see">税率・送料・閾値は <code>system_settings</code>（DS-TBL-21）の値。キーの欠落や型の不正は 500 <code>internal_error</code>（設定の投入漏れとして扱う）。</p>
+    <p class="stop-say">閾値と送料は、DB の設定の値で、コードには書いていません。だから、変えても再デプロイは要りません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/api/app/services/cart_rules.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>stock_status</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/cart_rules.py::stock_status" data-focus="if not published or stock &lt;= 0:" data-layer="service">
+    <p class="stop-see">明細の在庫状態。非公開か在庫 0 なら <code>out_of_stock</code>、在庫が数量より少なければ <code>insufficient</code>、それ以外は <code>ok</code>。1 件でも <code>ok</code> でなければ、<code>can_checkout</code> は false。</p>
+    <p class="stop-say">在庫の状態は、カートを返すたびに、そのときの在庫から計算します。数量を変えても在庫では止めず、状態として知らせる作りです。</p>
+  </li>
+</ol>
+<p>数量変更と削除で起きうる失敗と、返るステータス・code の一覧です。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>操作</th><th>状態</th><th>ステータス・code</th><th>判定する場所</th><th>確認するテスト</th></tr></thead>
+<tbody>
+<tr><td>共通</td><td>内部トークンが無い・違う</td><td>401 <code>unauthorized</code></td><td>verify_internal_token</td><td><a class="ref" data-ref="apps/api/tests/unit/test_ut_sec_02_error_handler.py::test_ut_sec_02_internal_token_missing_and_mismatch_401">UT-SEC-02</a>（仮ルートで確認。カートの API 自体では確認していない）</td></tr>
+<tr><td>PATCH</td><td><code>quantity</code> が 0 以下・数値でない、<code>item_id</code> が整数でない</td><td>400 <code>validation_error</code></td><td>Pydantic（<code>CartItemPatchIn</code>・パスの型）。BFF も先に形を検査</td><td>IT-012-01（0 → 400）</td></tr>
+<tr><td>PATCH・DELETE</td><td>自分のカートに無い明細（他人・不存在・削除済み）</td><td>404 <code>not_found</code></td><td><span class="loc" data-ref="apps/api/app/services/cart.py::update_item" data-focus="raise AppError(404, &quot;not_found&quot;)"></span></td><td>IT-012-01</td></tr>
+<tr><td>PATCH</td><td>数量が 11 点以上、または合計が 51 点以上になる</td><td>422 <code>limit_exceeded</code>（<code>limit</code> は 10 または 50）</td><td>check_limits</td><td>IT-012-01（11 → 422）。合計 50 点の超過は PATCH では未確認</td></tr>
+<tr><td>PATCH・DELETE</td><td>成功</td><td>200 と、更新後のカート全体</td><td>build_cart_response</td><td>IT-012-01</td></tr>
+<tr><td>PATCH</td><td>在庫が足りない数量に変える</td><td>200 で更新される（<code>stock_status</code> が <code>insufficient</code>、<code>can_checkout</code> が false）</td><td>在庫は更新時に検査しない</td><td>—（PATCH では未確認）</td></tr>
+<tr><td>共通</td><td>想定外</td><td>500 <code>internal_error</code>（固定文言）</td><td>例外ハンドラ</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="r04-response">④ 応答から表示まで</h3>
+<ol class="route" data-title="順路 A：応答から画面の更新まで（数量変更・削除で共通）">
+  <li class="stop" data-ref="apps/api/app/schemas/cart.py::CartResponse" data-focus="can_checkout: bool" data-layer="api">
+    <p class="stop-see">応答は、明細（<code>items</code>）・<code>item_count</code>・<code>subtotal</code>・<code>shipping_fee</code>・<code>total</code>・<code>free_shipping_threshold</code>・<code>can_checkout</code>。明細の 1 件は <code>CartLineOut</code>（<code>stock_status</code>・<code>line_total</code> を含む）。</p>
+    <p class="stop-say">画面で使う値は、すべてこの応答に入っています。画面側で、金額や在庫の判定を計算し直すことはありません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/lib/server/cart-proxy.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>proxyCartRequest</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-focus="return Response.json(cart, { status: result.status, headers });" data-layer="bff">
+    <p class="stop-see">成功は、FastAPI のカート全体を、そのまま 200 で返す（<code>Cache-Control: no-store</code>）。</p>
+    <p class="stop-say">BFF は、成功なら FastAPI の応答を、そのまま返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/CartView.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="setCart(next);" data-layer="screen">
+    <p class="stop-see"><code>apply</code> が、<code>setCart</code>（画面全体）と <code>applyCart</code>（ヘッダーのバッジ。3 章の順路 A と同じ経路）の 2 つを呼ぶ。明細・小計・送料・合計・<code>can_checkout</code> は、応答のカートから描き直される。</p>
+    <p class="stop-say">返ってきたカートで、画面全体を置き換えます。同じ応答で、ヘッダーのバッジも更新します。</p>
+    <p class="stop-next">次へ: 同じ関数の下の、明細を描く <code>items.map</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="{items.map((item) =&gt; {" data-layer="screen">
+    <p class="stop-see">明細ごとに、商品名・色/サイズ・単価・数量・小計。<code>stockWarning(item.stock_status)</code> が null でなければ、行の下に赤字の警告（<code>role="alert"</code>）。</p>
+    <p class="stop-say">明細は、応答の items から描きます。在庫に問題がある行には、警告を出します。</p>
+    <p class="stop-next">次へ: 同じ関数の下の、金額欄（送料の行）へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="円以上で無料" data-layer="screen">
+    <p class="stop-see">送料の行。閾値は応答の <code>free_shipping_threshold</code>（無ければ props）で、「（4,990 円以上で無料）」と添える。<code>shipping_fee</code> が 0 のときは「無料」、それ以外は金額。「あと何円で無料」の計算はしていない。</p>
+    <p class="stop-say">送料の案内は、閾値の金額を添えるところまでです。送料が 0 円のときは、「無料」と出します。</p>
+    <p class="stop-next">次へ: 同じ関数の下の、<code>canCheckout</code> の分岐へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="{!canCheckout &amp;&amp; (" data-layer="screen">
+    <p class="stop-see"><code>can_checkout</code> が false なら、「⚠ 在庫切れ・在庫不足の商品があるためレジへ進めません」を出し、「レジへ進む」は disabled のボタンになる。true なら <code>/checkout</code> へのリンクになる。</p>
+    <p class="stop-say">在庫に問題のある明細が 1 つでもあれば、レジへ進むボタンは無効になります。</p>
+    <p class="stop-next">次へ: <code>stockWarning</code> の文言は <kbd>⌘P</kbd> で <code>apps/web/lib/cart-messages.ts</code> を開き、<kbd>⌘⇧O</kbd> で <code>stockWarning</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/cart-messages.ts::stockWarning" data-focus="if (status === &quot;insufficient&quot;) return &quot;在庫が不足しています&quot;;" data-layer="screen">
+    <p class="stop-see">在庫状態の警告文。<code>ok</code> は null、<code>insufficient</code> は「在庫が不足しています」、<code>out_of_stock</code> は「在庫切れのため購入できません」。</p>
+    <p class="stop-say">警告の文言は、在庫状態の値ごとに決めてあります。</p>
+  </li>
+</ol>
+<ol class="route" data-title="順路 B：失敗したときと、空のカート">
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="const handleError = (err: unknown) =&gt; {" data-layer="screen">
+    <p class="stop-see">数量変更・削除の失敗は、<code>CartApiError</code> から status と body を取り出し、<code>cartErrorMessage</code> の文言をエラーのトーストに出す。数量変更が失敗しても state は更新しないので、セレクトは元の数量に戻る。削除が失敗したときは、ダイアログを閉じてからトーストを出す。</p>
+    <p class="stop-say">失敗したときは、エラーの種類に合わせた文言をトーストで出します。画面のカートは更新しないので、元の数量のままです。</p>
+    <p class="stop-next">次へ: <code>cartErrorMessage</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/cart-messages.ts::cartErrorMessage" data-focus="case &quot;not_found&quot;:" data-layer="screen">
+    <p class="stop-see">code ごとの固定文言（3 章の表と同じ）。他人の明細や、すでに削除された明細への操作は 404 <code>not_found</code> で、「商品が見つかりませんでした」。</p>
+    <p class="stop-say">すでに消えている明細を操作したときは、「商品が見つかりませんでした」と出ます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/CartView.tsx</code> を開き、読み込み失敗の表示を見る</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="カートを読み込めませんでした。時間をおいて再読み込みしてください。" data-layer="screen">
+    <p class="stop-see">初回表示の取得に失敗し（<code>refetchOnMount</code>）、ブラウザからの取り直し（<code>fetchCart</code>）も失敗したときの表示。<code>role="alert"</code>。</p>
+    <p class="stop-say">サーバー側の取得に失敗したときは、ブラウザからもう一度取りに行きます。それも失敗したら、この文言を出します。</p>
+    <p class="stop-next">次へ: 同じ関数の下の、空のカートの表示へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="カートに商品が入っていません" data-layer="screen">
+    <p class="stop-see">明細が 0 件のとき（Cookie 無し・最後の 1 件を削除したあとを含む）の表示。「買い物を続ける」でホームへ。</p>
+    <p class="stop-say">明細が 1 つも無いときは、空のカートの表示と、買い物を続けるボタンを出します。</p>
+  </li>
+</ol>
+<p>失敗・特別な状態のときの画面の出し分けです。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>場面</th><th>画面の表示</th><th>出す場所</th></tr></thead>
+<tbody>
+<tr><td>数量変更に成功</td><td>トースト「数量を変更しました」（2.5 秒）。小計・送料・合計・バッジが更新される</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="数量を変更しました"></span></td></tr>
+<tr><td>削除に成功</td><td>トースト「{商品名} を削除しました」。明細が消え、金額・バッジが更新される</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="を削除しました"></span></td></tr>
+<tr><td>数量変更・削除に失敗</td><td>エラーのトースト（文言は 3 章の表）。数量は元に戻る</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="const handleError"></span></td></tr>
+<tr><td>在庫切れ・在庫不足の明細がある</td><td>行の下に「⚠ 在庫切れのため購入できません」または「⚠ 在庫が不足しています」。「レジへ進む」は無効</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="const warning = stockWarning"></span></td></tr>
+<tr><td>注文確定で在庫切れになって戻ってきた（<code>?oos=</code>）</td><td>該当の明細を赤枠で強調し、「⚠ 注文時に在庫切れになりました」</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="注文時に在庫切れになりました"></span></td></tr>
+<tr><td>カートが空</td><td>「カートに商品が入っていません」と「買い物を続ける」</td><td><span class="loc" data-ref="apps/web/components/CartView.tsx::CartView" data-focus="カートに商品が入っていません"></span></td></tr>
+</tbody>
+</table>
+</div>
+<div class="note warn"><p>注意（既知の弱点 C5）: 送料無料の閾値には予備値 <code>4990</code> が <code>cart/page.tsx</code> に直書きされています（<span class="loc" data-ref="apps/web/app/cart/page.tsx#L1-20" data-focus="FALLBACK_FREE_SHIPPING_THRESHOLD = 4990"></span>）。使われるのは、公開設定の取得に失敗したときの表示だけです。送料の判定は API が行うので、金額には影響しません。ただ、設定の閾値を変えても、この予備値は連動しません。</p></div>
+<div class="note warn"><p>注意（既知の弱点 C1）: <code>CartView.tsx</code> は 262 行あり、表示・数量変更・削除・確認ダイアログ・エラー処理が 1 つのコンポーネントに入っているため、読むのに時間がかかります。</p></div>
+<h3 id="r04-test">⑤ テスト 1 本の説明</h3>
+<p><strong>推しのテスト</strong>　<span class="tid">IT-012-01</span><span class="req">DS-API-012</span><span class="req">DS-API-013</span><span class="req">F-009</span>　<span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span></p>
+<p>テスト設計書 4 章の記述は、「数量変更・削除 → 反映される。他人のカートの item_id は 404」です（区分は正常）。このテストで守りたいのは、数量変更と削除が自分のカートに反映されること、他人のカートの明細には触れないことです。</p>
+<p>テストコード: <a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404">test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404</a>（<a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py">test_it_010_013_cart.py</a>）</p>
+<ol>
+<li><strong>準備</strong>: <code>_new_token</code> で空のカートとトークンを作り、在庫が十分ある variant を 1 点（数量 1）追加して、応答の <code>item_id</code> を取る。別のカート（<code>other</code>）も作る。</li>
+<li><strong>実行</strong>: 自分のトークンで PATCH（数量 3、11、0）、別のカートのトークンで PATCH と DELETE、自分のトークンで DELETE を 2 回、存在しない <code>item_id</code>（999999）で DELETE。</li>
+<li><strong>確認</strong>: PATCH（数量 3）は 200 で、<code>quantity</code> と <code>item_count</code> が 3（<span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="[&quot;item_count&quot;] == 3"></span>）。11 は 422、0 は 400。別のカートからの PATCH は 404 で、本文は <code>{"code": "not_found"}</code>。DELETE も 404（<span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="client.delete("></span>）で、自分のカートの数量は 3 のまま。自分の DELETE は 200 で、<code>items</code> が空、<code>total</code> が 0（<span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="[&quot;total&quot;] == 0"></span>）。2 回目の DELETE と、存在しない ID は 404。</li>
+</ol>
+<p><strong>予備の 1 本</strong>　<span class="tid">UT-021-02</span>　<span class="tstat pass">通過（ローカル・CI とも）</span>　<a class="ref" data-ref="apps/api/tests/unit/test_ut_021_pricing.py::test_ut_021_02_shipping_threshold">test_ut_021_02_shipping_threshold</a>（<a class="ref" data-ref="apps/api/tests/unit/test_ut_021_pricing.py">test_ut_021_pricing.py</a>）。送料無料の境界を、DB を使わずに確かめます。小計 4,989 円は送料 550 円、4,990 円と 4,991 円は 0 円です（パラメータ 3 通り）。確かめる対象は、送料無料の閾値で動く関数 <code>calc_shipping_fee</code> そのものです。</p>
+<p>この流れの各部分のテストの状態です。</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>部分</th><th>テスト</th><th>状態</th></tr></thead>
+<tbody>
+<tr><td>FastAPI の数量変更・削除（反映・他人の明細は 404・上限・形）</td><td>IT-012-01（<a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py">test_it_010_013_cart.py</a>）</td><td><span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span></td></tr>
+<tr><td>金額（小計 4,980 円は送料 550 円、7,970 円は 0 円）</td><td><a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_cart_totals_match_pricing_rule">test_it_cart_totals_match_pricing_rule</a>（テスト ID なし）</td><td><span class="tstat pass">通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">CI ではスキップ</span></td></tr>
+<tr><td>送料・内税の計算関数</td><td>UT-021-01〜05（<a class="ref" data-ref="apps/api/tests/unit/test_ut_021_pricing.py">test_ut_021_pricing.py</a>）</td><td><span class="tstat pass">通過（ローカル・CI とも）</span></td></tr>
+<tr><td>BFF の PATCH・DELETE（CSRF 403、取り次ぎ、<code>item_id</code> が数字でなければ 404）</td><td><a class="ref" data-ref="apps/web/tests/bff.cart-route.test.ts#L186-227">bff.cart-route.test.ts の PATCH / DELETE</a></td><td><span class="tstat pass">通過（ローカル・CI とも）</span></td></tr>
+<tr><td>エラー文言・在庫警告の文言</td><td><a class="ref" data-ref="apps/web/tests/cart-messages.test.ts#L6-29">cart-messages.test.ts</a></td><td><span class="tstat pass">通過（ローカル・CI とも）</span></td></tr>
+<tr><td>カート画面（<code>CartView</code>）の表示・数量変更・削除・確認ダイアログ</td><td>専用のテストは無い</td><td><span class="tstat none">テストなし</span></td></tr>
+</tbody>
+</table>
+</div>
+<p>手動の記録は、AT-04（数量変更・削除・レジへ。小計・送料・合計の再計算、バッジ追従）<span class="tstat manual">手動で合格（2026-09-18）</span>、ST-F009-01<span class="tstat manual">手動で合格（2026-09-18）</span>、ST-F009-03（10 点は成功、11 点は 422。カート画面のセレクトでは 11 を選べないため、商品詳細からの追加で再現）<span class="tstat manual">手動で合格（2026-09-24）</span>、ST-F009-04（合計 50 点・51 点）<span class="tstat manual">手動で合格（2026-09-24）</span>、ST-F009-05（在庫切れの明細の警告とレジの無効化）<span class="tstat manual">手動で合格（2026-09-24）</span>、AT-08（4,980 円と 4,990 円の送料。再実施）<span class="tstat manual">手動で合格（2026-09-24）</span>、ST-F036-01（削除の確認ダイアログとトースト）<span class="tstat manual">手動で合格（2026-09-18）</span> です。記録は <a class="ref" data-ref="docs/05_検収/ST-AT実施記録_正常系_20260918.md">ST-AT 実施記録（正常系）</a> と <a class="ref" data-ref="docs/05_検収/ST実施記録_異常境界_20260924.md">ST 実施記録（異常・境界）</a> にあります。</p>
+<div class="note warn"><p>注意（既知の弱点 C2）: <code>CartView</code> の専用テストが無く、数量変更・削除の画面側（<code>onQuantityChange</code>・<code>onConfirmDelete</code>・確認ダイアログ・トースト）を確認したのは、手動の AT・ST だけです。<code>ConfirmDialog</code> と <code>Toast</code> も、他の画面のテストの中で動くだけで、単独のテストはありません。</p></div>
+<h3 id="r04-compare">⑥ 仕様書との突き合わせ</h3>
+<p>IT-012-01 の仕様書の記述と、テストコードの値を並べます。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>数量変更が反映される</td><td>数量変更 → 反映される</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="[&quot;item_count&quot;] == 3"></span>（<code>quantity</code> と <code>item_count</code> が 3）</td><td class="ok">一致</td></tr>
+<tr><td>削除が反映される</td><td>削除 → 反映される</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="[&quot;total&quot;] == 0"></span>（<code>items</code> が空、<code>total</code> が 0）</td><td class="ok">一致</td></tr>
+<tr><td>他人のカートの item_id</td><td>他人のカートの item_id は 404</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="assert res.status_code == 404 and res.json() == {&quot;code&quot;: &quot;not_found&quot;}"></span>（PATCH）、<span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="client.delete("></span> の次の行で 404（DELETE。本文は未確認）</td><td class="ok">一致</td></tr>
+<tr><td>他人の操作が自分に影響しない（仕様書に無い追加確認）</td><td>記述なし</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="# 影響なし"></span>（数量が 3 のまま）</td><td class="ok">一致（仕様より広く確認）</td></tr>
+<tr><td>上限（仕様書に無い追加確認）</td><td>記述なし（ST-F009-03 は「10 は成功、11 は 422」）</td><td><span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="assert res.status_code == 422"></span>（PATCH の 11）、<span class="loc" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_012_01_patch_and_delete_reflect_and_foreign_item_is_404" data-focus="assert res.status_code == 400"></span>（0）</td><td class="ok">一致（仕様より広く確認）</td></tr>
+<tr><td>合計 50 点の上限（PATCH）</td><td>DS-PRC-011: カート合計は 50 点（ST-F009-04・IT-011-04 は追加の操作）</td><td>PATCH で合計が 51 点になる場合は、<code>update_item</code> の <code>others + quantity</code> の計算を通るが、自動テストが無い（IT-011-04 は POST）</td><td class="warn">要注意（PATCH では未確認）</td></tr>
+<tr><td>小計・送料・合計の再計算</td><td>AT-04: 「小計・送料・合計が即時に再計算される」</td><td>IT-012-01 が確認する金額は、削除後の <code>total</code> が 0 だけ。送料の切り替えは <a class="ref" data-ref="apps/api/tests/integration/test_it_010_013_cart.py::test_it_cart_totals_match_pricing_rule">test_it_cart_totals_match_pricing_rule</a> が POST で確認（PATCH・DELETE のあとの再計算は自動テストなし）。画面の更新は手動の AT-04</td><td class="warn">要注意（一部が手動のみ）</td></tr>
+<tr><td>1 明細を 11 点にする（ST-F009-03）</td><td>「1 明細の数量を 10 と 11 にする → 11 は 422 でエラー表示」</td><td>カート画面の数量セレクトは 1〜10 で、11 を選べない（<code>MAX_QUANTITY_PER_ITEM</code>）。API は IT-012-01 で 422。画面の「エラー表示」は商品詳細からの追加で確認した</td><td class="warn">要注意（手順が画面と合わない）</td></tr>
+<tr><td>送料無料の境界</td><td>UT-021-02: 4,989 → 550、4,990 → 0、4,991 → 0</td><td><span class="loc" data-ref="apps/api/tests/unit/test_ut_021_pricing.py::test_ut_021_02_shipping_threshold" data-focus="(4989, 550), (4990, 0), (4991, 0)"></span>（CI でも実行）</td><td class="ok">一致</td></tr>
+<tr><td>実行の場所</td><td>1.2: 「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」</td><td>IT-012-01 は CI でスキップ（ci.yml に <code>DATABASE_URL_TEST</code> が無く、結合テスト 100 件が全件スキップ）。UT-021-02 は CI で動く</td><td class="ng">不一致</td></tr>
+</tbody>
+</table>
+</div>
+<div class="note fact"><p>事実（実物と設計書の食い違い）: 設計仕様書 6.6 のワイヤーは、送料を「送料 ¥550（4,990 円以上で無料）」と書きます。実装は、閾値を API 応答の <code>free_shipping_threshold</code> から表示するので、金額は固定ではありません（設定を変えれば追従します）。「あと何円で送料無料」の表示は、設計書にも実装にもありません。</p></div>
+<h3 id="r04-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>他の人のカートの商品を、消したり変えたりできませんか</summary>
+  <div class="qa-body">
+    <p>できません。リポジトリの <code>get_item</code> が、明細の ID に加えて自分のカートの ID も条件にして探すので、他人の <code>item_id</code> を送っても見つからず、404 <code>not_found</code> になります。他人のものと存在しないものは区別しません。BFF は <code>[id]</code> を正の整数に限っています。確認は IT-012-01 ですが、結合テストは CI でスキップされます。この点は先に伝えておいたほうがよいです。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: カートの持ち主はどう見分けていますか</p>
+      <p>Cookie の <code>cart_token</code>（43 文字の乱数）です。BFF が <code>X-Cart-Token</code> ヘッダーに載せ替えて FastAPI に渡し、FastAPI がトークンからカートを特定します。3 章の順路 B に発行の流れがあります。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>送料無料の閾値は、どこで決まっていますか。画面と API で食い違いませんか</summary>
+  <div class="qa-body">
+    <p><code>system_settings</code> の <code>free_shipping_threshold</code> で決まり、金額の判定は API の <code>calc_shipping_fee</code> が行います。画面は、API の応答の閾値と送料をそのまま表示するだけで、計算はしません。<code>cart/page.tsx</code> の予備値 4,990 円は、公開設定の取得に失敗したときの表示だけに使います（既知の弱点 C5）。</p>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>数量を変えるとき、在庫は確認していますか</summary>
+  <div class="qa-body">
+    <p>確認していません。設計仕様書 DS-PRC-011 で、数量が在庫を超えていても受け付け、在庫の確定は注文時の引当で行うと決めているためです。そのかわり、カートを返すたびに明細ごとの <code>stock_status</code> を計算し、在庫が足りない明細があれば警告を出して、「レジへ進む」を無効にします（ST-F009-05 は手動で確認）。</p>
+  </div>
+</details>
+</section>

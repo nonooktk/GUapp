@@ -6,6 +6,8 @@
 
 同じ `build.py` に `--map` を付けると、IDE の横に開いて「どこに何があって、どういう中身か」を引く **リポジトリ地図**（`GU_ECsite_リポジトリ地図.html`）を組み立てる。作り方は末尾の「リポジトリ地図」を参照。
 
+`--review` を付けると、コードレビュー当日に IDE と並べて使う **レビュー回答ガイド**（`GU_ECsite_レビュー回答ガイド.html`）を組み立てる。本文は `review/*.html`。作り方と本文の部品は「レビュー回答ガイド」の章を参照。
+
 ## 使い方
 
 リポジトリルートから実行する（スクリプト位置からルートを解決するので、どこから実行しても動く）。
@@ -24,6 +26,7 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 - 標準出力に章数・参照数・ユニークスニペット数・出力サイズを出す
 - 検証用の追加オプション: `--content-dir <dir>`（本文ディレクトリの差し替え）、`--out <path>`（出力先の差し替え）
 - `--map-url <URL>`: ヘッダーの「リポジトリ地図」リンクの向き先（既定: `GU_ECsite_リポジトリ地図.html`。同じフォルダ）
+- `data-focus`（下の「行番号の自動挿入」）は解説書でも使える（`data-focus-line` を付けるだけで、ドロワーが注目行を強調する）。地図の `body_html` では未対応
 
 本番の再ビルド前には `git fetch origin` で `origin/main` を最新にする。
 
@@ -32,12 +35,18 @@ python3 docs/05_解説/code-guide/build.py --include-sample   # content/00-*.htm
 | パス | 役割 |
 |---|---|
 | `build.py` | 組み立てスクリプト（標準ライブラリのみ） |
-| `template.html` | 解説書の外枠。CSS・JS・ヘッダー・目次。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{SNIPPETS_CODE}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` `{{MAP_URL}}`。`{{PARTIAL:名前}}` は `partials/名前` の中身に置き換わる |
+| `template.html` | 解説書の外枠。ヘッダー・目次・起動処理（CSS・JS の共通部分は `partials/guide-*` に切り出してある）。プレースホルダは `{{CONTENT}}` `{{TOC}}` `{{SNIPPETS_JSON}}` `{{SNIPPETS_CODE}}` `{{COMMIT}}` `{{COMMIT_FULL}}` `{{BUILD_DATE}}` `{{MAP_URL}}`。`{{PARTIAL:名前}}` は `partials/名前` の中身に置き換わる |
 | `content/NN-*.html` | 本文。ファイル名順に連結される |
 | `content/00-sample.html` | 動作確認用サンプル（`--include-sample` のときだけ入る） |
 | `partials/tokens.css` | デザイントークン（ライト/ダークの色・フォント）。解説書と地図で共通 |
 | `partials/drawer.css` | コード参照チップ・コードドロワー・hljs の CSS。共通 |
-| `partials/drawer.js` | コード参照・ドロワー・ホバーのツールチップ・hljs 読み込みの JS。共通（IIFE の中に差し込む） |
+| `partials/drawer.js` | コード参照・ドロワー・ホバーのツールチップ・hljs 読み込みの JS。共通（IIFE の中に差し込む）。`data-focus-line` があれば注目行を強調してスクロールする |
+| `partials/guide-base.css` | 本文まわり（ベース・ヘッダー・目次・表・注記・バッジ・Q&A・直書きコード）の CSS。解説書とレビュー回答ガイドで共通 |
+| `partials/guide-diagrams.css` | フロー図・構成図の CSS。同上 |
+| `partials/guide-widgets.js` | フロー図・表の絞り込み・目次の現在地の JS（`stopCurrent` もここ）。同上 |
+| `review/template-review.html` | レビュー回答ガイドの外枠。順路・行番号・キー・テスト状態バッジ・突き合わせ表・台本ボックスの CSS と、順路の JS を持つ |
+| `review/NN-*.html` | レビュー回答ガイドの本文。ファイル名順に連結される（`template*.html` は本文として扱わない） |
+| `review/00-sample.html` | レビュー回答ガイドの動作確認用サンプル（`--include-sample` のときだけ入る） |
 | `map/template-map.html` | 地図の外枠（CSS・JS・ヘッダー・全体図・ツリー・説明パネル） |
 | `map/descriptions.json` | 地図の説明データの本番ファイル（説明担当が作る） |
 | `map/sample.json` | 地図の動作確認用サンプル（最終出力には使わない） |
@@ -204,6 +213,136 @@ Tab で移動し、Enter / Space で開ける（JS が `role="button" tabindex="
 - スニペットは全件を HTML に埋め込むため、参照数が増えるとファイルが大きくなる
 - スニペットのコード本体は JSON に入れず、`<script type="text/plain" data-snippet="キー">` に原文のまま置く（JSON 化すると `"` が `\"` になるなど原文と違う文字列になり、detect-secrets がリポジトリ本体では出ない誤検知を出したため）。メタ情報（path・行範囲・URL など）は `<script type="application/json" id="snippets-data">` に 1 件ずつ改行して置く。script の終端・HTML コメントに見える並びだけ、`<` の直後にバックスラッシュを 1 つ足して埋め込み、ページ側で 1 つ引いて戻す（可逆）
 - ヘッダーの目次（狭い画面）は全 h3 を展開する。広い画面のサイドバーは現在の章の h3 だけを展開する
+
+---
+
+# レビュー回答ガイド（`--review`）
+
+コードレビューで、レビュワーが機能を 1 つ指定し、レビュイー（オーナー本人）が ②画面のコードからバックエンドへのリクエストまで ③バックエンドの処理 ④応答から画面表示まで ⑤テスト仕様 1 つとテストコード ⑥テスト条件が仕様書どおりか、を説明する。本人は IDE（VS Code）を見ながら「順路」を手でたどる。そのため、各停留所に **実ファイルの `ファイル:行`** を表示する。行番号は本文に手で書かず、組み立て時に実物から自動で入れる。
+
+## 作り方
+
+```bash
+python3 docs/05_解説/code-guide/build.py --review                    # review/*.html → GU_ECsite_レビュー回答ガイド.html
+python3 docs/05_解説/code-guide/build.py --review --check            # 出力を書かず検証だけ
+python3 docs/05_解説/code-guide/build.py --review --include-sample   # review/00-*.html（サンプル）も取り込む
+python3 docs/05_解説/code-guide/build.py --review --list-stops       # 停留所ごとの path:行 を一覧する（突き合わせ用）
+```
+
+- 出力: `docs/05_解説/GU_ECsite_レビュー回答ガイド.html`（`--out` で差し替え可。サンプルの動作確認は `--out` で別の場所に出す）
+- `--commit`・`--check`・`--content-dir`・`--out`・`--include-sample` は解説書と同じ。`--content-dir` の既定だけ `code-guide/review`
+- `--guide-url`（既定 `GU_ECsite_コード解説.html`）と `--map-url`（既定 `GU_ECsite_リポジトリ地図.html`）はヘッダーのリンク先
+- ページの文言（タイトル・eyebrow・リード・使い方の 1 行）は `review/template-review.html` に書いてある
+- 章の構造（`<section id data-title>`・`<h3 id>`・目次・id の重複検査）と `data-ref` 構文は解説書と同じ。`--map` との同時指定はエラー
+
+## 行番号の自動挿入（`data-focus`）
+
+`data-ref` に **`data-focus="部分文字列"`** を添えると、build.py が `data-ref` の解決範囲（シンボルなら宣言の先頭行から末尾まで、`#L` 範囲ならその範囲、ファイル全体ならファイル全体）の中で、その文字列を含む **最初の行** の実ファイルの行番号を求める。
+
+- `data-focus` が無ければ範囲の開始行（デコレータ付きの Python 関数はデコレータ行）
+- 文字列が範囲内に見つからなければ、`ファイル:行: 参照 → data-focus "…" が … の L…-L… の中に見つからない` を一覧にして exit 1
+- `data-focus` が空、`data-ref` なしの `data-focus`、順路の外の `li.stop`、`span.loc` の中身が空でない、も exit 1
+- 求めた行は `data-focus-line="N"` として自動で付く（本文には書かない）。ドロワーはその行を強調（背景色・左の太線・行番号の太字）し、上から 1/3 あたりにスクロールする。ヘッダーに `L34-215（182 行） ／ 注目 L65` と出る
+- 行番号は `git show <commit>:<path>` の行番号と一致する（GitHub のパーマリンクと同じ）。確認は `git show <commit>:<path> | grep -n -F '<data-focus>'`（最初の一致が範囲内にあることを見る）
+
+## 本文の部品（本文担当と共有する約束）
+
+### 1. 順路
+
+```html
+<ol class="route" data-title="順路：購入ボタンから完了画面まで">
+  <li class="stop" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="inflight.current" data-layer="screen">
+    <p class="stop-see">ここで見るもの（関数名・注目する行の説明）</p>
+    <p class="stop-say">言うこと（台本 1〜2 文）</p>
+    <p class="stop-next">次へ: <kbd>F12</kbd> で <code>createOrder</code> の定義へ</p>
+  </li>
+</ol>
+```
+
+- `data-ref`・`data-focus` は上のとおり。`data-note`（任意）はドロワーの「見どころ」になる
+- `data-layer`: `screen` / `bff` / `api` / `service` / `repo` / `db` / `ci` / `infra`（フロー図と同じ。左線の色とレイヤー名）
+- build.py が各 `li.stop` の先頭に `<div class="stop-loc">` を自動で挿入する。中身は、番号（順路ごとに 1, 2, …）、レイヤーのラベル、`path:行`（等幅。クリックで全選択）、「コピー」ボタン、「コードを見る」ボタン。本文には書かない
+- 「コピー」は `path:行` を `navigator.clipboard.writeText` で書く。失敗したらパスを選択状態にする。VS Code では <kbd>⌘P</kbd> に貼って Enter で開ける
+- 「コードを見る」はドロワーを開き、注目行を強調してそこまでスクロールする。停留所の全面クリックでは開かない（文字の選択を邪魔しないため）
+- 順路の見出し（`data-title`）の横に、フロー図と同じ「流れを再生」ボタンが付く。停留所を 1.4 秒ごとに順に強調する。再生中に停留所をクリックすると止まる
+- `stop-see` の前に「見る」、`stop-say` の前に「言う」のラベルが CSS で付く。本文に書き足さない。`stop-next` は書いたとおりに出る
+- `data-ref` の無い停留所（DB など）は番号とレイヤーだけ出て、警告が 1 行出る
+
+### 2. インラインの行番号
+
+```html
+<span class="loc" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm" data-focus="inflight.current"></span>
+```
+
+中身は自動で `path:行` になる（空にしておく）。押すとドロワーが開く。`data-focus` は省略可（範囲の開始行）。
+
+### 3. キー
+
+```html
+<kbd>⌘P</kbd> <kbd>F12</kbd>
+```
+
+### 4. テストの状態バッジ
+
+```html
+<span class="tstat pass">✅ 通過（ローカル）</span>
+<span class="tstat ciskip">⏭ CI ではスキップ</span>
+<span class="tstat fail">❌ 失敗</span>
+<span class="tstat manual">🖐 手動で合格</span>
+<span class="tstat none">— テストなし</span>
+<span class="tstat notimpl">未実装</span>
+```
+
+色は pass が緑系、ciskip が琥珀系、fail が赤系、manual が青系、none が灰色（塗り）、notimpl が灰色（破線の枠）。ラベルの文言は本文で決める（絵文字と文字でも状態が分かる）。
+
+### 5. 仕様書との突き合わせ表
+
+```html
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>仕様書</th><th>テスト</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>在庫が足りないとき</td><td>409 を返す</td><td>409 を確認</td><td class="ok">一致</td></tr>
+<tr><td>…</td><td>…</td><td>…</td><td class="ng">不一致</td></tr>
+<tr><td>…</td><td>…</td><td>…</td><td class="warn">要注意</td></tr>
+</tbody>
+</table>
+</div>
+```
+
+`td.ok`（緑）・`td.ng`（赤）・`td.warn`（琥珀）に背景色が付く。判定の文言は本文で決める。
+
+### 6. 台本ボックス
+
+```html
+<div class="script"><p class="script-title">30 秒版</p><p>台本の本文</p></div>
+```
+
+引用風（左の太線）で、本文より少し大きい文字。
+
+### 7. 章の頭の「指定のされ方」
+
+```html
+<p class="asked">「購入ボタンを押す」「注文を確定する」</p>
+```
+
+「指定のされ方」のラベルは CSS が付ける。
+
+### 8. 既存の部品
+
+`a.ref`、`flow`、`arch`、`note`、`status`、`req`、`tid`、`layer`、`table-wrap`、`filterable`、`details.qa`、`pre.code`、`metaphor`、`why`、`grid2` はそのまま使える。`data-focus` は `a.ref` と `flow-step` にも使える。
+
+## 秘密検査
+
+出力 HTML は解説書・地図と同じく `gitleaks detect --no-git --source <file> --redact` と `pre-commit run detect-secrets --files <file>` を通す。埋め込み方式（コードは原文のまま `<script type="text/plain">`、JSON の `secret` はエスケープ）は解説書と共通。
+
+## 既知の制限（レビュー回答ガイド）
+
+- `data-focus` は「範囲内で最初に一致する行」。同じ文字列が範囲内に複数あるときは 2 つ目以降を指せない（文字列を長くして一意にする）
+- 行は 1 行だけ強調する（複数行の範囲強調は未対応）
+- 地図（`--map`）の `body_html` では `data-focus` を解決しない（ドロワーの JS は `data-focus-line` があれば効く）
+- 順路の「流れを再生」は強調の移動のみ（フロー図のような動く点は無い）
+- JS が無い環境では「コピー」「コードを見る」ボタンは出ない（`path:行` の文字列は出る）
 
 ---
 
