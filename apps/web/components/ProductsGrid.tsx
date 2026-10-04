@@ -17,7 +17,7 @@ export interface ProductsGridProps {
   initialPage: number;
   hasMore: boolean;
   total: number;
-  /** `gender=women&category=tops` の形（page を含まない） */
+  /** `gender=women&category=women-tops` や `kind=tops` の形（page を含まない） */
   query: string;
   imageBaseUrl: string;
 }

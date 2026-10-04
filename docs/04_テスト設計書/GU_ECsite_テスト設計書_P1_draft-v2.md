@@ -16,6 +16,7 @@
 | draft-v1 | 2026-09-07 | 初稿。設計仕様書 P1 draft-v2 の設計 ID に対応する 4 レベルのテストを設計。9.4 申し送りの必須項目を IT に反映 | Claude | — |
 | draft-v2 | 2026-09-17 | 設計仕様書 draft-v3 に追従。UT-WEB-06 を CI へ移管、UT-WEB-07・UT-014-03/04 の検証範囲を UT で確認できる範囲に限定。tax_rate の表現・422 の扱いを設計と整合。1.4 に同時実行テスト（IT-014-02〜04）の偽陽性防止条件を追加 | Claude | Oya |
 | draft-v2（検収結果転記） | 2026-09-24 | 10 章のトレーサビリティ表に AT・ST 全 ID の実施結果（合格／不合格／未実施）と記録ファイル名を転記。IT・UT は CI 全件緑を追記 | Claude | — |
+| draft-v2（2026-10-04 追補・不具合修正） | 2026-10-04 | 設計仕様書 draft-v3 の 2026-10-04 追補（`categories.kind`・DS-API-001/002 の kind・DS-SCR-002 の ALL のカテゴリの札・DS-DEC-56）に対応するテストを追加した。ST-F001-04、IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002、UT-SEED-07、UT-WEB-11/12。テスト関数との対応は 11 章。既存の行は変えていない。原因は、設計書とテスト設計書に「ALL でカテゴリを選んだとき」の定義とテストが無かったこと（仕様の抜け）。発見はオーナーの手動操作（2026-10-04） | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -102,6 +103,7 @@
 | ST-F001-01 | F-001／DS-API-001,002・DS-SCR-001,002 | 正常 | ホームから性別区分・カテゴリ階層で一覧を開く | 該当カテゴリの公開商品のみが新着順で表示され、総件数が出る |
 | ST-F001-02 | F-001／DS-API-002 | 異常 | 非公開商品（P-UNPUB）の一覧表示 | 一覧に出ない。URL 直打ちの商品詳細は 404 |
 | ST-F001-03 | F-001／DS-SCR-002 | 境界 | 商品 25 点以上のカテゴリで「もっと見る」 | 24 件で区切られ、次の 24 件が追加表示される |
+| ST-F001-04 | F-001／DS-API-002・DS-SCR-002・DS-DEC-56（2026-10-04 追補・不具合修正） | 正常 | 商品一覧で ALL（性別を選ばない状態）にして、カテゴリの札「トップス」を選ぶ。続けて WOMEN・MEN・KIDS・TEEN のタブで同じ「トップス」を選び、件数を見比べる（手動） | ALL の「トップス」の一覧に、レディース・メンズ・キッズ・ティーンのトップスが並ぶ。総件数は各性別のトップスの件数の合計で、札の件数も同じ合計。札は「トップス」1 枚で、3 枚並ばない。URL は `/products?kind=tops`。性別のタブを選ぶと、従来どおりその性別のトップスだけが出る |
 | ST-F004-01 | F-004／DS-SCR 共通 | 正常 | 全 6 画面でヘッダー・フッター・オールメニューを確認 | ヘッダー（メニュー・ロゴ・検索・お気に入り・カート点数・会員）とフッター（企業情報・利用規約・プライバシー・特商法・FAQ）が全画面に出る |
 | ST-F005-01 | F-005／DS-API-003・DS-SCR-003 | 正常 | 商品詳細を開く | 画像・名称・税込価格・説明・素材・サイズ表・色/サイズ選択・数量・関連商品が表示される |
 | ST-F005-02 | F-005／DS-SCR-003 | 正常 | 色とサイズを切り替える | 選んだ組み合わせの在庫有無が表示に反映される |
@@ -154,8 +156,12 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | ID | 対象 DS | 区分 | 前提・入力 | 期待結果 |
 | --- | --- | --- | --- | --- |
 | IT-001-01 | DS-API-001 | 正常 | GET /categories | 性別 3 区分と子カテゴリが階層で返る |
+| IT-001-01a | DS-API-001・DS-TBL-05（2026-10-04 追補・不具合修正） | 正常 | GET /categories（pytest 関数は IT-001-01 と同じ。kind の assert を追加） | 子カテゴリに `kind` が付き、seed の定義と一致して空でない。子のキーは slug・name・kind・product_count の 4 つ。親には kind が出ない |
 | IT-002-01 | DS-API-002 | 正常 | GET /products?category=…&page=1 | 公開商品のみ 24 件、total が返る |
 | IT-002-02 | DS-API-002 | 境界 | page=0、page=最終+1 | 0 は 400、範囲外は空配列と total |
+| IT-002-03a | DS-API-002・DS-DEC-56（2026-10-04 追補・不具合修正） | 正常 | GET /products?kind=tops（gender・category なし）。続けて kind=dresses、kind=nothing | tops: total がレディース・メンズ・キッズ・ティーンの公開トップスの合計に等しく、商品名が seed の公開トップス全件と一致する（各性別とも 1 件以上）。dresses: レディースの 2 件だけ。形は正しいが存在しない kind: 200 で 0 件・空配列（400 ではない） |
+| IT-002-03b | DS-API-002・DS-DEC-56（2026-10-04 追補・不具合修正） | 境界 | gender=men＋kind=tops、category=men-tops＋kind=tops、category=men-tops＋kind=bottoms、gender=women＋category=men-tops＋kind=tops | AND で絞られる。1 つ目と 2 つ目はメンズのトップスの件数（4）。3 つ目と 4 つ目は条件が食い違うので 200 で 0 件 |
+| IT-002-03c | DS-API-002・DS-DEC-56・4.5（2026-10-04 追補・不具合修正） | 異常 | kind に `TOPS`・`to_ps`・33 文字・空文字・`tops `（末尾に空白）・`ト`・`tops;x` を渡す | 400 `validation_error`。fields は `[{"name": "kind", "reason": "format"}]` |
 | IT-003-01 | DS-API-003 | 正常 | GET /products/{id} | バリエーションごとの在庫有無、関連商品が返る |
 | IT-003-02 | DS-API-003 | 異常 | 非公開商品・存在しない id | 404 |
 | IT-010-01 | DS-API-010 | 正常 | Cookie 無しで GET /cart | 新規カートと匿名トークンが発行される |
@@ -184,6 +190,11 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | IT-CORS-01 | 7.1 CORS | 異常 | 許可外オリジンの OPTIONS | 許可ヘッダーが返らない |
 | IT-BFF-01 | 4.3 BFF | 正常 | ブラウザ相当で POST /api/orders（CSRF トークン付き） | BFF が内部認証ヘッダを付与して FastAPI へ取り次ぎ、201 が返る |
 | IT-BFF-02 | 4.3 BFF | 異常 | CSRF トークン無し | 403。FastAPI へ到達しない |
+| IT-SCHEMA-07 | DS-TBL-05・5.2.1（2026-10-04 追補・不具合修正） | 正常 | seed 済みの DB の categories | `kind` は VARCHAR(32)・NULL 可。親（parent_id が NULL）の kind は NULL。全行の kind が seed_data の定義と一致し、子の kind の集合は tops・bottoms・outer・dresses・inner-goods |
+| IT-SCHEMA-08 | DS-TBL-05・Alembic `ad00074244c2`（2026-10-04 追補・不具合修正） | 正常 | kind 追加前のリビジョン `371a338f4624` へ downgrade し、親（women・kids-teen）と子（women-tops・kids-teen-inner-goods）を INSERT してから upgrade head | downgrade で kind 列が消える。upgrade 後は子に slug 由来の kind（tops・inner-goods）が入り、親は NULL のまま。終了時は必ず head に戻し、categories を空にする（後続のテストに影響させない） |
+| IT-BFF-002 | 4.3 BFF・DS-API-002（2026-10-04 追補・不具合修正） | 正常・異常 | BFF の GET /api/products に kind を付ける（fetch をモックし、FastAPI への取り次ぎ内容を検証）。kind のみ、gender・category との併用、kind が無い・空・形が不正（大文字・空白・`;`・65 文字）、FastAPI の 400、FastAPI に接続できない場合 | kind を FastAPI の `/api/v1/products` へ取り次ぐ（内部認証ヘッダ付き）。併用時は 3 つとも渡す。無い・空・形が不正な kind は渡さない。400 はそのまま返す。接続できなければ 503 `upstream_unavailable`。ID は IT-BFF-01/02（orders）とは別で、`002` は DS-API-002 の番号 |
+
+**IT-SCHEMA・IT-SEED の ID について（2026-10-04 追補）**: `test_it_schema_and_seed.py` の `test_it_schema_01`・`02` と `test_it_seed_03`〜`06`（テーブル数・alembic check・seed 件数など）は、本書に ID の行が無く、コードのテスト名にだけ残っている。本追補は 07・08 だけを記載し、01〜06 は追記していない。同様に `test_ut_seed_data.py` の UT-SEED-01〜06 も本書に行が無い。
 
 ## 5. 単体テスト（UT）
 
@@ -206,6 +217,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | UT-VAL-02 | Pydantic 入力検証 | 境界 | 氏名 1 文字・50 文字・51 文字。住所 200／201 文字、電話 9 桁／12 桁も併せて確認 | 1 と 50 は可、51 は不可 |
 | UT-SEC-01 | 秘密マスクフィルタ | 正常 | ログに `sk_live_…` と接続文字列を含む文字列 | マスクされて出力される |
 | UT-SEC-02 | エラーハンドラ | 正常 | 未捕捉例外 | 500 の本文が固定文言。ログにのみ詳細 |
+| UT-SEED-07 | seed_data の categories・DS-TBL-05（2026-10-04 追補・不具合修正） | 正常 | `seed_data.CATEGORIES` | 親（性別）の kind は None。子の kind は slug から「親 slug＋`-`」を除いた値で、すべて `[a-z0-9-]{1,32}` に合う（API の kind 制約と同じ形）。tops・bottoms・outer・inner-goods は 3 性別にあり、dresses はレディースだけ |
 
 ### 5.2 Next.js（Vitest）
 
@@ -218,6 +230,8 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | UT-WEB-05 | 環境変数ローダー（7.2） | 異常 | `NEXT_PUBLIC_INTERNAL_TOKEN` を定義 | 起動時に拒否される |
 | UT-WEB-07 | 商品詳細の固定バー | 正常 | 色・サイズ・数量の選択操作 | 固定バーの表示内容（色/サイズ/数量/価格）が選択に追従。375px での表示位置は AT-02／ST-F005-03 で確認 |
 | UT-WEB-08 | 在庫切れ表示 | 正常 | 在庫 0 のバリエーション選択 | ボタン disabled、「在庫切れ」表示 |
+| UT-WEB-11 | CategoryNav・ALL（DS-SCR-002 6.4.1。2026-10-04 追補・不具合修正） | 正常・異常・境界 | gender なしで、レディース・メンズ・キッズ・ティーンの子（同じ kind が複数）を渡す。kind の有無・null の子・categories が null の場合も確認 | 同じ kind は 1 枚にまとまり、並びは最初に出た順。表示名は最初に出た名前、件数は全性別の合計（例: 3＋4＋3＝10）。リンクは `/products?kind=<kind>` で gender・category は付かない。選択中は URL の kind で判定し、kind が無い URL では選択中の札が無い。kind が null の子は束ねず `?category=<slug>` で 1 枚ずつ。categories が null なら性別タブだけで子の一覧は出ない |
+| UT-WEB-12 | CategoryNav・性別を選択中（DS-SCR-002 6.4.1。2026-10-04 追補・不具合修正） | 正常 | gender=men、gender=women＋category＋kind、gender=kids_teen で描画 | その性別の子だけを 1 枚ずつ並べ、件数はその性別の分。リンクは `?gender=<gender>&category=<slug>`。選択中は URL の category（slug）で判定し、kind は見ない。従来の動きから変わらない |
 
 ## 6. テストデータ
 
@@ -229,6 +243,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | P-ALL0（全バリエーション在庫 0） | 一覧の在庫切れ表示 | AT-03 |
 | 単価 1,990・2,990・1,490・4,990 の商品 | 送料閾値 4,980／4,990 の組み立て（商品 31「ライトジャケット（メンズ）」4,990 円を 2026-09-24 に追加） | AT-08、UT-021-02 |
 | system_settings の変更値 | 税率・送料の可変確認 | ST-F032-01,02、UT-021-04 |
+| seed の categories.kind（tops・bottoms・outer・dresses・inner-goods。2026-10-04 追補・不具合修正） | ALL ＋ 種類の絞り込み。同じ種類が 3 性別にあり、dresses はレディースだけ | ST-F001-04、IT-002-03a〜c、IT-SCHEMA-07、UT-SEED-07 |
 
 ## 7. 実施計画
 
@@ -275,9 +290,30 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | REQ-NFR-06,07,08 | — | 7 章 | — | ST-SEC-01〜11 | IT-060-01、IT-CORS-01、IT-BFF-01/02 | UT-SEC-01/02、UT-WEB-05（UT-WEB-06 は CI） | ST-SEC-01: 合格／ST-SEC-02: 合格／ST-SEC-03: 合格／ST-SEC-04: 合格／ST-SEC-05: 合格／ST-SEC-06: 合格／ST-SEC-07: 合格／ST-SEC-08: 合格／ST-SEC-09: 合格／ST-SEC-10: 合格／ST-SEC-11: 合格 | ST-AT実施記録_正常系_20260918.md（ST-SEC-01・07・09）、ST実施記録_異常境界_20260924.md（ST-SEC-02・03・04・05・06・08・10・11） |
 | REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 | AT-02: 合格（上記と同じ）／ST-NFR-01: 合格（注記: 数値で確認できる項目のみ。目視の崩れ判定は未実施） | ST-AT実施記録_正常系_20260918.md |
 | REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — | ST-F014-01: 合格（上記と同じ） | ST-AT実施記録_正常系_20260918.md |
+| REQ-FR-101,102,108（2026-10-04 追補・不具合修正） | F-001 / SCR-002 | DS-API-001,002・DS-TBL-05・DS-SCR-002・DS-DEC-56 | AT-07 | ST-F001-04 | IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002 | UT-SEED-07、UT-WEB-11/12 | 未記録（追補時点。ST-F001-04 は手動で未実施。IT・UT は実施後に転記） | — |
 
 P1 対象の要求 ID はすべて AT または ST に 1 件以上対応する。P2 以降の行は追補で追加する。
 
 **IT・UT の実施結果**: IT（本章 31 件）・UT（本章 22 件）は全件 CI 緑（`uv run --env-file .env pytest -q` → api **213 passed**／`pnpm test` → web vitest **130 passed**）。同時実行（IT-014-02〜04）の偽陽性防止条件（1.4 章）と防御外し確認（1.4 #8）の結果は `scripts/mutation-check/result-20260918*.md`。
 
 **AT・ST の集計**: AT は本書 2 章の 8 件、ST は本書 3 章の 40 件（3.1 機能要件 27 件＋3.2 非機能・セキュリティ 13 件。本表の ID を集計した数）。実施記録は `ST-AT実施記録_正常系_20260918.md`（AT 8・ST 正常 15・ST 3.2 5 の計 28 件＋再実施 2 件〈AT-07・AT-08〉）と `ST実施記録_異常境界_20260924.md`（3.1 異常・境界 12・ST-F032 2・ST-SEC 8 の計 22 件）の 2 本。ST-F032-01・02 は両記録に ID が登場するが（前者は「未実施・委譲」の記載、後者が実施本体）実体は同一の 2 件のため、単純合算の 20＋22＝42 ではなく重複を除いた **40 件**が本章の ST 総数と一致する。AT 8 件・ST 40 件とも全件合格。
+
+## 11. 2026-10-04 追補（不具合修正）: 追加したテストとテスト関数の対応
+
+設計仕様書 draft-v3 の 2026-10-04 追補（`categories.kind`・DS-API-001/002 の kind・DS-SCR-002 の ALL のカテゴリの札・DS-DEC-56）に対応して追加したテストと、コード上のテスト名の対応。ID の付け方は本編の規則に合わせた（IT は `IT-<DS-API の番号>-<連番>`、UT-WEB は連番、ST は `ST-F<機能番号>-<連番>`）。IT-002-03 は pytest 関数名がすべて `test_it_002_03_…` のため、a・b・c の枝番で分けた。
+
+| ID | テストファイル | テスト関数・テスト名 |
+| --- | --- | --- |
+| ST-F001-04 | 手動（自動テストなし） | 3.1 章の手順どおりに実施 |
+| IT-001-01a | `apps/api/tests/integration/test_it_001_003_catalog.py` | `test_it_001_01_categories_hierarchy`（kind の assert を追加。IT-001-01 と同じ関数） |
+| IT-002-03a | 同上 | `test_it_002_03_filter_by_kind_across_genders` |
+| IT-002-03b | 同上 | `test_it_002_03_kind_combines_with_gender_and_category_by_and` |
+| IT-002-03c | 同上 | `test_it_002_03_kind_format_violation_is_400`（7 パターンのパラメータ化） |
+| IT-SCHEMA-07 | `apps/api/tests/integration/test_it_schema_and_seed.py` | `test_it_schema_07_categories_kind_column_and_seed` |
+| IT-SCHEMA-08 | 同上 | `test_it_schema_08_kind_migration_backfills_existing_children` |
+| IT-BFF-002 | `apps/web/tests/it-bff-002.products-route.test.ts` | `buildProductsQuery` の 2 件（「kind を付ける。空・未指定なら付けない」「gender・category・kind をそろえて渡せる（順は gender → category → kind → page → per_page）」）と、`GET /api/products` の 5 件（「kind を FastAPI /api/v1/products へ取り次ぐ（gender・category は付けない）」「gender・category と併用しても 3 つとも取り次ぐ」「kind が無い・空・形が不正（大文字・記号）なら FastAPI へは渡さない」「FastAPI の 400 はそのまま透過する」「FastAPI に接続できなければ 503 upstream_unavailable」） |
+| UT-SEED-07 | `apps/api/tests/unit/test_ut_seed_data.py` | `test_ut_seed_07_category_kind_matches_slug_without_gender_prefix` |
+| UT-WEB-11 | `apps/web/tests/category-nav.test.tsx` | `describe("CategoryNav: ALL（性別なし）")` の 7 件 |
+| UT-WEB-12 | 同上 | `describe("CategoryNav: 性別を選択中（従来どおり）")` の 3 件 |
+
+既存テストの変更: `apps/web/tests/at-07.all-menu.test.tsx`（AT-07 に対応するオールメニューの Vitest）は、CategoryChild に kind が加わったため fixture に `kind` を足しただけで、検証内容は変えていない。

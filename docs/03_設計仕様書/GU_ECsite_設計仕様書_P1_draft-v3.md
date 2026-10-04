@@ -17,6 +17,7 @@
 | draft-v2 | 2026-09-07 | 未決 #20〜30 を統括が承認し DS-DEC-21〜31 に昇格（条件付きの項目は条件を本文へ反映）。9.5 の講義の問いに回答。精査で見つけた修正 4 件（注文後のカート再生成・ゲスト照会のメール送信方法・ホームの性別区分・8.3 の構成図）を反映 | Claude | Oya |
 | draft-v3 | 2026-09-17 | 実装前レビューで見つかった矛盾 3 件・未定義 3 件を反映。4.5 エラー応答を判定順序付きの全フェーズ共通規則に差し替え（DS-DEC-32）。金額計算の税率表現（DS-DEC-31 補足）、注文番号衝突時の再生成、入力形式の正規表現と長さ上限、注文状態の列挙コードを追加 | Claude | Oya |
 | draft-v3（P2追補a訂正） | 2026-09-24 | P2 追補a（GUEC-SD-01-P2a）の接続方式検証で、8.2 の `DATABASE_URL` 例 `?ssl=true` は SQLAlchemy／asyncmy の実装上 `ssl_ca` 等の個別クエリキーでないと解釈されないと判明したため、該当行を `?ssl_ca=<CA証明書ファイルの絶対パス>` に 1 行訂正。詳細は P2 追補a 8.1 章を参照 | キャタピー | Oya |
+| draft-v3（2026-10-04 追補・不具合修正） | 2026-10-04 | 商品一覧で ALL を選んでカテゴリ（例: トップス）を選ぶと女性物しか出ない不具合の修正に合わせ、`categories.kind` 列（5.2 DS-TBL-05・5.2.1）、DS-API-001 の子の `kind`・DS-API-002 の任意の `kind`（4.2.1）、DS-SCR-002 の「ALL のときのカテゴリの札」の振る舞い（6.4.1）、設計判断 DS-DEC-56（9.1）、10 章の追加行を追記した。既存の記述は変えていない。原因は、本書に「ALL でカテゴリを選んだときの動き」の定義が無かったこと（仕様の抜け）。発見はオーナーの手動操作（2026-10-04） | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -330,8 +331,8 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 
 | DS-API | メソッド | パス | 概要 | 関連 F | フェーズ |
 | --- | --- | --- | --- | --- | --- |
-| DS-API-001 | GET | /api/v1/categories | カテゴリ階層（性別・親子） | F-001,004 | P1 |
-| DS-API-002 | GET | /api/v1/products | 商品一覧。category・gender・page。公開品のみ | F-001 | P1 |
+| DS-API-001 | GET | /api/v1/categories | カテゴリ階層（性別・親子）。**子に `kind` を追加（2026-10-04 追補・不具合修正。4.2.1）** | F-001,004 | P1 |
+| DS-API-002 | GET | /api/v1/products | 商品一覧。category・gender・page。公開品のみ。**任意の `kind` を追加（2026-10-04 追補・不具合修正。4.2.1）** | F-001 | P1 |
 | DS-API-003 | GET | /api/v1/products/{product_id} | 商品詳細・バリエーション・在庫有無・関連商品 | F-005,007 | P1 |
 | DS-API-004 | GET | /api/v1/search?q= | キーワード検索。0 件時は代替導線（類似語・おすすめカテゴリ） | F-003 | P2 |
 | DS-API-005 | GET | /api/v1/contents | 特集・お知らせ（ホーム用） | F-030 | P2（P1 はダミー） |
@@ -361,6 +362,25 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 | DS-API-054 | GET/POST/PATCH | /api/v1/admin/contents | 特集・お知らせ・FAQ | F-034（Should） | P3 |
 | DS-API-060 | POST | /api/v1/internal/stripe-events | Webhook 転送の受け口（署名検証・重複排除） | F-014 | P2 |
 | DS-API-061 | GET | /api/v1/health | 死活監視 | — | P1 |
+
+#### 4.2.1 2026-10-04 追補（不具合修正）: DS-API-001・002 の kind
+
+商品一覧で ALL（性別を選ばない状態）からカテゴリ「トップス」を選ぶと女性物しか出ない不具合を直すための追補。カテゴリは性別ごとに別の行（slug は women-tops・men-tops・kids-teen-tops など）なので、slug の指定では「全性別のトップス」を表せなかった。性別をまたいで同じ種類を束ねる軸として `kind` を使う。DB は 5.2.1、設計判断は DS-DEC-56 に書く。
+
+DS-API-002 のクエリ引数（追加分のみ。gender・category・page・per_page は変更なし）:
+
+| 引数 | 形式 | 必須 | 意味 |
+| --- | --- | --- | --- |
+| kind | `^[a-z0-9-]{1,32}$` | 任意 | 種類（tops・bottoms・outer・dresses・inner-goods など）。`categories.kind` が一致するカテゴリに属する公開商品を返す。性別はまたぐ |
+
+- 併用: gender・category・kind は AND。1 つのカテゴリ行が、指定した条件をすべて満たす商品だけが残る。条件が食い違う組み合わせ（例: category=men-tops と kind=bottoms）は 200 で 0 件になり、エラーにはしない
+- 例: kind=tops だけを渡すと、全性別の公開トップスが新着順で返り、total は各性別のトップスの件数の合計になる。dresses はレディースにだけある種類なので、kind=dresses はレディースの商品だけが返る
+- 形式違反（大文字、`_`、33 文字以上、空文字、空白、日本語、`;` など）は 400 `validation_error`、fields は `[{"name": "kind", "reason": "format"}]`（4.5 の規則どおり。400 は形の誤り）
+- 形は正しいが存在しない種類（例: kind=nothing）は 200 で items が空、total は 0
+
+DS-API-001 の応答: 子カテゴリに `kind`（文字列。DB が NULL 可のため null もありうる）を加える。子のキーは slug・name・kind・product_count の 4 つ。親（性別）には kind を出さない。product_count は従来どおり公開商品の件数。例: women-tops の kind は `"tops"`。
+
+BFF（4.3）: `/api/products` は gender・category に加えて kind を受け付ける。3 つとも小文字英数字・`_`・`-` で 64 文字以内の形でなければ FastAPI へ渡さない。32 文字以内・`_` なしという厳しい検査は FastAPI が 400 で行い、BFF はその応答をそのまま返す。
 
 ### 4.3 BFF エンドポイント（P1）
 
@@ -512,7 +532,7 @@ erDiagram
 | DS-TBL-02 | member_addresses | member_id, name, postal_code, prefecture, city, address1, address2, phone, is_default | | F-026 | P2 |
 | DS-TBL-03 | sessions | token_hash(UNIQUE), subject_type(member/staff), subject_id, expires_at, last_seen_at | Cookie 値の SHA-256 のみ保存 | F-024,035 | P2 |
 | DS-TBL-04 | staff | login_id(UNIQUE), password_hash, role, locked_until | 単一ロール | F-035 | P2 |
-| DS-TBL-05 | categories | name, slug(UNIQUE), parent_id, gender, sort_order | 階層＋性別 | F-001 | P1 |
+| DS-TBL-05 | categories | name, slug(UNIQUE), parent_id, gender, sort_order, **kind（2026-10-04 追補。VARCHAR(32)・NULL 可）** | 階層＋性別。**親（性別）の kind は NULL、子は tops など（2026-10-04 追補・不具合修正。5.2.1）** | F-001 | P1 |
 | DS-TBL-06 | products | name, description, material, price_incl_tax, published, sort_order | 複数カテゴリは product_categories | F-001,005,031 | P1 |
 | DS-TBL-07 | product_categories | product_id, category_id | 複合 UNIQUE | F-031 | P1 |
 | DS-TBL-08 | product_images | product_id, path, sort_order | `path` はパスのみ保存し、配信ベース URL は環境変数 `IMAGE_BASE_URL` に持つ。P1 は Next.js の静的配信、P2 で Blob に移す際はファイルコピーと環境変数の変更のみで済む（DS-DEC-22） | F-005 | P1 |
@@ -536,6 +556,16 @@ erDiagram
 | DS-TBL-26 | login_attempts | subject_type, identifier, succeeded, ip, at | 5 回/15 分でロック判定 | NFR-10 | P2 |
 
 P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 までは「13 表」と誤記。列挙を数えると 5＋5＋1＋1＝12。2026-09-18 実装時に修正）。ただし `orders.member_id`（NULL 可）と `carts.member_id` は P1 から列を持ち、P2 で FK を張る。
+
+#### 5.2.1 2026-10-04 追補（不具合修正）: categories.kind
+
+商品一覧の ALL で「トップス」を選んだときに全性別の商品を出すため、categories に `kind` 列を足す（API 側は 4.2.1、判断は DS-DEC-56）。
+
+- 列: `kind VARCHAR(32)`・NULL 可。親（性別）の行は NULL、子の行は種類を入れる。seed の値は tops・bottoms・outer・dresses・inner-goods（dresses はレディースだけ）。値は slug から親 slug と区切りの `-` を除いたもの（women-tops → tops、kids-teen-inner-goods → inner-goods）。API の kind 引数の形式 `^[a-z0-9-]{1,32}$` に合う
+- 索引: 付けない。categories は十数行で、絞り込みは `product_categories.category_id`（索引あり）から引いたあとに categories を主キーで 1 行ずつ見る形のため、kind の索引は使われない
+- マイグレーション: Alembic リビジョン `ad00074244c2`（1 つ前は `371a338f4624`）。upgrade で列を追加し、既存の子の行へ slug から kind を入れる UPDATE を流す。接頭辞は親の slug から導くので、性別が増えても UPDATE を書き換えなくてよい。downgrade は `DROP COLUMN kind` だけで、他の列・データには影響しない（ロールバックは `alembic downgrade -1`）
+- seed: `seed_data.py` の CategorySeed に kind を持たせ、`seed.py` が投入する。Alembic のマイグレーションと seed を分ける方針（5.3）は変えない
+- テスト: テスト設計書の IT-SCHEMA-07・08、UT-SEED-07
 
 ### 5.3 設計上の注意
 
@@ -617,6 +647,22 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 ```
 
 在庫が全バリエーションで 0 の商品は「在庫切れ」を表示する（F-007）。検索 0 件表示（F-003）は P2。
+
+#### 6.4.1 2026-10-04 追補（不具合修正）: ALL でカテゴリを選んだときの動き
+
+不具合は、ALL（性別を選んでいない状態）でカテゴリ「トップス」を選ぶと女性物しか出なかったこと。カテゴリが性別ごとに別の行（women-tops・men-tops・kids-teen-tops）で、ALL の札が 3 性別ぶん並び、先頭の「トップス」が women-tops だった。本書にはこの場面の動きの定義が無かった（仕様の抜け）。次の振る舞いを定める。
+
+| 状態 | 子カテゴリの札 | リンク先 | 選択中の判定 | 札の件数 |
+| --- | --- | --- | --- | --- |
+| ALL（gender なし） | 同じ kind を 1 枚にまとめる。表示名は DS-API-001 の応答で最初に出てきた子の名前、並びも最初に出てきた順 | `/products?kind=<kind>` | URL の kind が一致する札。URL に kind が無ければ選択中の札は無い（category の slug では判定しない） | 全性別の合計 |
+| ALL で kind が NULL の子 | 束ねず、slug で 1 枚ずつ | `/products?category=<slug>` | 選択中にならない | その子の件数 |
+| 性別を選択中 | その性別（と共通 all）の子を 1 枚ずつ。従来どおり | `/products?gender=<gender>&category=<slug>` | URL の category（slug）が一致する札。kind は見ない | その性別の分 |
+
+- 一覧ページ: searchParams の gender・category・kind・page で DS-API-002 を呼ぶ。`/products?kind=tops` の総件数は、各性別のトップスの件数の合計になる
+- パンくずと見出し: 性別なしで kind を選んだときは「ホーム > すべての商品 > トップス」、見出しは「すべての商品 > トップス」。種類の名前は札と同じ決め方（カテゴリ一覧で最初に出てきた同じ kind の子の名前。見つからなければ kind の文字列）。category も指定されているときは category の名前を優先する
+- 「もっと見る」: gender・category・kind をそのまま BFF `/api/products` に渡し、次の 24 件を取る
+- カテゴリ一覧の取得に失敗したとき: 性別タブだけを出す（従来どおり）
+- オールメニューのリンク（性別ごとの `?gender=<gender>&category=<slug>`）は変えない。gender なしの `?category=<slug>` の URL も従来どおり動く
 
 ### 6.5 DS-SCR-003 商品詳細（U-05・REQ-FR-1203）
 
@@ -828,6 +874,9 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | 19 | UML は Mermaid | 差分管理 | draw.io |
 | 20 | Vitest ＋ pytest | 設定が軽い | Jest |
 | 32 | エラー応答は判定順序（認証→形→存在→業務規則→DB 状態→回数→その他）で 1 つに決める。400 と 422、422 と 409 の境目を定義 | フェーズをまたいで同じ規則で追補できる。Pydantic の既定 422 との混同を防ぐ | — |
+| 56 | 2026-10-04 追補（不具合修正）。性別をまたいで同じ種類を束ねる軸として `categories.kind`（VARCHAR(32)・NULL 可。親は NULL、子は tops など）を追加する。ALL の札は kind ごとに 1 枚（表示名は最初に出てきた名前、件数は合計、リンクは `?kind=`）。DS-API-002 に任意の `kind` を足し、gender・category と AND で効かせる。性別を選んでいるときの札とリンク（`?gender=&category=<slug>`）は変えない | 原因は、カテゴリが性別ごとの別の行で、ALL の札が 3 性別ぶん並び、先頭の「トップス」が women-tops だったこと。設計書に ALL でカテゴリを選んだときの動きが無かった。種類を独立した列にすると、API の引数 kind の意味を DB 側で決められ、slug の付け方に左右されない。既存の slug・URL・category 引数はそのまま使え、API の応答はキーが 1 つ増えるだけで済む（ロールバックは DROP COLUMN のみ） | 不採用の案。① slug の末尾一致（`LIKE '%-tops'`）で照合する: 列の追加は要らないが、slug は URL 用の名前で種類を表す約束が無く、slug の付け替えや別の接尾辞（例: `-sale-tops`）の追加で別の行まで一致しうる。先頭が `%` の LIKE は索引も使えない。② ALL の札に性別を付けて 3 枚並べる（「トップス（レディース）」など）: 札が増えて横スクロールが長くなり、「全性別のトップス」を 1 回で見る手段も無いまま。③ ALL では子カテゴリの札を出さず、性別を選んでから種類を選ばせる: 不具合は消えるが、性別を選ばずに種類で探す導線をなくす直し方になる |
+
+DS-DEC-56 は 2026-10-04 追補（不具合修正）で追加した。33〜55 は P2 追補a・公開追補で使用済みのため、次の番号の 56 とした。
 
 ### 9.2 draft-v1 の未決 #20〜30 の決定（2026-09-07 統括承認）
 
@@ -883,5 +932,6 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | REQ-NFR-06,07,08 | — | 7 章 | — | ST-SEC-01〜11 | IT-060-01、IT-CORS-01、IT-BFF-01/02 | UT-SEC-01/02、UT-WEB-05（UT-WEB-06 は CI） |
 | REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 |
 | REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — |
+| REQ-FR-101,102,108（2026-10-04 追補・不具合修正） | F-001 / SCR-002 | DS-API-001,002・DS-TBL-05・DS-SCR-002・DS-DEC-56 | AT-07 | ST-F001-04 | IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002 | UT-SEED-07、UT-WEB-11/12 |
 
 P2 以降の行は追補で追加する。

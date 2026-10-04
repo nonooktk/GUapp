@@ -30,12 +30,24 @@ async def get_categories(session: AsyncSession = Depends(get_session)) -> Catego
 async def list_products(
     gender: Annotated[Gender | None, Query(description="women / men / kids_teen / all")] = None,
     category: Annotated[str | None, Query(max_length=100, description="カテゴリ slug")] = None,
+    kind: Annotated[
+        str | None,
+        Query(
+            pattern=r"^[a-z0-9-]{1,32}$",
+            description="種類（tops / bottoms など）。性別をまたいで絞る。併用時は AND",
+        ),
+    ] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=PER_PAGE_MAX)] = PER_PAGE_DEFAULT,
     session: AsyncSession = Depends(get_session),
 ) -> ProductListResponse:
     return await catalog_service.list_products(
-        session, gender=gender, category_slug=category, page=page, per_page=per_page
+        session,
+        gender=gender,
+        category_slug=category,
+        kind=kind,
+        page=page,
+        per_page=per_page,
     )
 
 

@@ -84,7 +84,7 @@ export function deleteCartItem(itemId: number): Promise<Cart> {
   return mutate<Cart>(`/api/cart/items/${itemId}`, "DELETE");
 }
 
-/** 一覧の「もっと見る」。`query` は `gender=women&category=tops` の形（page は上書きする） */
+/** 一覧の「もっと見る」。`query` は `gender=women&category=women-tops` や `kind=tops` の形（page は上書きする） */
 export function fetchProductsPage(query: string, page: number): Promise<ProductListResponse> {
   const sp = new URLSearchParams(query);
   sp.set("page", String(page));

@@ -45,6 +45,9 @@ class Category(IdMixin, TimestampMixin, Base):
         default=Gender.all,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 種類（tops / bottoms / outer / inner-goods など）。性別をまたいで同じ種類を束ねる軸。
+    # 親（性別）の行は NULL。slug から性別の接頭辞を除いた値（例: women-tops → tops）
+    kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     parent: Mapped[Category | None] = relationship(remote_side="Category.id", lazy="raise")
 

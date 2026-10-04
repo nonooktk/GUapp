@@ -29,7 +29,9 @@ async def get_categories(session: AsyncSession) -> CategoriesResponse:
     for r in rows:
         if r.parent_id is not None:
             children_by_parent.setdefault(r.parent_id, []).append(
-                CategoryChildOut(slug=r.slug, name=r.name, product_count=r.product_count)
+                CategoryChildOut(
+                    slug=r.slug, name=r.name, kind=r.kind, product_count=r.product_count
+                )
             )
     return CategoriesResponse(
         categories=[
@@ -49,11 +51,17 @@ async def list_products(
     *,
     gender: Gender | None,
     category_slug: str | None,
+    kind: str | None = None,
     page: int,
     per_page: int,
 ) -> ProductListResponse:
     summaries, total = await products_repo.list_published(
-        session, gender=gender, category_slug=category_slug, page=page, per_page=per_page
+        session,
+        gender=gender,
+        category_slug=category_slug,
+        kind=kind,
+        page=page,
+        per_page=per_page,
     )
     colors = await products_repo.colors_by_product(session, [s.id for s in summaries])
     items = [

@@ -4,7 +4,7 @@ import type { ProductListResponse } from "@/lib/types";
 
 /**
  * 商品一覧 BFF（DS-API-002 取り次ぎ）。一覧画面の「もっと見る」がクライアントから呼ぶ（ST-F001-03）。
- * 受け付けるクエリは gender・category・page・per_page のみ。page は 1〜999、per_page は 1〜24 に丸める。
+ * 受け付けるクエリは gender・category・kind・page・per_page のみ。page は 1〜999、per_page は 1〜24 に丸める。
  */
 
 export const dynamic = "force-dynamic";
@@ -20,9 +20,11 @@ export async function GET(request: Request) {
   const sp = new URL(request.url).searchParams;
   const gender = sp.get("gender");
   const category = sp.get("category");
+  const kind = sp.get("kind");
   const query = buildProductsQuery({
     gender: gender && SLUG.test(gender) ? gender : undefined,
     category: category && SLUG.test(category) ? category : undefined,
+    kind: kind && SLUG.test(kind) ? kind : undefined,
     page: clampInt(sp.get("page"), 1, 1, 999),
     per_page: clampInt(sp.get("per_page"), 24, 1, 24),
   });
