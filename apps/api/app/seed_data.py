@@ -54,6 +54,7 @@ class CategorySeed:
     gender: str  # Gender の値（women / men / kids_teen）
     parent_slug: str | None
     sort_order: int
+    kind: str | None = None  # 種類（tops など）。親（性別）の行は None
 
 
 # 性別 3 区分（親）× 子カテゴリ。slug は英字 kebab-case
@@ -96,7 +97,9 @@ def build_categories() -> list[CategorySeed]:
         parent_slug = _gender_slug(gender)
         out.append(CategorySeed(parent_slug, gname, gender, None, gi))
         for ci, (child, cname) in enumerate(_CHILDREN[gender]):
-            out.append(CategorySeed(f"{parent_slug}-{child}", cname, gender, parent_slug, ci))
+            out.append(
+                CategorySeed(f"{parent_slug}-{child}", cname, gender, parent_slug, ci, kind=child)
+            )
     return out
 
 

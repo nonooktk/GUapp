@@ -51,6 +51,13 @@ async def test_it_001_01_categories_hierarchy(client) -> None:
     assert kids_inner["product_count"] == expected
     total_count = sum(c["product_count"] for p in parents for c in p["children"])
     assert total_count == _published_count()
+    # 子には kind（種類）が付き、seed の定義と一致する。親には kind を出さない
+    seed_kind = {c.slug: c.kind for c in seed_data.CATEGORIES}
+    assert all(
+        c["kind"] == seed_kind[c["slug"]] and c["kind"] for p in parents for c in p["children"]
+    )
+    assert set(by_slug["women"]["children"][0]) == {"slug", "name", "kind", "product_count"}
+    assert "kind" not in parents[0]
     # 親には内部 ID を出さない
     assert "id" not in parents[0]
 
@@ -94,6 +101,75 @@ async def test_it_002_01_filter_by_gender_and_category(client) -> None:
     res = await client.get("/api/v1/products", params={"gender": "unicorn"}, headers=HEADERS)
     assert res.status_code == 400
     assert res.json()["fields"] == [{"name": "gender", "reason": "format"}]
+
+
+def _published_kind_count(kind: str, gender: str | None = None) -> int:
+    return sum(
+        1
+        for p in seed_data.PRODUCTS
+        if p.published and p.category == kind and (gender is None or p.gender == gender)
+    )
+
+
+async def test_it_002_03_filter_by_kind_across_genders(client) -> None:
+    """ALL（性別指定なし）＋ kind=tops で、全性別のトップスが返る（カテゴリ不具合の修正）。"""
+    res = await client.get("/api/v1/products", params={"kind": "tops"}, headers=HEADERS)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    women = _published_kind_count("tops", "women")
+    men = _published_kind_count("tops", "men")
+    kids = _published_kind_count("tops", "kids_teen")
+    assert women > 0 and men > 0 and kids > 0
+    assert body["total"] == women + men + kids == _published_kind_count("tops")
+    names = {i["name"] for i in body["items"]}
+    expected = {p.name for p in seed_data.PRODUCTS if p.published and p.category == "tops"}
+    assert names == expected, "レディース・メンズ・キッズのトップスがそろう"
+    assert any(p.gender == "women" for p in seed_data.PRODUCTS if p.name in names)
+    assert any(p.gender == "men" for p in seed_data.PRODUCTS if p.name in names)
+
+    # dresses はレディースだけの種類
+    res = await client.get("/api/v1/products", params={"kind": "dresses"}, headers=HEADERS)
+    assert res.json()["total"] == _published_kind_count("dresses", "women") == 2
+
+    # 形は正しいが存在しない種類は 0 件（400 ではない）
+    res = await client.get("/api/v1/products", params={"kind": "nothing"}, headers=HEADERS)
+    assert res.status_code == 200 and res.json()["total"] == 0 and res.json()["items"] == []
+
+
+async def test_it_002_03_kind_combines_with_gender_and_category_by_and(client) -> None:
+    # gender ＋ kind: 性別も種類も満たすカテゴリの商品だけ
+    res = await client.get(
+        "/api/v1/products", params={"gender": "men", "kind": "tops"}, headers=HEADERS
+    )
+    assert res.json()["total"] == _published_kind_count("tops", "men") == 4
+
+    # category（slug）＋ kind: 両方 AND。同じ行（men-tops）なら通り、食い違えば 0 件
+    res = await client.get(
+        "/api/v1/products", params={"category": "men-tops", "kind": "tops"}, headers=HEADERS
+    )
+    assert res.json()["total"] == 4
+    res = await client.get(
+        "/api/v1/products", params={"category": "men-tops", "kind": "bottoms"}, headers=HEADERS
+    )
+    assert res.status_code == 200 and res.json()["total"] == 0
+
+    # gender ＋ category ＋ kind の三つ巴
+    res = await client.get(
+        "/api/v1/products",
+        params={"gender": "women", "category": "men-tops", "kind": "tops"},
+        headers=HEADERS,
+    )
+    assert res.json()["total"] == 0
+
+
+@pytest.mark.parametrize("bad", ["TOPS", "to_ps", "a" * 33, "", "tops ", "ト", "tops;x"])
+async def test_it_002_03_kind_format_violation_is_400(client, bad: str) -> None:
+    res = await client.get("/api/v1/products", params={"kind": bad}, headers=HEADERS)
+    assert res.status_code == 400, res.text
+    assert res.json() == {
+        "code": "validation_error",
+        "fields": [{"name": "kind", "reason": "format"}],
+    }
 
 
 async def test_it_002_02_page_0_is_400_and_beyond_last_is_empty(client) -> None:

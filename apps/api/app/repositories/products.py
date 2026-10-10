@@ -98,9 +98,15 @@ def rows_to_summaries(rows) -> list[ProductSummary]:
     ]
 
 
-def _category_scope(gender: Gender | None, category_slug: str | None) -> ColumnElement[bool] | None:
-    """gender／category（slug）で商品を絞る条件。どちらも無ければ None。"""
-    if gender is None and category_slug is None:
+def _category_scope(
+    gender: Gender | None, category_slug: str | None, kind: str | None = None
+) -> ColumnElement[bool] | None:
+    """gender／category（slug）／kind（種類）で商品を絞る条件。どれも無ければ None。
+
+    指定されたものは全て AND で効かせる（同じカテゴリ行が全条件を満たす商品だけ残る）。
+    kind は性別をまたいで同じ種類を束ねるための軸（例: ALL ＋ tops → 全性別のトップス）。
+    """
+    if gender is None and category_slug is None and kind is None:
         return None
     scope = select(ProductCategory.product_id).join(
         Category, Category.id == ProductCategory.category_id
@@ -109,6 +115,8 @@ def _category_scope(gender: Gender | None, category_slug: str | None) -> ColumnE
         scope = scope.where(Category.gender == gender)
     if category_slug is not None:
         scope = scope.where(Category.slug == category_slug)
+    if kind is not None:
+        scope = scope.where(Category.kind == kind)
     return Product.id.in_(scope)
 
 
@@ -117,11 +125,12 @@ async def list_published(
     *,
     gender: Gender | None,
     category_slug: str | None,
+    kind: str | None = None,
     page: int,
     per_page: int,
 ) -> tuple[list[ProductSummary], int]:
     """公開商品の一覧（新着順）と総件数。"""
-    scope = _category_scope(gender, category_slug)
+    scope = _category_scope(gender, category_slug, kind)
 
     count_stmt = select(func.count()).select_from(Product).where(published_filter())
     if scope is not None:
@@ -205,6 +214,7 @@ class CategoryRow:
     gender: Gender
     parent_id: int | None
     sort_order: int
+    kind: str | None
     product_count: int
 
 
@@ -227,6 +237,7 @@ async def list_categories_with_counts(session: AsyncSession) -> list[CategoryRow
             Category.gender,
             Category.parent_id,
             Category.sort_order,
+            Category.kind,
             func.coalesce(counts.c.product_count, 0).label("product_count"),
         )
         .outerjoin(counts, counts.c.category_id == Category.id)
@@ -241,6 +252,7 @@ async def list_categories_with_counts(session: AsyncSession) -> list[CategoryRow
             gender=Gender(r.gender),
             parent_id=r.parent_id,
             sort_order=r.sort_order,
+            kind=r.kind,
             product_count=int(r.product_count),
         )
         for r in rows

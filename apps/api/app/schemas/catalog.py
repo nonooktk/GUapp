@@ -16,6 +16,9 @@ PER_PAGE_MAX = 48
 class CategoryChildOut(BaseModel):
     slug: str
     name: str
+    kind: str | None = Field(
+        description="種類（tops など）。性別をまたいで同じ種類を束ねる軸。商品一覧の kind に渡す"
+    )
     product_count: int = Field(description="公開商品の件数")
 
 

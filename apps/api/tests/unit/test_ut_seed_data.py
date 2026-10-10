@@ -85,3 +85,30 @@ def test_ut_seed_06_system_settings_four_keys_tax_rate_string() -> None:
     assert settings["free_shipping_threshold"] == 4990
     assert settings["payment_timeout_minutes"] == 30
     assert all(desc for _, _, desc in seed_data.SYSTEM_SETTINGS), "description に用途を書く"
+
+
+def test_ut_seed_07_category_kind_matches_slug_without_gender_prefix() -> None:
+    """categories.kind: 親（性別）は None、子は slug から親 slug と '-' を除いた値。"""
+    parents = {c.slug: c for c in seed_data.CATEGORIES if c.parent_slug is None}
+    assert all(c.kind is None for c in parents.values())
+    children = [c for c in seed_data.CATEGORIES if c.parent_slug is not None]
+    for c in children:
+        assert c.parent_slug is not None
+        assert c.kind == c.slug.removeprefix(f"{c.parent_slug}-")
+        assert re.fullmatch(r"[a-z0-9-]{1,32}", c.kind), "kind は API の kind 制約に合う形"
+    # 同じ種類が 3 性別に存在する（ALL ＋ 種類で束ねる前提）。dresses はレディースだけ
+    kinds_by_gender = {
+        g: {c.kind for c in children if c.gender == g} for g in ("women", "men", "kids_teen")
+    }
+    assert {"tops", "bottoms", "outer", "inner-goods"} <= kinds_by_gender["women"]
+    assert (
+        kinds_by_gender["men"]
+        == kinds_by_gender["kids_teen"]
+        == {
+            "tops",
+            "bottoms",
+            "outer",
+            "inner-goods",
+        }
+    )
+    assert "dresses" in kinds_by_gender["women"]

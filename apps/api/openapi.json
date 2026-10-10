@@ -119,6 +119,25 @@
             "description": "カテゴリ slug"
           },
           {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-z0-9-]{1,32}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "種類（tops / bottoms など）。性別をまたいで絞る。併用時は AND",
+              "title": "Kind"
+            },
+            "description": "種類（tops / bottoms など）。性別をまたいで絞る。併用時は AND"
+          },
+          {
             "name": "page",
             "in": "query",
             "required": false,
@@ -1007,6 +1026,18 @@
             "type": "string",
             "title": "Name"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind",
+            "description": "種類（tops など）。性別をまたいで同じ種類を束ねる軸。商品一覧の kind に渡す"
+          },
           "product_count": {
             "type": "integer",
             "title": "Product Count",
@@ -1017,6 +1048,7 @@
         "required": [
           "slug",
           "name",
+          "kind",
           "product_count"
         ],
         "title": "CategoryChildOut"

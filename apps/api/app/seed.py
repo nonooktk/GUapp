@@ -113,6 +113,7 @@ async def _insert_all(session: AsyncSession) -> None:
             slug=c.slug,
             gender=Gender(c.gender),
             sort_order=c.sort_order,
+            kind=c.kind,
             parent_id=category_ids[c.parent_slug] if c.parent_slug else None,
         )
         session.add(row)

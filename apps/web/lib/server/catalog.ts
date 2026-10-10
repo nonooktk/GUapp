@@ -22,15 +22,18 @@ import type {
 export interface ProductListQuery {
   gender?: string;
   category?: string;
+  /** 種類（tops など）。性別をまたいで絞る。gender・category と併用時は AND */
+  kind?: string;
   page?: number;
   per_page?: number;
 }
 
-/** `/products?gender=&category=&page=&per_page=` のクエリ文字列。空の値は付けない */
+/** `/products?gender=&category=&kind=&page=&per_page=` のクエリ文字列。空の値は付けない */
 export function buildProductsQuery(q: ProductListQuery): string {
   const sp = new URLSearchParams();
   if (q.gender) sp.set("gender", q.gender);
   if (q.category) sp.set("category", q.category);
+  if (q.kind) sp.set("kind", q.kind);
   sp.set("page", String(q.page ?? 1));
   sp.set("per_page", String(q.per_page ?? 24));
   return sp.toString();

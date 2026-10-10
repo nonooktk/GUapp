@@ -8,6 +8,8 @@ export type Gender = "women" | "men" | "kids_teen" | "all";
 export interface CategoryChild {
   slug: string;
   name: string;
+  /** 種類（tops など）。性別をまたいで同じ種類を束ねる軸。`/products?kind=` に渡す */
+  kind: string | null;
   product_count: number;
 }
 

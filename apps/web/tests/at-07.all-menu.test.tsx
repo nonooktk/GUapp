@@ -14,21 +14,21 @@ const CATEGORIES: Category[] = [
     name: "レディース",
     gender: "women",
     children: [
-      { slug: "women-tops", name: "トップス", product_count: 3 },
-      { slug: "women-bottoms", name: "ボトムス", product_count: 2 },
+      { slug: "women-tops", name: "トップス", kind: "tops", product_count: 3 },
+      { slug: "women-bottoms", name: "ボトムス", kind: "bottoms", product_count: 2 },
     ],
   },
   {
     slug: "men",
     name: "メンズ",
     gender: "men",
-    children: [{ slug: "men-tops", name: "トップス", product_count: 4 }],
+    children: [{ slug: "men-tops", name: "トップス", kind: "tops", product_count: 4 }],
   },
   {
     slug: "kids-teen",
     name: "キッズ・ティーン",
     gender: "kids_teen",
-    children: [{ slug: "kids-teen-outer", name: "アウター", product_count: 1 }],
+    children: [{ slug: "kids-teen-outer", name: "アウター", kind: "outer", product_count: 1 }],
   },
 ];
 
