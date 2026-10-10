@@ -23,6 +23,7 @@ case "$GUAPP_TARGET" in
     _GUAPP_D_WEB="app-guapp-web-nonooktk"
     _GUAPP_D_API="app-guapp-api-nonooktk"
     _GUAPP_D_SKU="B1"
+    _GUAPP_D_CA_PATH="/home/site/wwwroot/certs/azure-mysql-ca.pem"
     _GUAPP_D_WORKERS="2"
     _GUAPP_D_FW_INDEX="1"
     _GUAPP_D_BASIC_AUTH="1"
@@ -34,6 +35,8 @@ case "$GUAPP_TARGET" in
     _GUAPP_D_WEB="app-tech0-gen12-01-fe"
     _GUAPP_D_API="app-tech0-gen12-01-be"
     _GUAPP_D_SKU="F1"
+    # 新しい Kudu は配備物を圧縮して /tmp に展開するため wwwroot に certs/ が無い。配備で消えない /home/site/certs に置く（01b が置く）
+    _GUAPP_D_CA_PATH="/home/site/certs/azure-mysql-ca.pem"
     # F1 は 1 GB メモリ・1 日の CPU 時間上限があるためワーカーは 1
     _GUAPP_D_WORKERS="1"
     # 並行運用中は既存の guapp-appsvc-1〜25 を残すため 26 から
@@ -78,8 +81,9 @@ export GUAPP_DB_NAME="guapp_nonooktk"
 # 将来変わった場合に備えて独立した変数にしておく
 export GUAPP_DB_RESOURCE_GROUP="${GUAPP_DB_RESOURCE_GROUP:-$GUAPP_RESOURCE_GROUP}"
 
-# App Service 上の CA 証明書ファイルの配置先（設計仕様書公開追補 8.4・DS-DEC-52）
-export GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE="/home/site/wwwroot/certs/azure-mysql-ca.pem"
+# App Service 上の CA 証明書ファイルの配置先（設計仕様書公開追補 8.4・DS-DEC-52・11.5）
+# 既定はターゲットごとに異なる（nonooktk は wwwroot 配下、tech0 は /home/site/certs）。
+export GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE="${GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE:-$_GUAPP_D_CA_PATH}"
 
 # 講義サーバー接続時の DB プール推奨値（DS-DEC-46）
 export GUAPP_DB_POOL_SIZE="${GUAPP_DB_POOL_SIZE:-5}"
@@ -131,4 +135,4 @@ guapp_confirm_azure_context() {
   esac
 }
 export -f guapp_confirm_azure_context
-unset _GUAPP_D_PLAN _GUAPP_D_WEB _GUAPP_D_API _GUAPP_D_SKU _GUAPP_D_WORKERS _GUAPP_D_FW_INDEX _GUAPP_D_BASIC_AUTH _GUAPP_D_DEMO_UNTIL _GUAPP_USE_SUFFIX
+unset _GUAPP_D_CA_PATH _GUAPP_D_PLAN _GUAPP_D_WEB _GUAPP_D_API _GUAPP_D_SKU _GUAPP_D_WORKERS _GUAPP_D_FW_INDEX _GUAPP_D_BASIC_AUTH _GUAPP_D_DEMO_UNTIL _GUAPP_USE_SUFFIX

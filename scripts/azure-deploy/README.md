@@ -48,7 +48,7 @@ scripts/azure-deploy/05-deploy-web.sh
 cd /path/to/GUapp
 export GUAPP_TARGET=tech0
 
-# 1. 既存アプリに設定を適用する（HTTPS Only・TLS 1.2・ランタイム PYTHON|3.13 / NODE|24-lts・起動コマンド）
+# 1. 既存アプリに設定を適用する（HTTPS Only・TLS 1.2・ランタイム PYTHON|3.13 / NODE|24-lts・起動コマンド・CA 証明書を /home/site/certs に配置）
 scripts/azure-deploy/01b-configure-existing.sh
 
 # 2. アプリ設定を投入する（BASIC_AUTH_*・DEMO_PUBLIC_UNTIL は設定せず、入っていれば削除する）
@@ -63,6 +63,13 @@ scripts/azure-deploy/03-db-firewall.sh
 scripts/azure-deploy/04-deploy-api.sh
 scripts/azure-deploy/05-deploy-web.sh
 ```
+
+### CA 証明書の置き場所（2026-10-10 の不具合と対応）
+
+- 不具合: 新しい Kudu/Oryx は、ビルド結果を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開して動かす（`oryx-manifest.toml` の `CompressDestinationDir="true"`）。そのため `/home/site/wwwroot/certs/azure-mysql-ca.pem` が存在せず、`DATABASE_URL` の `ssl_ca=` と `DB_SSL_CA_PATH` が指す先が無くなり、`/api/v1/health` が 503 `db_unavailable` を返した。従来の `app-guapp-api-nonooktk` は wwwroot にソース一式が残るため動いていた
+- 対応: tech0 ターゲットの CA パスを、配備で消えない `/home/site/certs/azure-mysql-ca.pem` にした（`config.sh`）。`01b-configure-existing.sh` が、手元の CA（`GUAPP_CA_FILE`）を Kudu の VFS API で、このパスに置く。CA は公開証明書で秘密ではない。nonooktk ターゲットは従来どおり wwwroot のパスで、この処理は飛ばす
+- 実行順: `01b` を `02-settings.sh` より前に実行する。すでに `02` を実行済みの環境では、`01b` → `02` の順でやり直す（CA パスの設定を入れ直すため）
+- 教訓: 配備物の中のファイルを絶対パスで参照しない（配備先によって展開場所が変わる）
 
 動作確認（Basic 認証がないため `-u` は不要）:
 

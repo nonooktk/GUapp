@@ -230,3 +230,9 @@ App Service Linux のシステムの信頼ストア（例 `/etc/ssl/certs/ca-cer
 - 現行環境の api 用に追加済みの規則 `guapp-appsvc-1〜25` は変更しない
 - be の送信 IP は `guapp-appsvc-26` 以降に追加する（`GUAPP_FIREWALL_START_INDEX=26`）
 - 現行環境を削除する `99-delete.sh` は `guapp-appsvc-*` をすべて削除するため、並行運用が終わるまで実行しない
+
+### 11.5 CA 証明書の置き場所（2026-10-10 追記）
+
+- 新しい Kudu/Oryx は配備物を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開する。そのため tech0 の be には `/home/site/wwwroot/certs/azure-mysql-ca.pem` が存在せず、`/api/v1/health` が 503 `db_unavailable` になった（8.4 の配置方針は wwwroot に実体がある前提だった）
+- tech0 ターゲットの `DB_SSL_CA_PATH` と `DATABASE_URL` の `ssl_ca=` は `/home/site/certs/azure-mysql-ca.pem` を指す。`01b-configure-existing.sh` が Kudu の VFS API で CA（公開証明書）を置く。`01b` は `02-settings.sh` より前に実行する
+- 教訓: 配備物の中のファイルを絶対パスで参照しない

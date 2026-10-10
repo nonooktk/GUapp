@@ -39,6 +39,12 @@
 - 1 日の CPU 時間に上限があり、超えると QuotaExceeded になってアプリが停止する。この間は zip 配備が通らない見込み
 - 上限は UTC 0 時（日本時間 9 時）にリセットされる
 
+## 配備中に見つかった不具合：CA 証明書の置き場所（2026-10-10）
+
+- 新しい Kudu/Oryx はビルド結果を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開する。そのため `/home/site/wwwroot/certs/azure-mysql-ca.pem` が無く、`/api/v1/health` が 503 `db_unavailable` になった
+- tech0 ターゲットの CA パスを、配備で消えない `/home/site/certs/azure-mysql-ca.pem` に変えた。`01b-configure-existing.sh` が Kudu の VFS API で CA（公開証明書）を置く。`01b` は `02-settings.sh` より前に実行する
+- 教訓: 配備物の中のファイルを絶対パスで参照しない
+
 ## 検討した代替案
 
 | 案 | 内容 | 採否 |

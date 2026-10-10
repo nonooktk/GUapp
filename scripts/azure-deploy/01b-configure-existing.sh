@@ -8,6 +8,10 @@
 #   - 起動コマンド（api・web）
 #   - api: SCM_DO_BUILD_DURING_DEPLOYMENT=true
 #   - web: WEBSITES_PORT=3000・PORT=3000・WEBSITES_CONTAINER_START_TIME_LIMIT
+#   - api: CA 証明書を /home/site/certs に置く（CA パスが wwwroot 配下のターゲットでは飛ばす）
+#     新しい Kudu/Oryx は配備物を output.tar.zst に圧縮して /tmp に展開するため、
+#     wwwroot の certs/ が存在しない。配備で消えない /home/site/certs に Kudu VFS API で置く。
+#     02-settings.sh は CA のパスを設定に書くため、必ず 02 より前に実行する。
 #
 # 使い方:
 #   GUAPP_TARGET=tech0 scripts/azure-deploy/01b-configure-existing.sh
@@ -90,6 +94,50 @@ az webapp config appsettings set \
     PORT=3000 \
     WEBSITES_CONTAINER_START_TIME_LIMIT="$GUAPP_WEBSITES_CONTAINER_START_TIME_LIMIT" \
   --output none
+
+CA_DEST_PATH="/home/site/certs/azure-mysql-ca.pem"
+if [[ "$GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE" != "$CA_DEST_PATH" ]]; then
+  echo "[01b] CA のパスが $GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE（配備物の中）のため、CA 証明書の配置は飛ばします。"
+else
+  echo "[01b] CA 証明書を $CA_DEST_PATH に置きます（Kudu VFS API）..."
+  if [[ ! -f "$GUAPP_CA_FILE" ]]; then
+    echo "[01b] エラー: 手元の CA 証明書が見つかりません: $GUAPP_CA_FILE" >&2
+    echo "[01b] apps/api/certs/azure-mysql-ca.pem などを上記のパスに置くか、GUAPP_CA_DIR を指定してください。" >&2
+    exit 1
+  fi
+  KUDU_URL="https://${GUAPP_API_APP_NAME}.scm.azurewebsites.net"
+  # トークンの値は表示しない
+  TOKEN="$(az account get-access-token --resource https://management.azure.com --query accessToken -o tsv)"
+
+  # ディレクトリ作成。既にある場合は 409 や 200 が返るため、-f を付けず http コードで判定する
+  DIR_CODE="$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+    -H "Authorization: Bearer $TOKEN" "$KUDU_URL/api/vfs/site/certs/")"
+  case "$DIR_CODE" in
+    200|201|204|409) ;;
+    *) echo "[01b] エラー: certs ディレクトリの作成に失敗しました（HTTP $DIR_CODE）。" >&2; exit 1 ;;
+  esac
+
+  curl -sf -X PUT \
+    -H "Authorization: Bearer $TOKEN" -H "If-Match: *" \
+    --data-binary @"$GUAPP_CA_FILE" \
+    "$KUDU_URL/api/vfs/site/certs/azure-mysql-ca.pem" -o /dev/null
+
+  # 置けたことを一覧で確かめる（ファイル名とサイズのみ。中身は表示しない）
+  LIST_JSON="$(curl -sf -H "Authorization: Bearer $TOKEN" "$KUDU_URL/api/vfs/site/certs/")"
+  if ! printf '%s' "$LIST_JSON" | python3 -c '
+import json, sys
+found = False
+for e in json.load(sys.stdin):
+    if e.get("name") == "azure-mysql-ca.pem":
+        print("[01b] 確認: %s (%s バイト)" % (e["name"], e.get("size")))
+        found = True
+sys.exit(0 if found else 1)
+'; then
+    echo "[01b] エラー: certs/azure-mysql-ca.pem が一覧に見つかりません。" >&2
+    exit 1
+  fi
+  unset TOKEN
+fi
 
 echo "[01b] 完了。web: $GUAPP_WEB_URL / api: $GUAPP_API_URL"
 echo "[01b] 次は 02-settings.sh でアプリ設定（環境変数・秘密）を投入してください。"
