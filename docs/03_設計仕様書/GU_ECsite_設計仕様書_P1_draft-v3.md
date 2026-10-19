@@ -18,6 +18,7 @@
 | draft-v3 | 2026-09-17 | 実装前レビューで見つかった矛盾 3 件・未定義 3 件を反映。4.5 エラー応答を判定順序付きの全フェーズ共通規則に差し替え（DS-DEC-32）。金額計算の税率表現（DS-DEC-31 補足）、注文番号衝突時の再生成、入力形式の正規表現と長さ上限、注文状態の列挙コードを追加 | Claude | Oya |
 | draft-v3（P2追補a訂正） | 2026-09-24 | P2 追補a（GUEC-SD-01-P2a）の接続方式検証で、8.2 の `DATABASE_URL` 例 `?ssl=true` は SQLAlchemy／asyncmy の実装上 `ssl_ca` 等の個別クエリキーでないと解釈されないと判明したため、該当行を `?ssl_ca=<CA証明書ファイルの絶対パス>` に 1 行訂正。詳細は P2 追補a 8.1 章を参照 | キャタピー | Oya |
 | draft-v3（2026-10-04 追補・不具合修正） | 2026-10-04 | 商品一覧で ALL を選んでカテゴリ（例: トップス）を選ぶと女性物しか出ない不具合の修正に合わせ、`categories.kind` 列（5.2 DS-TBL-05・5.2.1）、DS-API-001 の子の `kind`・DS-API-002 の任意の `kind`（4.2.1）、DS-SCR-002 の「ALL のときのカテゴリの札」の振る舞い（6.4.1）、設計判断 DS-DEC-56（9.1）、10 章の追加行を追記した。既存の記述は変えていない。原因は、本書に「ALL でカテゴリを選んだときの動き」の定義が無かったこと（仕様の抜け）。発見はオーナーの手動操作（2026-10-04） | Claude | — |
+| draft-v3（2026-10-19 追補・セキュリティ点検対応） | 2026-10-19 | 2026-10-19 のセキュリティ点検（講義 5 項目＋チェックリスト 53 項目。指摘 G-01〜G-15）への対応。7.7 を新設し、S1〜S10 の決定を DS-DEC-57〜66 として 9.1 に追加した（依存の更新と CI の S11・S12 は DS-DEC-67）。あわせて 2 章（Next.js の版）、4 章（DS-API-010・011 の GET /cart の挙動、BFF の応答本文と入力検査、エラー応答の 413・429）、7.1・7.3・7.5、8.2（RATE_LIMIT_API_PER_MIN・RATE_LIMIT_PAGE_PER_MIN、TRUSTED_PROXY_HOPS の注記）、8.4（CI の依存チェック）、9.4、10 章を更新した。既存の記述のうち意味が変わるのは、GET /cart がカートを作らなくなった点と、BFF の応答本文から cart_token を除く点。点検結果は `docs/05_検収/セキュリティ点検記録_20261019.md` | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -77,7 +78,7 @@ flowchart LR
 | 領域 | 採用 | 版 | 実装版（2026-09-18） | 理由 |
 | --- | --- | --- | --- | --- |
 | Node.js | Node.js | 24 LTS | 24.14.0 | Active LTS。26 は 2026-10 に LTS 化するが演習中は切り替えない |
-| フロント | Next.js（App Router・TypeScript） | 16.x | Next.js 16.3.5・React 19.2.8・TypeScript 5.9・Tailwind CSS 4.3 | 最新安定。Route Handlers を BFF に使う |
+| フロント | Next.js（App Router・TypeScript） | 16.x | Next.js 16.3.8 以上（2026-10-19 に 16.3.5 から更新。S11）・React 19.2.8・TypeScript 5.9・Tailwind CSS 4.3 | 最新安定。Route Handlers を BFF に使う |
 | Python | CPython | 3.13 | 3.13.15（uv 管理） | FastAPI 最新系で動作確認済み。App Service では起動コマンドを明示する（8 章） |
 | バックエンド | FastAPI ＋ Pydantic v2 | 0.14x 系 | FastAPI 0.141.1・Pydantic 2.13.5・uvicorn 0.53.0 | 型定義が入力検証を兼ねる（7 章） |
 | ORM | SQLAlchemy 2.0（async）＋ asyncmy | 2.0 系 | SQLAlchemy 2.0.54・asyncmy 0.2.14（＋cryptography 50.0.1: MySQL 8.4 の caching_sha2_password に必須）・tzdata 2026.4（Windows の ZoneInfo 用） | DB 待ちの間に他リクエストを処理できる。asyncmy は MySQL 8.x の認証方式に対応 |
@@ -90,6 +91,8 @@ flowchart LR
 | テスト | pytest（API）、Vitest（フロント）、Stripe CLI（Webhook） | 最新 | pytest 9.1.1・Vitest 5.0.1・Testing Library 16.3 | README の jest は Vitest に変更済み |
 | パッケージ管理 | pnpm、uv | 最新 | pnpm 12.4.2・uv 0.12.15 | 版固定が明確（DS-DEC-24）。演習期間中は版を固定し、脆弱性は Week8 のチェックで更新する。api は App Service が requirements.txt を読むため CI で `uv export` する（8.4） |
 | ローカル環境 | Docker Compose（MySQL 8.4・utf8mb4・UTC） | — | 本機は Docker 無しのため zip 版（`scripts/mysql-local/`）。compose は未検証 | Azure と揃える（DS-DEC-25）。Azure Database for MySQL Flexible Server の 8.4 提供状況は構築時に要確認。無ければ両方 8.0（Azure 延長サポート）に揃える |
+
+2026-10-19 追補（S11・DS-DEC-67）: セキュリティ点検（E-01・G-02）で、Next.js 16.3.5 に既知の脆弱性が 9 件見つかった（`pnpm audit --prod`: critical 1・high 3・moderate 4・low 1。推移的依存の sharp・source-map-js の high を含む）。`next` と `eslint-config-next` を 16.3.8 以上（同じ 16.3 系の最新）へ上げ、`pnpm-lock.yaml` を更新する。完了条件は `pnpm audit --prod` で critical が 0 件になること。sharp・source-map-js の high が残る場合は、Next の更新で消えるか、`pnpm.overrides` で上げられるかを試し、残ったものは理由を記録する。点検の時点で、該当する機能（`next/og` の `ImageResponse`・`next/image` の `remotePatterns`・`use cache`・Draft Mode・ISR）は使っておらず、実影響は小さいと判断していた（事実: コード上の使用箇所は 0 件。意見: 更新すれば確実に解消できる）。
 
 ## 3. UML
 
@@ -337,10 +340,10 @@ FastAPI の `/docs`・`/redoc`・`/openapi.json` は本番で無効化する。F
 | DS-API-004 | GET | /api/v1/search?q= | キーワード検索。0 件時は代替導線（類似語・おすすめカテゴリ） | F-003 | P2 |
 | DS-API-005 | GET | /api/v1/contents | 特集・お知らせ（ホーム用） | F-030 | P2（P1 はダミー） |
 | DS-API-006 | GET | /api/v1/contents/{slug} | FAQ・規約・特商法などの静的ページ | F-028 | P2 |
-| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員）。匿名トークンは **FastAPI が発行**し（32 バイト乱数の base64url）、BFF は応答の値を Cookie に載せるだけ。トークンのカートが `ordered` なら旧カートの `anonymous_token` を NULL にしてから同じトークンで新しい `active` カートを作って返す（`anonymous_token` は UNIQUE のため。注文は `orders.cart_id` で旧カートに紐づく）。未知のトークンは無いものとして扱い新規発行する。応答に小計・送料・合計（DS-PRC-021）と明細ごとの在庫状態を含める | F-009 | P1 |
-| DS-API-011 | POST | /api/v1/cart/items | 明細追加（variant_id・quantity）。在庫 0 は 409 | F-009,007 | P1 |
-| DS-API-012 | PATCH | /api/v1/cart/items/{item_id} | 数量変更 | F-009 | P1 |
-| DS-API-013 | DELETE | /api/v1/cart/items/{item_id} | 明細削除 | F-009 | P1 |
+| DS-API-010 | GET | /api/v1/cart | カート取得（Cookie の匿名トークンまたは会員）。応答に小計・送料・合計（DS-PRC-021）と明細ごとの在庫状態を含める。**GET はカートを作らず、DB に何も書かない**（2026-10-19 追補・DS-DEC-59）。`X-Cart-Token` が無い・形が不正・DB に無い・`active` でない（`ordered` など）ときは、空のカート応答（items=[]・item_count=0・金額 0・can_checkout=false・`cart_token=null`）を返す。`active` のカートが見つかったときだけ、そのカートの明細と `cart_token` を返す。`CartResponse.cart_token` は文字列または null。匿名トークンは **FastAPI が発行**し（32 バイト乱数の base64url）、発行するのは DS-API-011 の最初の追加のとき。BFF は応答の `cart_token` が null でなければ Cookie に載せ、null なら cart_token の Set-Cookie を出さない | F-009 | P1 |
+| DS-API-011 | POST | /api/v1/cart/items | 明細追加（variant_id・quantity）。在庫 0 は 409。**カートを新しく作るのは、この API の最初の追加だけ**（DS-DEC-59）。トークンが無い・形が不正・DB に無いときは新しい `active` カートを作って匿名トークンを発行する。従来 GET が行っていた作成の扱い（トークンのカートが `ordered` なら旧カートの `anonymous_token` を NULL にしてから新しい `active` カートを作る。`anonymous_token` は UNIQUE のため。注文は `orders.cart_id` で旧カートに紐づく）は、この API が引き継ぐ。`quantity` は 1〜99 の整数、`variant_id` は 1 以上 9223372036854775807 以下の整数で、範囲外は 400 `validation_error`（DS-DEC-63）。11〜99 は従来どおり 422 `limit_exceeded` | F-009,007 | P1 |
+| DS-API-012 | PATCH | /api/v1/cart/items/{item_id} | 数量変更。カートが無ければ 404（従来どおり。カートは作らない） | F-009 | P1 |
+| DS-API-013 | DELETE | /api/v1/cart/items/{item_id} | 明細削除。カートが無ければ 404（従来どおり。カートは作らない） | F-009 | P1 |
 | DS-API-020 | GET | /api/v1/settings/public | 税率・送料ルール（表示用） | F-032,016 | P1 |
 | DS-API-021 | POST | /api/v1/checkout/prepare | 金額計算・冪等キー発行（確認画面用） | F-013 | P1 |
 | DS-API-022 | POST | /api/v1/orders | 注文確定（DS-PRC-014-1） | F-014,025 | P1 |
@@ -387,11 +390,24 @@ BFF（4.3）: `/api/products` は gender・category に加えて kind を受け�
 | パス | メソッド | 取り次ぎ先 | 備考 |
 | --- | --- | --- | --- |
 | /api/products, /api/products/[id], /api/categories | GET | DS-API-001〜003 | Server Component から直接 FastAPI を呼ぶ場合は BFF を経由しなくてよい（サーバー間通信） |
-| /api/cart, /api/cart/items, /api/cart/items/[id] | GET/POST/PATCH/DELETE | DS-API-010〜013 | 匿名トークン Cookie の発行・付与 |
+| /api/cart, /api/cart/items, /api/cart/items/[id] | GET/POST/PATCH/DELETE | DS-API-010〜013 | 匿名トークン Cookie の付与（GET では発行せず、最初の POST で発行する。2026-10-19 追補）。ブラウザへ返す本文に `cart_token` を含めない（DS-DEC-60） |
 | /api/checkout/prepare | POST | DS-API-021 | CSRF トークン検証 |
 | /api/orders | POST | DS-API-022 | CSRF トークン検証。処理中は F-036 の表示 |
 | /api/orders/[orderNumber]/lookup | POST | DS-API-023 | 完了画面の再表示。メールは本文で送る |
 | /api/webhooks/stripe | POST | DS-API-060 | P2。生ボディを変更せず転送 |
+
+#### 4.3.1 2026-10-19 追補: BFF の共通動作（回数制限・本文サイズ・Origin・入力範囲）
+
+セキュリティ点検（G-01・G-08・G-12）を受けて、BFF が FastAPI を呼ぶ前に判定する項目を足した。詳細は 7.7。
+
+| 項目 | 動作 | 拒否したときの応答 | DS-DEC |
+| --- | --- | --- | --- |
+| 回数制限 | IP ごと・60 秒の固定窓。`/api/*` は 120 回、それ以外の動的リクエストは 600 回。`proxy.ts` で判定する | 429 `{"code":"rate_limited"}` ＋ `Retry-After`（窓の残り秒） | 57 |
+| 本文サイズ | カート・注文系の本文読み取りで 8192 バイトを超える | 413 `{"code":"payload_too_large"}` | 58 |
+| Origin の確認 | `verifyCsrf` でトークン照合の前に、`Origin`（無ければ `Sec-Fetch-Site`）を確認する | 403 `{"code":"forbidden"}` | 62 |
+| 数量・ID の範囲 | `quantity` は 1〜99、`variant_id`・`item_id` は 1 以上 2^53-1 以下の整数 | 400 `validation_error`（`out_of_range`） | 63 |
+| 応答本文 | カート応答から `cart_token` を除く（Set-Cookie は除く前の値で処理する） | — | 60 |
+| 拒否のログ | 403・413・429・400 を 1 行の構造化ログに出す | — | 65 |
 
 ### 4.4 処理仕様（P1 詳細設計）
 
@@ -427,6 +443,7 @@ BFF（4.3）: `/api/products` は gender・category に加えて kind を受け�
 - 郵便番号・電話の桁は ASCII 数字 `[0-9]` に限定（Python の `\d` は全角数字にも一致するため）
 - 空カートで `POST /orders` を呼ぶと 409 `empty_cart`（prepare と同じ pricing 経由。4.5 の 409 一覧に含める）
 - 決済 NG のときは `order_items` を書かない（注文は `payment_failed` の行と `payments` の失敗記録のみ）
+- 2026-10-19 追補（DS-DEC-66）: メールアダプタは `APP_ENV=production` のとき、手順 7 のファイル出力をせず、注文番号だけを 1 行ログに出すアダプタに切り替わる。それ以外の環境（開発・テスト）は従来どおり `.mail-outbox/` へ出力する
 
 #### DS-PRC-021 金額計算（確認画面用）
 
@@ -436,7 +453,7 @@ BFF（4.3）: `/api/products` は gender・category に加えて kind を受け�
 
 #### DS-PRC-011 カート追加
 
-variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422（4.5 の limit_exceeded）。 数量が在庫数を超えていても追加は許す（在庫の確定は注文時の引当 DS-PRC-014-1 で行う）。カート応答では明細ごとに `stock_status`（ok／insufficient＝数量 > 在庫／out_of_stock＝在庫 0）を返し、insufficient・out_of_stock が 1 つでもあれば「レジへ進む」を無効にする（ST-F009-05）。同じ variant の同時追加は `INSERT … ON DUPLICATE KEY UPDATE` で加算し、加算後に上限を検査して超過なら戻す。
+variant の `stock > 0` かつ `products.published = true` のときだけ追加する。同じ variant が既にあれば数量を加算する。1 明細の上限は 10 点、カート合計は 50 点。上限超過は 422（4.5 の limit_exceeded）。 数量が在庫数を超えていても追加は許す（在庫の確定は注文時の引当 DS-PRC-014-1 で行う）。カート応答では明細ごとに `stock_status`（ok／insufficient＝数量 > 在庫／out_of_stock＝在庫 0）を返し、insufficient・out_of_stock が 1 つでもあれば「レジへ進む」を無効にする（ST-F009-05）。同じ variant の同時追加は `INSERT … ON DUPLICATE KEY UPDATE` で加算し、加算後に上限を検査して超過なら戻す。入力の範囲は DS-API-011（4.2）のとおり（quantity 1〜99。2026-10-19 追補）。99 は桁あふれを防ぐための形の上限で、業務上限 10 とは別に置く。11〜99 を 422 のままにするため、Pydantic に書く上限は 99 までとする（4.5 の「業務上限は書かない」と矛盾しない）。
 
 #### DS-PRC-036 画面共通の状態表示
 
@@ -458,25 +475,28 @@ BFF への状態変更リクエスト中はボタンを無効化して処理中�
 
 400 と 422 の境目は「他のリクエストがどう来ても常に不正」なら 400、「形は正しいがこのサービスの規則で受けられない」なら 422。422 と 409 の境目は、DB を読まずに判定できれば 422、DB の今の状態に依存するなら 409（409 は時間が経てば成功しうる、422 は入力を変えないと成功しない）。
 
+BFF が返す 429（DS-DEC-57）と 413（DS-DEC-58）は、FastAPI を呼ぶ前に BFF だけで決まる。上の判定順序の 1〜5 に入る前に返すもので、順序の表には含めない。
+
 コード別の本文形式:
 
 | コード | code | 本文 | 備考 |
 | --- | --- | --- | --- |
-| 400 | validation_error | `{code, fields:[{name, reason}]}` | FastAPI 既定の 422 を例外ハンドラで 400 に変換。reason は固定語（required／format／too_long／out_of_range）。`required` は必須欠落に加え、文字列の最小長違反で値が空または空白のみ（全角含む）の場合も含む。非空の最小長違反は `out_of_range` |
+| 400 | validation_error | `{code, fields:[{name, reason}]}` | FastAPI 既定の 422 を例外ハンドラで 400 に変換。reason は固定語（required／format／too_long／out_of_range）。`required` は必須欠落に加え、文字列の最小長違反で値が空または空白のみ（全角含む）の場合も含む。非空の最小長違反は `out_of_range`。数量・ID の範囲検査（quantity 1〜99、variant_id・item_id は 1 以上。BFF と FastAPI の両方。DS-DEC-63）も同じ形で `out_of_range` を返す |
 | 401 | unauthorized | `{code}` | 内部トークン不一致・セッション無効・期限切れ。管理画面は 302 で SCR-014 |
-| 403 | forbidden | `{code}` | CSRF 不一致、ロール不足、アカウントロック中（locked_until は返さない） |
+| 403 | forbidden | `{code}` | CSRF 不一致、ロール不足、アカウントロック中（locked_until は返さない）、Origin が自サイトと一致しない（BFF。DS-DEC-62） |
 | 404 | not_found | `{code}` | 存在しない・非公開・他人のもの。3 者を区別しない。未定義ルート・本番で無効化した `/docs` 等も同形（FastAPI 既定の `{"detail"}` は出さない。PR #28） |
 | 405 | method_not_allowed | `{code}` ＋ `Allow` ヘッダ | ルートはあるがメソッドが違う。ルーティング時に決まるため判定順序 1 より前に返る |
 | 409 | 業務名 | `{code, ...詳細}` | out_of_stock {items}／price_changed {amounts}／already_ordered {order_number}／invalid_transition {from, to}／duplicate {field}／empty_cart |
+| 413 | payload_too_large | `{code}` | BFF が返す。リクエスト本文が 8192 バイトを超える（`Content-Length` または実際に読んだ量。DS-DEC-58）。FastAPI は呼ばない |
 | 422 | limit_exceeded ほか | `{code, field, limit}` | limit_exceeded／unsupported_value |
-| 429 | rate_limited | `{code}` ＋ Retry-After ヘッダ | |
+| 429 | rate_limited | `{code}` ＋ Retry-After ヘッダ | 2 か所で返す。BFF の回数制限（DS-DEC-57。`Retry-After` は窓の残り秒）と、FastAPI の注文照会（DS-API-023。100 回/時/IP） |
 | 500 | internal_error | `{code, message:"処理中にエラーが発生しました"}` | 固定文言。詳細はログのみ |
 
 P1〜P2 の適用例:
 
 | API | 400 | 422 | 409 |
 | --- | --- | --- | --- |
-| DS-API-011 カート追加 | quantity が整数でない・0 以下 | quantity > 10、カート合計 > 50 | 在庫 0（非公開は 404） |
+| DS-API-011 カート追加 | quantity が整数でない・0 以下・100 以上、variant_id が 1 未満 | quantity 11〜99、カート合計 > 50 | 在庫 0（非公開は 404） |
 | DS-API-022 注文確定 | 郵便番号 7 桁以外、メール形式不正、氏名 51 文字 | 受け取り方法が P1 未対応の store、支払い方法が card 以外 | 在庫引当失敗、金額不一致、カートが ordered |
 | DS-API-030 会員登録 | メール形式不正、パスワード 8 文字未満 | パスワードが禁止パターン | メール既登録（duplicate。列挙防止で 200 にする場合は 7.5 に明記） |
 | DS-API-032 ログイン | 必須欠落 | — | —（認証失敗は 401、回数超過は 403、回数は返さない） |
@@ -743,12 +763,16 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 
 | 項目 | 設計 | 検証 |
 | --- | --- | --- |
-| BFF（サーバーサイドプロキシ） | ブラウザは `/api/*` のみ。FastAPI の URL・鍵をブラウザに渡さない | ST: ブラウザの通信に FastAPI ホストが出ない |
-| CORS | FastAPI の許可オリジンは BFF の 1 つ。ワイルドカード禁止。認証付きリクエストの `Access-Control-Allow-Credentials` は明示 | IT: 他オリジンからの preflight が拒否される |
-| Swagger 非表示 | 本番は `docs_url=None, redoc_url=None, openapi_url=None` | ST: /docs が 404 |
-| 型定義（SQLi 対策） | 入力は Pydantic モデル、DB アクセスは SQLAlchemy のパラメータ束縛のみ。文字列連結の SQL を禁止（レビュー観点） | UT: `' OR 1=1` を含む入力が値として扱われる |
-| 金額はバックエンドで計算 | DS-PRC-014-1 手順 4。フロントの金額は表示専用で、照合に失敗すれば注文しない | IT: 改ざんした合計で 409 |
-| DB Firewall | Azure MySQL のファイアウォールで App Service の送信 IP のみ許可。ローカルからは開発時の IP を都度追加 | 構築時に確認 |
+| BFF（サーバーサイドプロキシ） | ブラウザは `/api/*` のみ。FastAPI の URL・鍵をブラウザに渡さない | ST: ブラウザの通信に FastAPI ホストが出ない。2026-10-19 の点検で、公開 HTML と JS 7 本に api の URL・`INTERNAL_TOKEN`・`NEXT_PUBLIC_` が 0 件であることを確認 |
+| CORS | FastAPI の許可オリジンは BFF の 1 つ。ワイルドカード禁止。認証付きリクエストの `Access-Control-Allow-Credentials` は明示 | IT: 他オリジンからの preflight が拒否される。2026-10-19 の点検で、公開 api が許可外の Origin を反射しないことを確認 |
+| Swagger 非表示 | 本番は `docs_url=None, redoc_url=None, openapi_url=None` | ST: /docs が 404。2026-10-19 の点検で、公開 web・api とも 404 であることを確認 |
+| 型定義（SQLi 対策） | 入力は Pydantic モデル、DB アクセスは SQLAlchemy のパラメータ束縛のみ。文字列連結の SQL を禁止（レビュー観点） | UT: `' OR 1=1` を含む入力が値として扱われる。2026-10-19 の点検で、検索・一覧・カートの ID に注入文字列を送っても SQL エラー文が漏れないことを確認 |
+| 金額はバックエンドで計算 | DS-PRC-014-1 手順 4。フロントの金額は表示専用で、照合に失敗すれば注文しない | IT: 改ざんした合計で 409。2026-10-19 の点検で、合計・数量・variant_id の改ざんをサーバーの再計算が拒否することを確認（金額不一致は 409 `price_changed`） |
+| DB Firewall | Azure MySQL のファイアウォールで App Service の送信 IP のみ許可。ローカルからは開発時の IP を都度追加 | 構築時に確認。講義共用 MySQL の「全 Azure サービス許可」規則は講義運営の管理下で、自分では変更できない（G-11。運営へ依頼） |
+| セキュリティヘッダ | web と api の全応答に付ける（7.7 S5・DS-DEC-61）。web は `X-Content-Type-Options`・`Referrer-Policy`・`Permissions-Policy`・`Strict-Transport-Security`・`X-Frame-Options`・`Content-Security-Policy`（`frame-ancestors` など。`script-src` は後日）を付け、`X-Powered-By` は出さない。api は `nosniff`・`X-Frame-Options`・`Content-Security-Policy`・HSTS・`Cache-Control: no-store` を付け、`Server` は出さない | ST-SEC-30 |
+| 回数制限・本文サイズ | BFF で IP ごとに 120 回/分（`/api/*`）と 600 回/分（それ以外の動的リクエスト）、本文は 8192 バイトまで（7.7 S1・S2） | ST-SEC-26・27 |
+| CSRF の Origin 確認 | Double Submit Cookie に `Origin`／`Sec-Fetch-Site` の確認を加える（7.7 S6・DS-DEC-62） | ST-SEC-31 |
+| 拒否のログ | 403・413・429・400（web）と 401・429（api）を 1 行の構造化ログに残す（7.7 S9・DS-DEC-65）。アラートは未対応 | ST-SEC-34 |
 
 ### 7.2 秘密情報がフロントへ出ない仕組み（DS-DEC-13）
 
@@ -768,11 +792,11 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | 方式 | サーバー側セッション。`sessions` に Cookie 値の SHA-256 を保存 |
 | Cookie | HttpOnly・Secure・SameSite=Lax。会員は `sid`、管理は `asid`（別名・別種別）。会員 24 時間、管理 8 時間（要件 6 章の 24 時間より厳しい側に設定。DS-DEC-21）。`Secure` は `APP_ENV=production` のみ付与する（`http://localhost` では Secure 付き Cookie がブラウザに保存されず、ローカルの AT-01 が通らないため） |
 | 固定攻撃対策 | ログイン成功時にセッション ID を再発行 |
-| CSRF | 状態変更 API は BFF でトークン検証（Double Submit Cookie） |
+| CSRF | 状態変更 API は BFF でトークン検証（Double Submit Cookie）。トークン照合の前に `Origin`／`Sec-Fetch-Site` を確認する（7.7 S6・DS-DEC-62） |
 | ロック | `login_attempts` で 5 回/15 分を判定し `locked_until` を設定。通知メール。手動解除は F-039（P3） |
 | 管理画面の分離 | 同じ Next.js の `/admin`（route group で独立）＋別 Cookie。API は `/api/v1/admin/*` に隔離。Week10 の閉域化で管理面を別ホスト＋IP 制限に切り出し、公開面からの総当たり到達性を消す（DS-DEC-21） |
 | 失効 | ログアウト・期限切れ・ロック時に行を削除 |
-| ゲスト | 認証なし。カートは `anonymous_token` Cookie（HttpOnly・90 日） |
+| ゲスト | 認証なし。カートは `anonymous_token` Cookie（HttpOnly・90 日。最初のカート追加で発行し、GET では発行しない。DS-DEC-59） |
 
 ### 7.4 二重登録・二重課金の防止（DS-DEC-07）
 
@@ -789,9 +813,9 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | 露出面 | 対策 |
 | --- | --- |
 | URL | 注文は注文番号、会員はセッション特定、カートは Cookie。商品は内部 ID 可 |
-| API 応答 | `response_model` で白リスト化。注文・会員・カートの応答に内部 ID と外部キーを含めない。例外: カート明細の `item_id`（DS-API-012/013 の宛先として必要。所有者チェックで他人のものは 404 なので列挙されても害がない）と商品側の `variant_id`（商品は内部 ID 可） |
+| API 応答 | `response_model` で白リスト化。注文・会員・カートの応答に内部 ID と外部キーを含めない。例外: カート明細の `item_id`（DS-API-012/013 の宛先として必要。所有者チェックで他人のものは 404 なので列挙されても害がない）と商品側の `variant_id`（商品は内部 ID 可）。BFF がブラウザへ返すカート応答には `cart_token` も含めない（Cookie の HttpOnly を意味のあるものにするため。7.7 S4・DS-DEC-60） |
 | 列挙 | 商品 API は公開品のみ。未公開は 404 |
-| 総当たり | 注文番号はランダム 8 文字。ゲスト照会とログインにレート制限（100 件/時/IP） |
+| 総当たり | 注文番号はランダム 8 文字。ゲスト照会とログインにレート制限（100 件/時/IP）。BFF 全体の回数制限は 7.7 S1 |
 | 認可 | 全 API で所有者確認。他人のものは 404。管理 API はロール必須。冪等キーの重複時も既存注文の `cart_id` と要求者のカートを照合する（DS-PRC-014-1 手順 1） |
 
 ### 7.6 その他
@@ -800,6 +824,121 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 - 不正検知: 個人データ API の大量呼出（100 件/時/ID 超）を遮断しアラート（REQ-NFR-10）
 - LLM: 送信前に氏名・住所・電話・カード番号らしき文字列をマスク。回答の商品は DB に実在する ID のみ。価格・在庫は DB 値で差し替える
 - 監査ログ: 注文・決済・会員変更・管理操作を `audit_logs` に「誰が・いつ・何を」で記録し 90 日保持
+
+### 7.7 セキュリティ点検（2026-10-19）を受けた強化
+
+2026-10-19 に、講義の 5 項目とチェックリストの 53 項目でセキュリティ点検を行った（記録: `docs/05_検収/セキュリティ点検記録_20261019.md`）。53 項目の判定は OK 25・NG 12・該当なし 16・保留 0 だった。指摘は 15 件（High 1・中 5・低 9）である。金額・数量・variant_id の改ざん、他人のカートへの越境、CSRF トークンなしの送信、二重送信、SQL・XSS 文字列、パストラバーサルは、いずれも防げていた。指摘のうち、今回の PR（PR-B、ブランチ `security/hardening`）で直すものを S1〜S12 とする。これらの決定を DS-DEC-57〜67 に残す。
+
+| S | 内容 | 指摘 | DS-DEC | テスト |
+| --- | --- | --- | --- | --- |
+| S1 | BFF の回数制限 | G-01 | 57 | ST-SEC-26 |
+| S2 | 本文サイズの上限 | G-01 | 58 | ST-SEC-27 |
+| S3 | GET /cart でカートを作らない | G-01・G-12 | 59 | ST-SEC-28 |
+| S4 | 応答本文から cart_token を除く | G-04 | 60 | ST-SEC-29 |
+| S5 | セキュリティヘッダ | G-05・G-09 | 61 | ST-SEC-30 |
+| S6 | CSRF 対策に Origin の確認を足す | G-12 | 62 | ST-SEC-31 |
+| S7 | 数量・ID の範囲 | G-08 | 63 | ST-SEC-32 |
+| S8 | api での IP の決め方 | G-14 | 64 | ST-SEC-33 |
+| S9 | 拒否したときのログ | G-06 | 65 | ST-SEC-34 |
+| S10 | 本番ではメールの中身をファイルに書かない | G-13 | 66 | ST-SEC-35 |
+| S11・S12 | Next.js の更新と CI の依存チェック | G-02 | 67 | なし（2 章・8.4 と CI で確認） |
+
+#### 7.7.1 S1 BFF の回数制限（DS-DEC-57・G-01）
+
+- 場所: `apps/web/proxy.ts`（全リクエストの手前で動く門番）。判定は新規の `apps/web/lib/server/rate-limit.ts` が行う（純粋関数と、プロセス内メモリに持つ固定窓カウンタ）
+- IP: `lib/client-ip.ts` の `resolveClientIp` で求める（`TRUSTED_PROXY_HOPS` を使う。利用者が付けた `X-Forwarded-For` は信用しない）
+- 上限（IP ごと・60 秒の固定窓）: `/api/*`（BFF の窓口）は 120 回/分、それ以外の動的リクエスト（ページ・RSC・prefetch）は 600 回/分
+- 対象外: `proxy.ts` の matcher で除外している `_next/static`・`_next/image`・favicon などのほか、拡張子付きの静的ファイル（`/products/031/1.jpg` など public 配下）
+- 超過したら 429 を返す。本文は `{"code":"rate_limited"}` で、`Retry-After` ヘッダには窓の残り秒数を入れる。429 を返すときは FastAPI を呼ばない
+- 上限は環境変数 `RATE_LIMIT_API_PER_MIN`・`RATE_LIMIT_PAGE_PER_MIN` で変えられる（値は正の整数で、`lib/env-validation.ts` で検証する。未設定なら上の既定値を使う。8.2）
+- 窓が切れたキーは定期的に捨てる（Map が増え続けるのを防ぐため）
+- 注記: カウンタはプロセス内メモリに持つため、複数インスタンス間では共有されない。F1 は 1 インスタンスなので、この点は許容する。複数インスタンスにするときは、カウンタを共有ストアへ置き換える（9.4）。`TRUSTED_PROXY_HOPS` が未設定だと全員が接続元の同じ枠を使うため、本番では 1 を設定する（8.2）
+
+#### 7.7.2 S2 本文サイズの上限（DS-DEC-58・G-01）
+
+- 場所: `apps/web/lib/server/cart-proxy.ts` の `readJsonBody`。注文系に同等の本文読み取りがあれば、同じ上限をかける
+- `Content-Length` が 8192 バイトを超えるか、実際に読み取った本文が 8192 バイトを超えた場合は、413 を返す。本文は `{"code":"payload_too_large"}` とする。FastAPI は呼ばない
+- `Content-Length` は省略も偽装もできるため、ヘッダの値と読み取った量の両方で、上限を超えていないかを判定する
+
+#### 7.7.3 S3 GET /cart でカートを作らない（DS-DEC-59・G-01・G-12）
+
+- `GET /api/v1/cart`: `X-Cart-Token` が無い、形が不正、DB に無い、`active` でない（`ordered` など）のいずれかのときは、**DB に何も書かず**空のカート応答を返す（items=[]・item_count=0・金額 0・can_checkout=false・`cart_token=null`）
+- カートを新しく作るのは、`POST /api/v1/cart/items` による最初の「カートに入れる」だけ。PATCH・DELETE は従来どおりで、カートが無ければ 404 を返す
+- `CartResponse.cart_token` は文字列または null にする
+- BFF（`cart-proxy.ts`）: 応答の `cart_token` が null のときは、cart_token の Set-Cookie を出さない。`csrf_token` Cookie は従来どおり、未発行なら発行する（`ensureCsrfToken` が GET で合言葉を得るため）
+- 画面に表示される内容は変わらない（空のカートが表示される）。変わるのは、最初の追加までカートの行が作られない点
+
+#### 7.7.4 S4 応答本文から cart_token を除く（DS-DEC-60・G-04）
+
+- BFF は、全カート応答（GET・POST・PATCH・DELETE、`checkout/prepare` など `cart_token` を含みうる応答すべて）について、ブラウザへ返す本文から `cart_token` を除く。Set-Cookie の処理は、本文から除く前の値で行う
+- 画面側の型（`lib/types.ts` の `Cart`）から `cart_token` を外す。BFF 内部用の型は、画面側の型とは別に用意する
+- FastAPI の `CartResponse` は、BFF との内部契約として残す
+
+#### 7.7.5 S5 セキュリティヘッダ（DS-DEC-61・G-05・G-09）
+
+- web（`apps/web/next.config.ts` の `headers()` を使い、全パスを対象にする）:
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+  - `Strict-Transport-Security: max-age=31536000`
+  - `X-Frame-Options: DENY`
+  - `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`
+  - `poweredByHeader: false`（`X-Powered-By` を出さない）
+- api（`apps/api/app/main.py` のミドルウェア）: ミドルウェアが全応答に `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`、`Strict-Transport-Security: max-age=31536000`、`Cache-Control: no-store` を付ける。応答にすでに `Cache-Control` が付いている場合は、その値を上書きしない
+- `Server` ヘッダは起動コマンドの `--no-server-header` で消す。この対応は PR-A（#38）で済んでおり、PR-B では変更しない
+- 注記: 今回、CSP に `script-src` は付けない。Next.js のインラインスクリプトには nonce が必要なため、nonce 方式の本格的な CSP は後日に回す。ARR affinity Cookie（Azure が付ける）は、配備時に `clientAffinityEnabled` を false にして止める
+
+#### 7.7.6 S6 CSRF に Origin の確認を足す（DS-DEC-62・G-12）
+
+- 場所: `apps/web/lib/server/csrf.ts` の `verifyCsrf`（状態を変える全 BFF が使う）。この関数は、トークンを照合する前に次を確認する
+  - `Origin` ヘッダがあれば、そのホスト（host:port）を自サイトのホストと比べ、一致しなければ 403 `{"code":"forbidden"}` を返す
+  - 自サイトのホストには `X-Forwarded-Host`（あれば先頭の値）を使い、無ければ `Host` ヘッダを使う。App Service の背後でも自サイトのホストを正しく取るためである
+  - `Origin` が無いときは、`Sec-Fetch-Site` があり、かつその値が `same-origin` 以外であれば 403 を返す
+  - どちらのヘッダも無い（curl など）ときは、従来どおりトークンの照合だけを行う
+- 注記: この確認は、SameSite=Lax・Secure に重ねる層である。サブドメインや同じホスト上の別アプリから送られたリクエストは、Origin が自サイトと違えば止まる
+
+#### 7.7.7 S7 数量・ID の範囲（DS-DEC-63・G-08）
+
+- BFF: `quantity` は 1〜99 の整数、`variant_id` と `item_id` は 1 以上 2^53-1 以下の整数とする。範囲を外れた場合は 400 `validation_error`（`out_of_range`）を返す
+- 11〜99 の値は FastAPI に渡す。従来どおり 422 `limit_exceeded` になる（業務上限は 1 明細 10・合計 50）
+- api（`apps/api/app/schemas/cart.py`）: `quantity` に `ge=1, le=99`、`variant_id` に `ge=1, le=9223372036854775807` を指定する。範囲外は既存の例外ハンドラが 400 `validation_error` として返す
+- 注記: 99 は桁あふれを防ぐための上限で、業務上限 10 とは別のものである。業務上限を Pydantic に書かない規則（4.5）は保たれる
+
+#### 7.7.8 S8 api の IP の決め方（DS-DEC-64・G-14）
+
+- 場所: `apps/api/app/core/rate_limit.py` の `client_ip`
+- この処理は `X-Forwarded-For` の**末尾**の要素を使う。BFF が検証済みの 1 要素を付ける前提とし、複数要素ある場合は末尾（直前のホップ）を使う。ヘッダが無い場合は接続元を使う。
+
+#### 7.7.9 S9 拒否したときのログ（DS-DEC-65・G-06）
+
+- 出力は 1 行の JSON 風の構造化ログとし、項目は event・path・method・status・code・ip とする
+- ip は丸める。IPv4 は末尾 1 オクテットを 0 に、IPv6 は先頭 3 ブロック以外を 0 にする。本文・Cookie・トークン・個人情報は出力しない
+- web: 403（CSRF・Origin）、413、429（S1）、400（BFF の入力検査）のとき、`console.warn` で出力する
+- api: 401（内部トークン不一致）、429（注文照会の回数制限）のとき、`logger.warning` で出力する。この出力は既存の `SecretMaskFilter` を通る
+- 未対応: アラート。検知の仕組み（Application Insights の接続とアラート規則）は 8.1 の構成案にあるが、点検の時点で構築されておらず、今回の範囲にも入れていない。当面はログを手動で確認する
+
+#### 7.7.10 S10 本番でメールの中身をファイルに書かない（DS-DEC-66・G-13）
+
+- 場所: `apps/api/app/adapters/mail.py` の `get_mail_adapter`
+- `APP_ENV=production` のときは、この関数は送信内容をファイルに書かず、注文番号だけを 1 行ログに出すアダプタを返す。それ以外（開発・テスト）のときは、従来の Outbox を返す。
+- 理由: 従来のアダプタは氏名・住所・電話・メールを平文で `.mail-outbox/` に書き出す。本番の App Service のディスクに個人情報を残さないためである。
+
+#### 7.7.11 S11・S12 依存の更新と CI（DS-DEC-67・G-02）
+
+- S11: 2 章のとおり、`next` と `eslint-config-next` を 16.3.8 以上へ更新する
+- S12: `.github/workflows/ci.yml` の `deps-audit` は、critical の脆弱性があれば失敗するようにする。`continue-on-error: true` を外し、`pnpm audit --prod --audit-level critical` を実行する。`pip-audit` は critical 相当の判定ができないため、報告のみとして失敗させず、その旨をコメントに残す。job 名の「(non-blocking)」も、実態に合わせて変える
+
+#### 7.7.12 今回の PR で扱わない指摘
+
+| 指摘 | 扱い | 理由・時期 |
+| --- | --- | --- |
+| G-03 本番に `TRUSTED_PROXY_HOPS` が入っていない | PR-A（#38） | 値は 1。配備時にアプリ設定へ投入し、反映する（8.2） |
+| G-07 api の URL に直接到達できる | Week10 の閉域化 | App Service のアクセス制限で、api へのアクセス許可を web の送信元に絞る（DS-DEC-21、DS-DEC-27） |
+| G-09 のうち `Server` ヘッダ | PR-A（#38） | 起動コマンドに `--no-server-header` を指定する |
+| G-09 のうち ARR affinity | 配備時に設定する | F1 は 1 インスタンスのため不要 |
+| G-10 アプリ設定が平文である | 本番運用時 | Key Vault 参照とマネージド ID を使う。講義環境では許容範囲だと考える（意見） |
+| G-11 共用 MySQL のファイアウォール | 講義運営へ依頼する | サーバーの管理者が設定しているため、自分では変更できない |
+| G-15 ヘルス応答の公開 | 対応しない | 死活監視のために意図して公開している。この応答の機密性は低い |
 
 ## 8. インフラ・デプロイ設計
 
@@ -827,8 +966,10 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 | ACS_CONNECTION_STRING / MAIL_FROM | api | P2 |
 | ANTHROPIC_API_KEY | api | P2 |
 | PAYMENT_STUB_RESULT | api | P1 のスタブ切替（ok/ng） |
-| （ヘッダ）X-Forwarded-For | web→api | BFF が利用者の送信元 IP を付与。**BFF は利用者送信の `X-Forwarded-For`・`X-Client-IP` を転送しない**。`TRUSTED_PROXY_HOPS >= 1` のときだけ `X-Client-IP`（App Service front end）→ 右から hops 番目の XFF を信用し、0 では接続元のみ（2026-09-25 検収指摘 PR #27）。FastAPI は内部トークン付きの呼び出しに限りこれを信用し、ゲスト照会のレート制限（100 回/時/IP）に使う |
-| TRUSTED_PROXY_HOPS | web | 信頼するプロキシのホップ数（既定 0。App Service 配下は 1）。利用者が付けたヘッダを送信元 IP として使わないための設定 |
+| （ヘッダ）X-Forwarded-For | web→api | BFF が利用者の送信元 IP を付与。**BFF は利用者送信の `X-Forwarded-For`・`X-Client-IP` を転送しない**。`TRUSTED_PROXY_HOPS >= 1` のときだけ `X-Client-IP`（App Service front end）→ 右から hops 番目の XFF を信用し、0 では接続元のみ（2026-09-25 検収指摘 PR #27）。FastAPI は内部トークン付きの呼び出しに限りこれを信用し、ゲスト照会のレート制限（100 回/時/IP）に使う。BFF が付けるのは検証済みの 1 要素で、FastAPI は複数要素のときは末尾（直前のホップ）を使う（2026-10-19 追補・S8・DS-DEC-64） |
+| TRUSTED_PROXY_HOPS | web | 信頼するプロキシのホップ数（既定 0。App Service 配下は 1）。利用者が付けたヘッダを送信元 IP として使わないための設定。**本番値は 1**。2026-10-19 の点検で、公開 web のアプリ設定に無いことが分かった（G-03）。未設定だと 0 になり、送信元が接続元の `127.0.0.1` に倒れて、注文照会と BFF の回数制限（S1）の枠を全員で 1 つ共有する。投入は PR-A（#38）で対応し、配備時にアプリ設定へ反映する |
+| RATE_LIMIT_API_PER_MIN | web | BFF の `/api/*` の回数制限（IP ごと・60 秒の窓あたり）。正の整数。未設定は 120（2026-10-19 追補・S1・DS-DEC-57） |
+| RATE_LIMIT_PAGE_PER_MIN | web | `/api/*` 以外の動的リクエスト（ページ・RSC・prefetch）の回数制限。正の整数。未設定は 600（同上） |
 | SESSION_COOKIE_DOMAIN | web | |
 
 ### 8.3 ローカル開発
@@ -845,7 +986,7 @@ GUapp/（リポジトリルート。モノレポ）
 
 ### 8.4 デプロイ方針（Week7 に向けたメモ）
 
-GitHub Actions で main への push をトリガに、①pytest・Vitest・gitleaks → ②ビルド（web は Next.js standalone 出力、api は `uv export --format requirements-txt > requirements.txt` を生成して App Service の Oryx ビルドに渡す） → ③App Service へデプロイ（web・api を別ジョブ）。マイグレーションはデプロイジョブの前段で `alembic upgrade head` を実行する。デプロイ後のチェックに「本番で `PAYMENT_STUB_RESULT` が未設定」を含める。P1 はローカルのみで、CI はテストと秘密スキャンまでを先に整える。
+GitHub Actions で main への push をトリガに、①pytest・Vitest・gitleaks → ②ビルド（web は Next.js standalone 出力、api は `uv export --format requirements-txt > requirements.txt` を生成して App Service の Oryx ビルドに渡す） → ③App Service へデプロイ（web・api を別ジョブ）。マイグレーションはデプロイジョブの前段で `alembic upgrade head` を実行する。デプロイ後のチェックに「本番で `PAYMENT_STUB_RESULT` が未設定」を含める。P1 はローカルのみで、CI はテストと秘密スキャンまでを先に整える。2026-10-19 追補（S12・DS-DEC-67）: CI の `deps-audit` は、critical の脆弱性がある場合に失敗させる（`pnpm audit --prod --audit-level critical`。`continue-on-error` は外す）。`pip-audit` は critical 相当の判定ができないため、報告のみにする。
 
 ## 9. 設計上の決定・申し送り
 
@@ -875,8 +1016,21 @@ GitHub Actions で main への push をトリガに、①pytest・Vitest・gitle
 | 20 | Vitest ＋ pytest | 設定が軽い | Jest |
 | 32 | エラー応答は判定順序（認証→形→存在→業務規則→DB 状態→回数→その他）で 1 つに決める。400 と 422、422 と 409 の境目を定義 | フェーズをまたいで同じ規則で追補できる。Pydantic の既定 422 との混同を防ぐ | — |
 | 56 | 2026-10-04 追補（不具合修正）。性別をまたいで同じ種類を束ねる軸として `categories.kind`（VARCHAR(32)・NULL 可。親は NULL、子は tops など）を追加する。ALL の札は kind ごとに 1 枚（表示名は最初に出てきた名前、件数は合計、リンクは `?kind=`）。DS-API-002 に任意の `kind` を足し、gender・category と AND で効かせる。性別を選んでいるときの札とリンク（`?gender=&category=<slug>`）は変えない | 原因は、カテゴリが性別ごとの別の行で、ALL の札が 3 性別ぶん並び、先頭の「トップス」が women-tops だったこと。設計書に ALL でカテゴリを選んだときの動きが無かった。種類を独立した列にすると、API の引数 kind の意味を DB 側で決められ、slug の付け方に左右されない。既存の slug・URL・category 引数はそのまま使え、API の応答はキーが 1 つ増えるだけで済む（ロールバックは DROP COLUMN のみ） | 不採用の案。① slug の末尾一致（`LIKE '%-tops'`）で照合する: 列の追加は要らないが、slug は URL 用の名前で種類を表す約束が無く、slug の付け替えや別の接尾辞（例: `-sale-tops`）の追加で別の行まで一致しうる。先頭が `%` の LIKE は索引も使えない。② ALL の札に性別を付けて 3 枚並べる（「トップス（レディース）」など）: 札が増えて横スクロールが長くなり、「全性別のトップス」を 1 回で見る手段も無いまま。③ ALL では子カテゴリの札を出さず、性別を選んでから種類を選ばせる: 不具合は消えるが、性別を選ばずに種類で探す導線をなくす直し方になる |
+| 57 | BFF に IP ごとの回数制限を置く。`proxy.ts` で判定し、判定ロジックは `lib/server/rate-limit.ts`（純粋関数＋プロセス内メモリの 60 秒固定窓）。`/api/*` は 120 回/分、それ以外の動的リクエストは 600 回/分で、静的ファイルは数えない。超えたら 429 `{"code":"rate_limited"}` ＋ `Retry-After`。上限は `RATE_LIMIT_API_PER_MIN`・`RATE_LIMIT_PAGE_PER_MIN` で変えられる | 点検で、認証不要の `GET /api/cart` を 300 回送ると全て 200 で、毎回カートが 1 行できた（G-01）。F1 の共用プラン（CPU 60 分/日）を 1 人で使い切れ、プランを共用する他の受講生のアプリも止まる。F1 は 1 インスタンスなので、プロセス内メモリで足りる | 複数インスタンスにするときに、共有ストア（MySQL 表または Redis）へ置き換える（9.4 と同じ扱い）。窓をスライディングにする案もあるが、実装が増える |
+| 58 | カート・注文系の BFF の本文読み取りで、上限を 8192 バイトにする。`Content-Length` が超える、または読み取った量が超えたら 413 `{"code":"payload_too_large"}`。FastAPI は呼ばない | 2 MB の JSON を `POST /api/cart/items` に送ると 201 で受理された（G-01）。正常な本文（カート操作・注文確定）より十分大きく、負荷に使える大きさよりは小さい値として 8 KB にした（意見） | 上限を環境変数にする。今は変える理由がなく、固定値とする |
+| 59 | `GET /api/v1/cart` はカートを作らず、DB に書かない。トークンが無い・形が不正・DB に無い・`active` でないときは、空のカート応答（`cart_token=null`）を返す。カートを作るのは `POST /api/v1/cart/items` の最初の追加だけ。`CartResponse.cart_token` は null になりうる。BFF は null のとき cart_token の Set-Cookie を出さず、`csrf_token` は従来どおり未発行なら発行する | GET が毎回 DB に 1 行書くため、回数制限が無いとカートの行が増え続けた（G-01）。GET が状態を変えるのは CSRF の観点でも好ましくない（G-12）。画面に出る内容（空のカート）は変わらない | GET で作り続け、未使用のカートを定期的に消す。行が増える点と GET が書く点が残るため採らない |
+| 60 | BFF がブラウザへ返すカート応答の本文から `cart_token` を除く（GET・POST・PATCH・DELETE・prepare など）。Set-Cookie は除く前の値で処理する。画面側の `Cart` 型から外し、BFF 内部用の型は別に持つ。FastAPI の `CartResponse` は内部契約として残す | 本文の値だけを別クライアントの Cookie に入れると、他人のカートの明細を取れ、POST も通った（G-04）。XSS が 1 つ成立すると、HttpOnly で守っているはずの識別子を JS が読める。カートは匿名で個人情報が無く、注文後の照会にはメールが要るため、被害はカートの閲覧・編集に限られる（意見: 現状は中〜低。CSP が無い点と重なる） | FastAPI の応答から `cart_token` をなくす。FastAPI が発行する設計（DS-API-010・011）と、BFF が Cookie に載せる流れに合わないため採らない |
+| 61 | web と api の全応答にセキュリティヘッダを付ける（7.7.5 の値）。CSP は `script-src` を含めず、`frame-ancestors`・`base-uri`・`object-src`・`form-action` だけにする。nonce 方式の CSP は後日。`X-Powered-By` は `poweredByHeader: false` で消し、`Server` は uvicorn の `--no-server-header`（PR-A）で消す | 公開 web・api とも、点検したヘッダが 0 件だった（G-05）。クリックジャッキング、MIME スニッフィング、初回 HTTP アクセスの傍受、XSS 発生時の被害拡大を防ぐ層が無かった。`script-src` を付けるには Next.js のインラインスクリプト用に nonce が要り、`proxy.ts` での発行を含めて手間が大きい（点検記録の見積もりは半日） | `default-src 'self'` の CSP を Report-Only で先に出し、nonce 化と合わせて本採用する（点検記録の案） |
+| 62 | `verifyCsrf` にトークン照合の前の段として Origin の確認を足す。`Origin` があれば host:port が自サイトと一致しなければ 403 `{"code":"forbidden"}`。自サイトのホストは `X-Forwarded-Host`（あれば先頭）→ `Host`。`Origin` が無く `Sec-Fetch-Site` があって `same-origin` 以外なら 403。どちらも無ければ従来どおりトークン照合だけ | 点検で、`Origin` が `evil.example` でもトークンが正しければ通った（G-12）。署名の無い Double Submit Cookie は、Cookie を差し込める前提（サブドメインや同一ホストの別アプリ）で両方に同じ値を入れると通せる。Origin の確認は、トークンを HMAC 署名にする案より変更が小さい | トークンを HMAC で署名する。変更が大きいため、まず Origin の確認で止める |
+| 63 | BFF は `quantity` を 1〜99 の整数、`variant_id`・`item_id` を 1 以上 2^53-1 以下の整数に限り、外れたら 400 `validation_error`（`out_of_range`）。11〜99 は FastAPI へ渡し、従来どおり 422 `limit_exceeded`。FastAPI の `schemas/cart.py` も `quantity` に `ge=1, le=99`、`variant_id` に `ge=1, le=9223372036854775807` を付ける | 数量 999999999999 の追加だけが 500 になった（G-08）。500 は不要なアラートとログ汚染の元で、DB の例外パスを外から叩ける。99 は桁あふれを防ぐ形の上限で、業務上限 10（合計 50）は従来どおり 422 の層で判定する（4.5 の 400／422 の境目を保つ） | 点検記録の案は、`quantity > 1000` を 422 にするもの。形の不正は 400 にする規則（4.5）に合わせ、400 にそろえた |
+| 64 | api の `client_ip` は `X-Forwarded-For` の末尾の要素を使う。複数要素なら末尾（直前のホップ）、無ければ接続元 | 先頭の要素をそのまま使っていた（G-14）。BFF が検証済みの 1 要素を付けるため、BFF 経由では偽装できない。内部トークンが漏れて api を直接叩ける場合（G-07）にだけ、先頭を偽装して回数制限を避けられる | 先頭のまま使い、BFF が 1 要素しか付けないことに頼る。トークン漏えい時に破れるため採らない |
+| 65 | 拒否したときのログを、1 行・JSON 風の構造化ログで出す。項目は event・path・method・status・code・ip。ip は丸める（IPv4 は末尾 1 オクテット、IPv6 は先頭 3 ブロック以外を 0 に）。本文・Cookie・トークン・個人情報は出さない。web は 403・413・429・400、api は 401 と注文照会の 429。アラートは今回対応しない | BFF の 403・400、api の 401・429 がログに何も出ず、上限到達や不正トークンの連発を検知できなかった（G-06）。IP を丸めて個人を特定しにくくする | Application Insights とアラートで検知する。F1 では難しく今回の範囲に入れない。当面はログを手動で確認する |
+| 66 | 本番（`APP_ENV=production`）では、メールの中身をファイルに書かず、ログに注文番号だけを 1 行出すアダプタを返す。それ以外は従来の Outbox | 従来のアダプタは、氏名・住所・電話・メールを平文で `.mail-outbox/` に書く。本番の App Service のディスクに個人情報が残る（G-13）。`APP_ENV` は Cookie の Secure と `/docs` の無効化にも使っており、同じ値で切り替えると設定が増えない | 切り替え用の設定フラグを `core/config.py` に足す（点検記録の案）。環境の判定が 2 つに分かれるため採らない |
+| 67 | Next.js を 16.3.8 以上へ更新する（S11）。CI の `deps-audit` は critical があれば失敗させ、`continue-on-error` を外す。`pip-audit` は critical 相当の判定ができないため報告のみとする（S12） | 点検で `pnpm audit --prod` が critical 1・high 3・moderate 4・low 1 を示した（G-02）。現構成では該当機能を使っておらず実影響は小さいが、機能を足した時点（OGP 画像・`next/image` の導入など）で条件がそろう。CI は `continue-on-error` で PR を止めていなかった | high 以上で止める案（点検記録）。sharp・source-map-js の high が残るあいだ CI が通らなくなるため、まず critical から始める（意見） |
 
 DS-DEC-56 は 2026-10-04 追補（不具合修正）で追加した。33〜55 は P2 追補a・公開追補で使用済みのため、次の番号の 56 とした。
+
+DS-DEC-57〜67 は 2026-10-19 追補（セキュリティ点検対応）で追加した。57〜66 が S1〜S10 に、67 が S11・S12 に対応する（7.7）。ほかの文書で使っている番号は 55 までなので、56 の次の 57 から振った。
 
 ### 9.2 draft-v1 の未決 #20〜30 の決定（2026-09-07 統括承認）
 
@@ -907,6 +1061,7 @@ DS-DEC-56 は 2026-10-04 追補（不具合修正）で追加した。33〜55 �
 - 受け入れ: US-01（ゲスト購入）を P1 の出口条件に。375px での全操作
 - 非機能: 一覧・詳細 95%tile 2.0 秒は P2 の Azure 環境で計測
 - レート制限（DS-API-023 の 100 回/時/IP）は P1 ではプロセス内メモリ。P2 の gunicorn 2 ワーカーでは共有ストア（MySQL 表または Redis）に置き換えること
+- BFF の回数制限（7.7 S1。DS-DEC-57）もプロセス内メモリで、インスタンス間では共有されない。F1 は 1 インスタンスのため許容し、複数インスタンスにするときは上の共有ストアへ合わせて置き換えること
 - 既知の穴（P1 受容）: DS-PRC-014-1 手順 6 の決済 NG 経路は「決済失敗を COMMIT → 別トランザクションで在庫を戻す」の 2 段。間でプロセスが落ちると在庫が引かれたまま残る。P1 はスタブが同期で戻るため実害はほぼ無い。P2 の決済待ち期限切れ処理（DS-DEC-26）で「決済失敗のまま在庫が戻っていない注文」も回収対象に含めること
 - 注文番号 `GU-YYMMDD` の日付は JST で生成する（DS-DEC-16 は保存 UTC・表示 JST。顧客が見る番号なので表示側に合わせる）。UT-014-01 で日付部分を JST で検証する
 
@@ -933,5 +1088,6 @@ DS-DEC-56 は 2026-10-04 追補（不具合修正）で追加した。33〜55 �
 | REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 |
 | REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — |
 | REQ-FR-101,102,108（2026-10-04 追補・不具合修正） | F-001 / SCR-002 | DS-API-001,002・DS-TBL-05・DS-SCR-002・DS-DEC-56 | AT-07 | ST-F001-04 | IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002 | UT-SEED-07、UT-WEB-11/12 |
+| REQ-NFR-06,07,08（2026-10-19 追補・セキュリティ点検対応） | — | 7.7・DS-DEC-57〜67・DS-API-010,011 | — | ST-SEC-26〜35 | IT-010-01/02（期待結果を改訂）、IT-010-03/04、IT-011-03（境界を追加） | 各 S の単体テストは、テスト設計書 12 章の対応表に記す |
 
 P2 以降の行は追補で追加する。

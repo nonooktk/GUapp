@@ -17,6 +17,7 @@
 | draft-v2 | 2026-09-17 | 設計仕様書 draft-v3 に追従。UT-WEB-06 を CI へ移管、UT-WEB-07・UT-014-03/04 の検証範囲を UT で確認できる範囲に限定。tax_rate の表現・422 の扱いを設計と整合。1.4 に同時実行テスト（IT-014-02〜04）の偽陽性防止条件を追加 | Claude | Oya |
 | draft-v2（検収結果転記） | 2026-09-24 | 10 章のトレーサビリティ表に AT・ST 全 ID の実施結果（合格／不合格／未実施）と記録ファイル名を転記。IT・UT は CI 全件緑を追記 | Claude | — |
 | draft-v2（2026-10-04 追補・不具合修正） | 2026-10-04 | 設計仕様書 draft-v3 の 2026-10-04 追補（`categories.kind`・DS-API-001/002 の kind・DS-SCR-002 の ALL のカテゴリの札・DS-DEC-56）に対応するテストを追加した。ST-F001-04、IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002、UT-SEED-07、UT-WEB-11/12。テスト関数との対応は 11 章。既存の行は変えていない。原因は、設計書とテスト設計書に「ALL でカテゴリを選んだとき」の定義とテストが無かったこと（仕様の抜け）。発見はオーナーの手動操作（2026-10-04） | Claude | — |
+| draft-v2（2026-10-19 追補・セキュリティ点検対応） | 2026-10-19 | 設計仕様書 draft-v3 の 2026-10-19 追補（7.7・DS-DEC-57〜67）に対応するテストを追加した。3.3 章にシステムテスト ST-SEC-26〜35（S1〜S10。正常値・異常値・境界値）、4 章に IT-010-03/04 を追加し、GET /cart の挙動が変わる IT-010-01/02 と、数量の範囲が広がる IT-011-03 の期待結果を改訂した（変更理由は各行に記載）。10 章にトレーサビリティの行、12 章にテスト関数との対応表（実装レーンの報告後に転記）を追加した。原因は、設計・テストに回数制限・本文サイズ・Origin・セキュリティヘッダ・拒否ログの定義が無かったこと（仕様の抜け）。発見は 2026-10-19 のセキュリティ点検（記録: `docs/05_検収/セキュリティ点検記録_20261019.md`） | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -149,6 +150,55 @@ P1 はローカル環境のため、HTTPS と性能数値は P2 の Azure 環境
 | ST-SEC-10 | 4.1 内部認証 | 異常 | `X-Internal-Token` 無しで FastAPI を直接呼ぶ | 401 |
 | ST-SEC-11 | 4.5 エラー応答 | 異常 | 意図的に 500 を起こす（DB 停止） | 本文は固定文言。スタックトレース・SQL・接続文字列が出ない |
 
+### 3.3 セキュリティ点検（2026-10-19）を受けた追加分
+
+設計仕様書 7.7（S1〜S10・DS-DEC-57〜66）に対応する。ID は ST-SEC の最大番号（公開追補の ST-SEC-25）の続きで、S1 から順に 26〜35 とした。同じ S の中の正常値・異常値・境界値は、枝番（a・b・c・d）で分ける。
+
+実施の前提:
+
+- 回数制限（ST-SEC-26）は IP ごと・60 秒の窓で数える。前回の送信から 60 秒以上あけ、窓が空の状態で始める。手元では `TRUSTED_PROXY_HOPS` を指定しない限り、すべて接続元（`127.0.0.1`）の 1 つの枠になる
+- 手順の中の状態を変える POST・PATCH・DELETE は、CSRF トークン（`csrf_token` Cookie と `X-CSRF-Token` ヘッダ）を付ける。付けない場合はそれ自体が ST-SEC-06 の確認になる
+- 手順どおりに HTTP を送れるものは自動テスト（Vitest・pytest）にもする。テスト関数との対応は 12 章に、実装レーンの報告後に記す
+- 実施結果は、実施後に 10 章へ転記する。本追補の時点では全項目が実施前
+
+| ID | 対象 | 区分 | 観点・手順 | 期待結果 |
+| --- | --- | --- | --- | --- |
+| ST-SEC-26 | 7.7 S1・DS-DEC-57 | 境界 | 同じ IP から 60 秒以内に `/api/categories` へ 120 回リクエストを送り、続けて 121 回目を送る。上限は既定値とする（環境変数は未設定） | 1〜120 回目は 200 を返す。121 回目は 429 を返し、本文は `{"code":"rate_limited"}`、`Retry-After` は窓の残り秒数（1〜60 の整数）になる。429 を返したリクエストは FastAPI のアクセスログに出ない |
+| ST-SEC-26a | 7.7 S1・DS-DEC-57 | 境界 | 同じ IP から 60 秒以内に `/products`（ページ）へ 600 回リクエストを送り、続けて 601 回目を送る | 1〜600 回目は 200 を返す。601 回目は 429 を返し、`rate_limited` と `Retry-After` が付く。`/api/*` の上限 120 回より多くのリクエストが通る |
+| ST-SEC-26b | 7.7 S1・DS-DEC-57 | 正常 | ST-SEC-26 で 429 になった直後に、`/products/031/1.jpg`（拡張子付きの静的ファイル）、`/_next/static/` 配下のファイル、`/favicon.ico` を取得する。その後、前回の送信から 60 秒以上待ち、`/api/categories` を送る | 静的ファイルは 429 にならず取得できる（回数に数えない）。60 秒以上たつと、`/api/categories` が再び 200 を返す（窓が切れる） |
+| ST-SEC-26c | 7.7 S1・DS-DEC-57 | 異常 | `TRUSTED_PROXY_HOPS=0` で web を起動し、`X-Forwarded-For` と `X-Client-IP` の値を毎回変えながら `/api/categories` へ 121 回リクエストを送る | 121 回目が 429 になる。送信するヘッダの値を変えても、枠は接続元の 1 つのまま増えない |
+| ST-SEC-26d | 7.7 S1・DS-DEC-57 | 境界・異常 | `RATE_LIMIT_API_PER_MIN=5` で起動して `/api/categories` を 6 回送る。これとは別に、`RATE_LIMIT_API_PER_MIN` を `0`・`-1`・`abc`・`1.5` のそれぞれにして起動する。`RATE_LIMIT_PAGE_PER_MIN` についても同様に試す | 前者は 6 回目が 429 になる。後者は、どちらの変数でも値が正の整数以外だと、起動時（環境変数の検証）に失敗する |
+| ST-SEC-27 | 7.7 S2・DS-DEC-58 | 境界 | `POST /api/cart/items` に、有効な variant_id を含み本文がちょうど 8192 バイトになる JSON と、本文が 8193 バイトになる JSON を、それぞれ送る（残りは空白や余分な項目で埋める） | 8192 バイトの方は 413 にならず、FastAPI まで届いて通常の応答（201 など）が返る。8193 バイトの方は 413 `{"code":"payload_too_large"}` が返る |
+| ST-SEC-27a | 7.7 S2・DS-DEC-58 | 異常 | 2 MB の JSON を `POST /api/cart/items` と `POST /api/orders` に送る。また、`Content-Length` を付けない送り方（chunked）で 8193 バイト以上を送る | どちらも 413 `payload_too_large` になる。FastAPI のアクセスログには出ない。`Content-Length` が無い場合も、読み取った量で 413 になる |
+| ST-SEC-27b | 7.7 S2・DS-DEC-58 | 正常 | 通常のカート追加・数量変更・注文確定を行う（AT-01 の操作） | 従来どおり成功し、413 にならない |
+| ST-SEC-28 | 7.7 S3・DS-DEC-59 | 正常 | Cookie を付けずに `GET /api/cart` を送る。送信の前後で `carts` の行数を数える | 200 で空のカートが返る（items=[]・item_count=0・金額 0・can_checkout=false）。`Set-Cookie` に cart_token は無く、`csrf_token` は付く。`carts` の行数は変わらない |
+| ST-SEC-28a | 7.7 S3・DS-DEC-59 | 異常 | Cookie の cart_token に、形が不正な値（5000 文字、`<script>`、SQL 文字列）、DB に無い値、注文済み（ordered）カートの値をそれぞれ入れて `GET /api/cart` を送る。送信の前後で、`carts` の行数と ordered カートの行を比べる | いずれも 200 で空のカートが返る（`cart_token` は null）。`carts` の行数は変わらない。ordered カートの `anonymous_token` と状態も変わらない。500 にならず、新規作成も起きない |
+| ST-SEC-28b | 7.7 S3・DS-DEC-59 | 正常 | ST-SEC-28 の状態から、在庫のある variant で最初の `POST /api/cart/items` を送る。続けて `GET /api/cart`、もう一度 `POST /api/cart/items` | 最初の POST は 201 で、`carts` が 1 行増え、`Set-Cookie` に cart_token が付く。続く GET は明細 1 件のカート。2 回目の POST で `carts` の行は増えない |
+| ST-SEC-28c | 7.7 S3・DS-DEC-59 | 異常 | Cookie 無しで、CSRF トークン付きの `PATCH /api/cart/items/1` と `DELETE /api/cart/items/1` を送る | どちらも 404（従来どおり）。カートは作られない |
+| ST-SEC-28d | 7.7 S3・DS-DEC-59 | 境界 | Cookie 無しで `GET /api/cart` を 100 回（回数制限の範囲内）続けて送り、前後の `carts` の行数を比べる | 行数は増えない（点検では 300 回で 300 行できていた） |
+| ST-SEC-29 | 7.7 S4・DS-DEC-60 | 正常 | `GET /api/cart`、`POST /api/cart/items`、`PATCH /api/cart/items/[id]`、`DELETE /api/cart/items/[id]`、`POST /api/checkout/prepare` の応答本文を、開発者ツールのネットワークタブか curl で確認する | どの本文にも `cart_token` のキーが無い（入れ子の中も含む）。カートを作った POST の `Set-Cookie` には、cart_token が従来どおり HttpOnly で付く |
+| ST-SEC-29a | 7.7 S4・DS-DEC-60 | 異常 | 開発者ツールのコンソールで `document.cookie` を読む。ネットワークタブで `/api/cart` 系の全応答を探す | `document.cookie` に cart_token が出ない。応答の JSON にも無く、JS から cart_token の値を得られない |
+| ST-SEC-30 | 7.7 S5・DS-DEC-61 | 正常 | web の `/`、`/products`、`/api/health`、存在しないパス（404）に `curl -sI` でリクエストを送り、応答ヘッダを確認する（Basic 認証を有効にしている場合は資格情報を付ける） | いずれの応答にも次のヘッダが付く。`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`、`Strict-Transport-Security: max-age=31536000`、`X-Frame-Options: DENY`、`Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'`。`X-Powered-By` は付かない |
+| ST-SEC-30a | 7.7 S5・DS-DEC-61 | 正常 | api に対して、`/api/v1/health`（200）、内部トークンを付けない呼び出し（401）、存在しないパス（404）、許可されないメソッド（405）の各ケースを実行し、応答ヘッダを確認する | すべての応答に `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`、`Strict-Transport-Security: max-age=31536000`、`Cache-Control: no-store` が付く。`--no-server-header` を指定して起動していれば `Server` は付かない（PR-A） |
+| ST-SEC-30b | 7.7 S5・DS-DEC-61 | 境界 | ミドルウェアの単体テストで、ルート側があらかじめ `Cache-Control` を付けた応答と、付けていない応答をそれぞれ返させる | `Cache-Control` を付けてある応答ではその値が上書きされず、付けていない応答にだけ `no-store` が付く |
+| ST-SEC-30c | 7.7 S5・DS-DEC-61 | 異常 | 別のオリジンで開いたテスト用 HTML の中で、web の `/` を `<iframe>` で埋め込む | ブラウザが埋め込みを拒否し、iframe の中に画面は表示されない（`X-Frame-Options: DENY` と CSP の `frame-ancestors 'none'` による） |
+| ST-SEC-31 | 7.7 S6・DS-DEC-62 | 異常 | 有効な `csrf_token`（Cookie とヘッダが一致）を付け、`Origin: https://evil.example` を指定して `POST /api/cart/items` を送る | 403 `{"code":"forbidden"}` が返る。リクエストは FastAPI に届かず、カートも変わらない |
+| ST-SEC-31a | 7.7 S6・DS-DEC-62 | 境界 | 同じトークンで、`Origin` を自サイトと同じ host:port（例: `http://localhost:3000`）にして送る。続けて、ポートだけ違う Origin（`http://localhost:3001`）で送り、さらにホストだけ違う Origin でも送る | host:port が同じなら通る（201 など通常の応答）。ポート違いとホスト違いは、どちらも 403 `forbidden` になる |
+| ST-SEC-31b | 7.7 S6・DS-DEC-62 | 正常・異常 | `X-Forwarded-Host: app.example.test, proxy.test` と `Origin: https://app.example.test` を付けて送る。同じ `X-Forwarded-Host` のまま `Origin: https://proxy.test` を付けて送る。`X-Forwarded-Host` は付けず、`Host: app.example.test` と `Origin: https://app.example.test` を付けて送る | 1 つ目は通る（先頭の値と一致するため）。2 つ目は 403 になる（先頭以外の値は使わないため）。3 つ目は `Host` と比べて判定し、通る |
+| ST-SEC-31c | 7.7 S6・DS-DEC-62 | 異常 | `Origin` は付けず、`Sec-Fetch-Site` を `cross-site`・`same-site`・`none` のそれぞれにして、正しいトークンで送る | いずれも 403 `forbidden` が返る |
+| ST-SEC-31d | 7.7 S6・DS-DEC-62 | 正常 | `Origin` も `Sec-Fetch-Site` も付けず（curl 相当）、正しいトークンで送る。続けて、`Sec-Fetch-Site: same-origin` だけを付けて送る。さらに、トークン無しの場合と不一致の場合も送る | 正しいトークンなら、どちらも通る（従来どおり）。トークン無しと不一致は、どちらも 403 になる |
+| ST-SEC-32 | 7.7 S7・DS-DEC-63 | 境界 | `POST /api/cart/items` に、`quantity` を 1・10・11・99・100・0・-1 のそれぞれの値で送る（variant_id は在庫のある実在の値にする。カートは毎回空の状態から始める） | 1・10 は 201。11 と 99 は FastAPI まで届き、422 `limit_exceeded` になる。100・0・-1 は BFF が 400 `validation_error`（`out_of_range`）で返し、FastAPI には届かない |
+| ST-SEC-32a | 7.7 S7・DS-DEC-63 | 異常 | `quantity` に `999999999999`・`1e300`・`1.5`・`"1"`・`null`・`true`・`[1]` を入れて送る | いずれも 400 `validation_error` になる。500 は返らず、カートは変わらない |
+| ST-SEC-32b | 7.7 S7・DS-DEC-63 | 境界 | `variant_id` に 1・9007199254740991（2^53-1）・0・-1・9007199254740992（2^53）・`"1"` を入れて送る。`PATCH`・`DELETE` の `item_id` にも同じ値を入れて送る | 1 と 2^53-1 は BFF を通る（存在しなければ 404 など通常の応答になる）。0・-1・2^53・文字列は 400 `validation_error` になる |
+| ST-SEC-32c | 7.7 S7・DS-DEC-63 | 異常・境界 | 内部トークン付きで FastAPI を直接呼ぶ（pytest の統合テストで行う）。`quantity=100`、`variant_id=0`、`variant_id=9223372036854775808`、`variant_id=9223372036854775807` を送る | 前の 3 つは 400 `validation_error` になる。最後の 9223372036854775807 は範囲内として扱われ、存在しなければ 404 になる |
+| ST-SEC-33 | 7.7 S8・DS-DEC-64 | 境界 | api の `client_ip` に、`X-Forwarded-For` が 1 要素（`a`）・2 要素（`a, b`）・3 要素（`a, b, c`）の場合と、ヘッダが無い場合を渡す（単体テスト） | 1 要素なら `a`、2 要素なら `b`、3 要素なら `c`（末尾）になる。ヘッダが無ければ接続元になる |
+| ST-SEC-33a | 7.7 S8・DS-DEC-64 | 異常 | 内部トークン付きで `POST /api/v1/orders/{番号}/lookup` に、`X-Forwarded-For` の末尾を固定して先頭だけ毎回変えながら（`a1, z`、`a2, z`、…）誤メールを 101 回送る（pytest） | 101 回目が 429 になる。先頭を変えても枠は増えない（ST-F025-03 と同じ 100 回/時/IP） |
+| ST-SEC-34 | 7.7 S9・DS-DEC-65 | 正常 | web で拒否を起こす。CSRF トークン無しの POST（403）、`Origin: https://evil.example` の POST（403）、9000 バイトの本文（413）、回数制限の超過（429）、`quantity=0`（400） | それぞれ `console.warn` に 1 行出る。ログの項目は event・path・method・status・code・ip。正常な応答（200・201）ではログを出さない |
+| ST-SEC-34a | 7.7 S9・DS-DEC-65 | 異常・境界 | ST-SEC-34 のログ行を全文確認する。ip の丸めは単体テストで確かめる。IPv4（`192.0.2.45`）と IPv6（`2001:db8:1234:5678::1`）を渡す | ログ行に本文・Cookie・トークン・メール・氏名が含まれない。IPv4 は末尾 1 オクテットが 0（`192.0.2.0`）になり、IPv6 は先頭 3 ブロック以外が 0 になる |
+| ST-SEC-34b | 7.7 S9・DS-DEC-65 | 正常・異常 | api で、内部トークンの不一致による 401 と、注文照会が 100 回を超えたことによる 429 を起こす（pytest）。ログ出力を捕まえて確認する | `logger.warning` に 1 行ずつ出る（event・path・method・status・code・ip）。送った内部トークンの値と照会のメールは、ログに出ない（`SecretMaskFilter` を通る） |
+| ST-SEC-35 | 7.7 S10・DS-DEC-66 | 正常 | `APP_ENV=production` で api を起動し、注文を確定する | `.mail-outbox/` にファイルが作られない。ログには注文番号だけの 1 行が出る。氏名・住所・電話・メールは出ない。注文は成立する（201） |
+| ST-SEC-35a | 7.7 S10・DS-DEC-66 | 正常 | `APP_ENV` が production 以外（開発・テスト）の状態で注文を確定する | 従来どおり `.mail-outbox/<注文番号>.txt` が作られる（ST-F014-06・IT-014-09 の挙動は変わらない） |
+
 ## 4. 結合テスト（IT）
 
 FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は `IT-<DS-API または DS-PRC の番号>-<連番>`。設計仕様書 9.4 の必須項目は太字。
@@ -164,11 +214,13 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | IT-002-03c | DS-API-002・DS-DEC-56・4.5（2026-10-04 追補・不具合修正） | 異常 | kind に `TOPS`・`to_ps`・33 文字・空文字・`tops `（末尾に空白）・`ト`・`tops;x` を渡す | 400 `validation_error`。fields は `[{"name": "kind", "reason": "format"}]` |
 | IT-003-01 | DS-API-003 | 正常 | GET /products/{id} | バリエーションごとの在庫有無、関連商品が返る |
 | IT-003-02 | DS-API-003 | 異常 | 非公開商品・存在しない id | 404 |
-| IT-010-01 | DS-API-010 | 正常 | Cookie 無しで GET /cart | 新規カートと匿名トークンが発行される |
-| IT-010-02 | DS-API-010 | 正常 | 注文済み（ordered）カートのトークンで GET /cart | 新しい active カートが作られて返る |
+| IT-010-01 | DS-API-010・DS-DEC-59 | 正常 | Cookie 無しで GET /cart | **（2026-10-19 改訂）** 200 で空のカート（items=[]・item_count=0・金額 0・can_checkout=false・`cart_token` は null）。`carts` に行は作られない。改訂前の期待結果は「新規カートと匿名トークンが発行される」。変更理由: GET が毎回カートを作るため、認証不要の呼び出しで行が増え続けた（点検 G-01）。カートを作るのは最初の POST /cart/items（IT-010-03）に移した |
+| IT-010-02 | DS-API-010・DS-DEC-59 | 正常 | 注文済み（ordered）カートのトークンで GET /cart | **（2026-10-19 改訂）** 200 で空のカート（`cart_token` は null）。DB は変わらず、ordered カートの `anonymous_token` も変わらない。改訂前の期待結果は「新しい active カートが作られて返る」。変更理由は IT-010-01 と同じ。注文後に新しいカートへ追加できること（AT-06）は IT-010-03 で確認する |
+| IT-010-03 | DS-API-011・DS-DEC-59 | 正常 | Cookie 無しで POST /cart/items（在庫のある variant）。別に、注文済み（ordered）カートのトークンで POST /cart/items | どちらも 201。新しい active カートが 1 行作られ、応答に `cart_token` が入る（FastAPI の応答。BFF はブラウザへ返す本文から除く）。後者は旧カートの `anonymous_token` が NULL になり、注文との紐づけ（`orders.cart_id`）は旧カートのまま |
+| IT-010-04 | DS-API-012,013・DS-DEC-59 | 異常 | トークン無し、または DB に無いトークンで PATCH・DELETE /cart/items/{item_id} | 404（従来どおり）。カートは作られない |
 | IT-011-01 | DS-API-011 | 正常 | 同じ variant を 2 回追加 | 明細は 1 行で数量 2 |
 | IT-011-02 | DS-API-011 | 異常 | 在庫 0・非公開商品の variant | 409 `out_of_stock`／404 |
-| IT-011-03 | DS-API-011 | 境界 | quantity=10、11、0、-1 | 10 は 201、11 は 422 `limit_exceeded`（業務上限）、0 と -1 は 400 `validation_error`（形式） |
+| IT-011-03 | DS-API-011・DS-DEC-63 | 境界 | quantity=10、11、99、100、0、-1 | **（2026-10-19 改訂）** 10 は 201、11 と 99 は 422 `limit_exceeded`（業務上限）、100・0・-1 は 400 `validation_error`（形式）。改訂前は 100 を含まず、11 以上はすべて 422 だった。変更理由: 数量 999999999999 の追加だけが 500 になった（点検 G-08）ため、形の上限 99 を足した |
 | IT-011-04 | DS-API-011 | 境界 | 合計 50 点、51 点 | 50 は 201、51 は 422 |
 | IT-012-01 | DS-API-012,013 | 正常 | 数量変更・削除 | 反映される。他人のカートの item_id は 404 |
 | IT-020-01 | DS-API-020 | 正常 | GET /settings/public | tax_rate・shipping_fee・free_shipping_threshold のみ返る（内部設定は含まない） |
@@ -267,7 +319,7 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | ユーザーテスト | 2 章 AT-01〜08 |
 | 結合・機能テスト | 4 章 IT、3.1 ST 機能要件 |
 | 正常値・異常値 | 全表の区分列 |
-| 境界値 | AT-08、ST-F009-03/04、ST-F025-03、IT-002-02、IT-011-03/04、UT-021-02/03、UT-014-04、UT-011-01、UT-VAL-02 |
+| 境界値 | AT-08、ST-F009-03/04、ST-F025-03、IT-002-02、IT-011-03/04、UT-021-02/03、UT-014-04、UT-011-01、UT-VAL-02、ST-SEC-26・27・31a・32（2026-10-19 追補） |
 | V 字での要求・要件・仕様とテストの関係 | 0 章の 4 レベル対応と 10 章のトレーサビリティ表 |
 
 ## 10. トレーサビリティ表（P1）
@@ -291,12 +343,15 @@ FastAPI と MySQL を実際に起動し、pytest から HTTP で呼ぶ。ID は 
 | REQ-NFR-09 | — | 6 章（375px） | AT-02 | ST-NFR-01 | — | UT-WEB-07 | AT-02: 合格（上記と同じ）／ST-NFR-01: 合格（注記: 数値で確認できる項目のみ。目視の崩れ判定は未実施） | ST-AT実施記録_正常系_20260918.md |
 | REQ-CO-06 | — | DS-DEC-04・DS-TBL-16 | — | ST-F014-01（payments にカード情報なし） | IT-014-01 | — | ST-F014-01: 合格（上記と同じ） | ST-AT実施記録_正常系_20260918.md |
 | REQ-FR-101,102,108（2026-10-04 追補・不具合修正） | F-001 / SCR-002 | DS-API-001,002・DS-TBL-05・DS-SCR-002・DS-DEC-56 | AT-07 | ST-F001-04 | IT-001-01a、IT-002-03a〜c、IT-SCHEMA-07/08、IT-BFF-002 | UT-SEED-07、UT-WEB-11/12 | 未記録（追補時点。ST-F001-04 は手動で未実施。IT・UT は実施後に転記） | — |
+| REQ-NFR-06,07,08（2026-10-19 追補・セキュリティ点検対応） | — | 7.7・DS-DEC-57〜67・DS-API-010,011 | — | ST-SEC-26〜35 | IT-010-01/02（改訂）、IT-010-03/04、IT-011-03（改訂） | 12 章の対応表のとおり | ST-SEC-26〜35: 合格（2026-10-20、ローカル）／IT-010-01/02（改訂）: 合格（2026-10-20、ローカル）／IT-010-03/04: 合格（2026-10-20、ローカル）／IT-011-03（改訂）: 合格（2026-10-20、ローカル）。対応するテストは 12 章の表のとおり。専用の自動テストが無い手順は、12 章の結果欄に書いた | — |
 
 P1 対象の要求 ID はすべて AT または ST に 1 件以上対応する。P2 以降の行は追補で追加する。
 
 **IT・UT の実施結果**: IT（本章 31 件）・UT（本章 22 件）は全件 CI 緑（`uv run --env-file .env pytest -q` → api **213 passed**／`pnpm test` → web vitest **130 passed**）。同時実行（IT-014-02〜04）の偽陽性防止条件（1.4 章）と防御外し確認（1.4 #8）の結果は `scripts/mutation-check/result-20260918*.md`。
 
 **AT・ST の集計**: AT は本書 2 章の 8 件、ST は本書 3 章の 40 件（3.1 機能要件 27 件＋3.2 非機能・セキュリティ 13 件。本表の ID を集計した数）。実施記録は `ST-AT実施記録_正常系_20260918.md`（AT 8・ST 正常 15・ST 3.2 5 の計 28 件＋再実施 2 件〈AT-07・AT-08〉）と `ST実施記録_異常境界_20260924.md`（3.1 異常・境界 12・ST-F032 2・ST-SEC 8 の計 22 件）の 2 本。ST-F032-01・02 は両記録に ID が登場するが（前者は「未実施・委譲」の記載、後者が実施本体）実体は同一の 2 件のため、単純合算の 20＋22＝42 ではなく重複を除いた **40 件**が本章の ST 総数と一致する。AT 8 件・ST 40 件とも全件合格。
+
+**2026-10-19 追補の ST について**: ST-SEC-26〜35（3.3 章。枝番を含めて 35 行）は、上記の集計（検収 2026-09-24 時点の AT 8 件・ST 40 件）には含めない。実施結果は実施後に本章の該当行へ転記する。
 
 ## 11. 2026-10-04 追補（不具合修正）: 追加したテストとテスト関数の対応
 
@@ -317,3 +372,26 @@ P1 対象の要求 ID はすべて AT または ST に 1 件以上対応する�
 | UT-WEB-12 | 同上 | `describe("CategoryNav: 性別を選択中（従来どおり）")` の 3 件 |
 
 既存テストの変更: `apps/web/tests/at-07.all-menu.test.tsx`（AT-07 に対応するオールメニューの Vitest）は、CategoryChild に kind が加わったため fixture に `kind` を足しただけで、検証内容は変えていない。
+
+
+## 12. 2026-10-19 追補（セキュリティ点検対応）: 追加・改訂したテストとテスト関数の対応
+
+設計仕様書 draft-v3 の 2026-10-19 追補（7.7・DS-DEC-57〜67）に対応して追加・改訂したテストと、コード上のテスト名の対応。ID の付け方は本編の規則に合わせた（ST は `ST-SEC-<連番>`、IT は `IT-<DS-API の番号>-<連番>`）。テストファイル・テスト関数は 2026-10-20 に転記した。web のテストは Vitest（`apps/web/tests/`）の「describe > it」、api のテストは pytest（`apps/api/tests/`）の関数名で書く。実施結果は、2026-10-20 に手元で全件を実行した結果で、web は 36 ファイル 354 件、api は 348 件（結合テストを含む。使い捨ての MySQL 8.4 で実行）がすべて通った。専用の自動テストが無い手順は、結果の欄に書き添えた。
+
+| ID | 対象 | テストファイル・テスト関数 | 実施結果 |
+| --- | --- | --- | --- |
+| ST-SEC-26（a〜d） | S1・DS-DEC-57 回数制限 | 26: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > /api/* は 120 回まで通り、121 回目が 429・本文 rate_limited・Retry-After 付き`<br>26: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > 429 のときは FastAPI を呼ばない（fetch を使わない）`<br>26a: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > ページ（RSC・prefetch 含む）は 600 回まで通り、601 回目が 429`<br>26b: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > 静的ファイル（拡張子付き）は何回送っても数えず、429 にもならない`<br>26b: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > 窓（60 秒）が切れたら通常に戻る`<br>26c: `st-sec-xff.client-ip.test.ts::resolveClientIp: 利用者が付けた X-Forwarded-For は使わない（hops=0） > 複数値でも同じ（先頭を採らない）`<br>26c: `st-sec-xff.client-ip.test.ts::resolveClientIp: X-Client-IP（App Service front end）は hops>=1 のときだけ最優先 > hops=0（プロキシ無し）では利用者が付けた X-Client-IP も無視して接続元`<br>26d: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > RATE_LIMIT_API_PER_MIN・RATE_LIMIT_PAGE_PER_MIN で上限を上書きできる`<br>26d: `st-sec-s1.rate-limit.test.ts::S1 proxy の回数制限 > 上限の環境変数が 0・小数・文字列なら import 時（起動時相当）に失敗する` | 合格（2026-10-20、ローカル） |
+| ST-SEC-27（a・b） | S2・DS-DEC-58 本文サイズ | 27: `st-sec-s2.body-limit.test.ts::S2 readJsonBody > 8192 バイトちょうどは読める`<br>27: `st-sec-s2.body-limit.test.ts::S2 readJsonBody > 8193 バイトは 413 payload_too_large`<br>27a: `st-sec-s2.body-limit.test.ts::S2 readJsonBody > Content-Length が 8192 を超えていれば本文を読まずに 413`<br>27a: `st-sec-s2.body-limit.test.ts::S2 readJsonBody > Content-Length が無い（チャンク転送）でも、読み取った量が 8192 を超えたら 413`<br>27a: `st-sec-s2.body-limit.test.ts::S2 各 BFF は 413 を返し、FastAPI を呼ばない > POST /api/cart/items`<br>27a: `st-sec-s2.body-limit.test.ts::S2 各 BFF は 413 を返し、FastAPI を呼ばない > POST /api/orders` | 合格（2026-10-20、ローカル）。27b の専用テストは無い（通常操作は再点検で確認） |
+| ST-SEC-28（a〜d） | S3・DS-DEC-59 GET でカートを作らない | 28: `st-sec-s3s4.cart-token.test.ts::S3 cart_token が null のとき > GET /api/cart（Cookie 無し）: cart_token の Set-Cookie を出さず、csrf_token は発行する`<br>28: `integration/test_it_010_013_cart.py::test_it_010_01_no_token_returns_empty_cart_without_creating`<br>28a: `st-sec-s3s4.cart-token.test.ts::S3 cart_token が null のとき > GET /api/cart（未知の Cookie）: cart_token の Set-Cookie を出さない。csrf_token が発行済みなら Set-Cookie は 0 件`<br>28a: `integration/test_it_010_013_cart.py::test_it_sec_s3_get_never_creates_cart`<br>28b: `integration/test_it_010_013_cart.py::test_it_sec_s3_post_item_is_the_only_place_that_creates_a_cart`<br>28b: `st-sec-s3s4.cart-token.test.ts::S3 従来の Set-Cookie は維持する > POST /api/cart/items で FastAPI が新しい cart_token を返したら cart_token を Set-Cookie（HttpOnly）`<br>28c: `integration/test_it_010_013_cart.py::test_it_sec_s3_patch_delete_without_cart_are_404_and_create_nothing` | 合格（2026-10-20、ローカル）。28d の 100 回連続送信は専用テストが無い（行数不変は 28a の 4 パターンで確認） |
+| ST-SEC-29（a） | S4・DS-DEC-60 cart_token を本文から除く | 29: `st-sec-s3s4.cart-token.test.ts::S4 応答本文に cart_token が無い > GET・POST・PATCH・DELETE のどれでも、FastAPI が返した cart_token は本文に出ない`<br>29: `st-sec-s3s4.cart-token.test.ts::S4 応答本文に cart_token が無い > POST /api/checkout/prepare も、万一 cart_token が入っていても本文から除く`<br>29: `st-sec-s3s4.cart-token.test.ts::S4 応答本文に cart_token が無い > stripCartToken: 最上位の cart_token だけ除き、他の項目・配列・null はそのまま`<br>29a: `st-sec-s3s4.cart-token.test.ts::S3 従来の Set-Cookie は維持する > POST /api/cart/items で FastAPI が新しい cart_token を返したら cart_token を Set-Cookie（HttpOnly）` | 合格（2026-10-20、ローカル）。29a のブラウザでの `document.cookie` 確認は専用テストが無い |
+| ST-SEC-30（a〜c） | S5・DS-DEC-61 セキュリティヘッダ | 30: `st-sec-s5.security-headers.test.ts::S5 next.config のセキュリティヘッダ > poweredByHeader は false（X-Powered-By を出さない）`<br>30: `st-sec-s5.security-headers.test.ts::S5 next.config のセキュリティヘッダ > headers() は全パス（/:path*）に 6 つのヘッダを付ける`<br>30: `st-sec-s5.security-headers.test.ts::S5 next.config のセキュリティヘッダ > Content-Security-Policy に script-src は含めない（nonce 方式の本格 CSP は後日）`<br>30a: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s5_security_headers_on_every_response`<br>30a: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s5_cors_preflight_response_has_headers`<br>30a: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s5_swagger_ui_is_not_blocked_by_csp_in_development`<br>30b: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s5_headers_on_500_and_existing_header_is_kept` | 合格（2026-10-20、ローカル）。30c の iframe 表示の拒否は専用テストが無く、ブラウザでは未実施（ヘッダの付与は 30・30a で確認） |
+| ST-SEC-31（a〜d） | S6・DS-DEC-62 Origin の確認 | 31: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > 別の Origin は 403 forbidden（トークンが正しくても）`<br>31a: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > 同じ Origin（Host と一致）なら通る`<br>31a: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > ポート違いは別オリジン（localhost:3000 と localhost:3001）`<br>31b: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > X-Forwarded-Host があればそれを使う（App Service の背後。Host は内部名でも通る）`<br>31b: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > X-Forwarded-Host が複数なら先頭を使う`<br>31b: `st-sec-s6.csrf-origin.test.ts::S6 isOriginAllowed / ownHost（純粋関数） > ownHost: X-Forwarded-Host の先頭 → Host → URL。大文字小文字は区別しない`<br>31c: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > Origin が無く Sec-Fetch-Site が cross-site なら 403`<br>31d: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > Origin が無く Sec-Fetch-Site が same-origin なら通る`<br>31d: `st-sec-s6.csrf-origin.test.ts::S6 verifyCsrf の Origin 確認 > どちらも無い（curl など）ときは従来どおりトークン照合だけ` | 合格（2026-10-20、ローカル） |
+| ST-SEC-32（a〜c） | S7・DS-DEC-63 数量・ID の範囲 | 32: `st-sec-s7.range.test.ts::S7 POST /api/cart/items の quantity > quantity=%s は 400 validation_error（out_of_range）。FastAPI を呼ばない`<br>32: `st-sec-s7.range.test.ts::S7 POST /api/cart/items の quantity > quantity=%s は FastAPI へ渡る（11 以上の業務上限は FastAPI が 422 limit_exceeded）`<br>32a: `st-sec-s7.range.test.ts::S7 POST /api/cart/items の quantity > quantity=%s は 400 validation_error（out_of_range）。FastAPI を呼ばない`<br>32b: `st-sec-s7.range.test.ts::S7 POST /api/cart/items の variant_id > variant_id=%s は 400（out_of_range）`<br>32b: `st-sec-s7.range.test.ts::S7 POST /api/cart/items の variant_id > 上限ちょうど（2^53-1）は FastAPI へ渡る`<br>32b: `st-sec-s7.range.test.ts::S7 PATCH /api/cart/items/[id] > item_id が 0 または 2^53-1 超は 400（out_of_range）、数字でなければ従来どおり 404`<br>32b: `st-sec-s7.range.test.ts::S7 PATCH /api/cart/items/[id] > DELETE も item_id の範囲を見る。上限ちょうどは FastAPI へ渡る`<br>32c: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s7_quantity_out_of_range_is_400`<br>32c: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s7_variant_id_out_of_range_is_400`<br>32c: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s7_schema_accepts_boundaries`<br>32c: `integration/test_it_010_013_cart.py::test_it_sec_s7_quantity_and_variant_id_ranges` | 合格（2026-10-20、ローカル）。32a の `quantity=999999999999` は web・api とも専用ケースが無い（範囲外の値 `10**9` は api で確認し、再点検でも確認） |
+| ST-SEC-33（a） | S8・DS-DEC-64 api の IP | 33: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s8_client_ip_uses_last_forwarded_for_element`<br>33: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s8_client_ip_falls_back_to_connection` | 合格（2026-10-20、ローカル）。33a の「先頭を変えて 101 回」は専用テストが無い（33 と、100 回/時の `test_it_023_02_100_requests_ok_101st_is_429_with_retry_after` で代替） |
+| ST-SEC-34（a・b） | S9・DS-DEC-65 拒否のログ | 34: `st-sec-s9.rejection-log.test.ts::S9 拒否ログ > 403（CSRF トークン不一致）: 1 行出る。IP は末尾 1 オクテットを 0 に丸める`<br>34: `st-sec-s9.rejection-log.test.ts::S9 拒否ログ > 403（別 Origin）: event は origin_rejected`<br>34: `st-sec-s9.rejection-log.test.ts::S9 拒否ログ > 413: 本文の中身を出さない`<br>34: `st-sec-s9.rejection-log.test.ts::S9 拒否ログ > 400（BFF の入力チェック）: 1 行出る`<br>34: `st-sec-s9.rejection-log.test.ts::S9 拒否ログ > 429（proxy）: 1 行出る。ヘッダやクエリは出さない`<br>34a: `st-sec-s9.rejection-log.test.ts::S9 maskIp / sanitizePath > maskIp(%s) = %s`<br>34a: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s9_mask_ip`<br>34b: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s9_401_logs_one_masked_line_without_token`<br>34b: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s9_401_without_token_header_is_logged_too`<br>34b: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s9_429_logs_one_masked_line_without_email`<br>34b: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s9_valid_token_logs_nothing` | 合格（2026-10-20、ローカル）。34a のログ全文の目視確認は専用テストが無い |
+| ST-SEC-35（a） | S10・DS-DEC-66 本番のメール | 35: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s10_production_mail_writes_no_file_and_logs_only_order_number`<br>35a: `unit/test_ut_sec_04_hardening.py::test_ut_sec_04_s10_non_production_keeps_outbox` | 合格（2026-10-20、ローカル） |
+| IT-010-01・IT-010-02 | S3・DS-DEC-59（期待結果を改訂） | IT-010-01: `integration/test_it_010_013_cart.py::test_it_010_01_no_token_returns_empty_cart_without_creating`<br>IT-010-01: `integration/test_it_010_013_cart.py::test_it_010_01_get_with_existing_token_returns_same_cart`<br>IT-010-02: `integration/test_it_010_013_cart.py::test_it_010_02_ordered_cart_token_moves_to_new_active_cart_on_post`<br>IT-010-02: `integration/test_it_010_013_cart.py::test_it_010_02_concurrent_post_on_ordered_cart_no_500`<br>IT-010-02: `integration/test_it_010_013_cart.py::test_it_sec_s3_get_never_creates_cart` | 合格（2026-10-20、ローカル） |
+| IT-010-03・IT-010-04 | S3・DS-DEC-59（追加） | IT-010-03: `integration/test_it_010_013_cart.py::test_it_sec_s3_post_item_is_the_only_place_that_creates_a_cart`<br>IT-010-03: `integration/test_it_010_013_cart.py::test_it_010_02_ordered_cart_token_moves_to_new_active_cart_on_post`<br>IT-010-04: `integration/test_it_010_013_cart.py::test_it_sec_s3_patch_delete_without_cart_are_404_and_create_nothing` | 合格（2026-10-20、ローカル） |
+| IT-011-03 | S7・DS-DEC-63（境界を追加） | IT-011-03: `integration/test_it_010_013_cart.py::test_it_011_03_quantity_boundaries`<br>IT-011-03: `integration/test_it_010_013_cart.py::test_it_sec_s7_quantity_and_variant_id_ranges` | 合格（2026-10-20、ローカル） |
+
+S11・S12（Next.js の更新と CI の依存チェック。DS-DEC-67）は、手順書のテストではなく、`pnpm audit --prod --audit-level critical` が 0 件で終わること、CI の `deps-audit` が critical で失敗すること、既存の `pnpm test`・`pnpm typecheck`・`pnpm lint`・`pnpm build` が通ることで確認する。
