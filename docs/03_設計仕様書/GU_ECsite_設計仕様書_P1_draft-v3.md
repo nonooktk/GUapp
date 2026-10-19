@@ -402,7 +402,7 @@ BFF（4.3）: `/api/products` は gender・category に加えて kind を受け�
 
 | 項目 | 動作 | 拒否したときの応答 | DS-DEC |
 | --- | --- | --- | --- |
-| 回数制限 | IP ごと・60 秒の固定窓。`/api/*` は 120 回、それ以外の動的リクエストは 600 回。`proxy.ts` で判定する | 429 `{"code":"rate_limited"}` ＋ `Retry-After`（窓の残り秒） | 57 |
+| 回数制限 | IP ごと・60 秒の固定窓（60 秒ごとに回数を数え直す区切り）。`/api/*` は 120 回、それ以外の動的リクエストは 600 回。`proxy.ts` で判定する | 429 `{"code":"rate_limited"}` ＋ `Retry-After`（窓の残り秒） | 57 |
 | 本文サイズ | カート・注文系の本文読み取りで 8192 バイトを超える | 413 `{"code":"payload_too_large"}` | 58 |
 | Origin の確認 | `verifyCsrf` でトークン照合の前に、`Origin`（無ければ `Sec-Fetch-Site`）を確認する | 403 `{"code":"forbidden"}` | 62 |
 | 数量・ID の範囲 | `quantity` は 1〜99、`variant_id`・`item_id` は 1 以上 2^53-1 以下の整数 | 400 `validation_error`（`out_of_range`） | 63 |
@@ -849,7 +849,7 @@ P1 で作るのは DS-TBL-05〜09・12〜16・21・23 の 12 表（draft-v3 ま�
 - IP: `lib/client-ip.ts` の `resolveClientIp` で求める（`TRUSTED_PROXY_HOPS` を使う。利用者が付けた `X-Forwarded-For` は信用しない）
 - 上限（IP ごと・60 秒の固定窓）: `/api/*`（BFF の窓口）は 120 回/分、それ以外の動的リクエスト（ページ・RSC・prefetch）は 600 回/分
 - 対象外: `proxy.ts` の matcher で除外している `_next/static`・`_next/image`・favicon などのほか、拡張子付きの静的ファイル（`/products/031/1.jpg` など public 配下）
-- 超過したら 429 を返す。本文は `{"code":"rate_limited"}` で、`Retry-After` ヘッダには窓の残り秒数を入れる。429 を返すときは FastAPI を呼ばない
+- 超過したら 429 を返す。本文は `{"code":"rate_limited"}` で、`Retry-After` ヘッダには窓が切れるまでの残り秒数を入れる。429 を返すときは FastAPI を呼ばない
 - 上限は環境変数 `RATE_LIMIT_API_PER_MIN`・`RATE_LIMIT_PAGE_PER_MIN` で変えられる（値は正の整数で、`lib/env-validation.ts` で検証する。未設定なら上の既定値を使う。8.2）
 - 窓が切れたキーは定期的に捨てる（Map が増え続けるのを防ぐため）
 - 注記: カウンタはプロセス内メモリに持つため、複数インスタンス間では共有されない。F1 は 1 インスタンスなので、この点は許容する。複数インスタンスにするときは、カウンタを共有ストアへ置き換える（9.4）。`TRUSTED_PROXY_HOPS` が未設定だと全員が接続元の同じ枠を使うため、本番では 1 を設定する（8.2）
