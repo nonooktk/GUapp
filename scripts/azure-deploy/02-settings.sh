@@ -120,6 +120,8 @@ settings = [
     {"name": "IMAGE_BASE_URL", "value": os.environ["GUAPP_WEB_URL"]},
     {"name": "INTERNAL_TOKEN", "value": os.environ["INTERNAL_TOKEN"]},
     {"name": "APP_ENV", "value": "production"},
+    # App Service（ARR）配下は 1。未設定だと全利用者が同じ IP 扱いになり、注文照会の回数制限を共有してしまう（設計仕様書 8.2）
+    {"name": "TRUSTED_PROXY_HOPS", "value": "1"},
 ]
 if os.environ["GUAPP_ENABLE_BASIC_AUTH"] == "1":
     settings += [
