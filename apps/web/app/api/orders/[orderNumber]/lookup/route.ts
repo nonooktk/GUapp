@@ -21,10 +21,11 @@ export async function POST(request: Request, { params }: RouteContext<"/api/orde
     return Response.json({ code: "not_found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
   }
 
-  const body = await readJsonBody(request);
-  const email = body?.guest_email;
+  const parsed = await readJsonBody(request);
+  if (!parsed.ok) return parsed.response;
+  const email = parsed.body?.guest_email;
   if (typeof email !== "string" || email.length === 0 || email.length > 254) {
-    return validationError([{ name: "guest_email", reason: "format" }]);
+    return validationError(request, [{ name: "guest_email", reason: "format" }]);
   }
 
   return proxyOrderRequest(request, `/orders/${encodeURIComponent(orderNumber)}/lookup`, { json: { guest_email: email } });

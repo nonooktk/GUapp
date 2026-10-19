@@ -11,7 +11,6 @@ vi.mock("next/navigation", () => ({
 }));
 function cartResponse(itemCount: number): Cart {
   return {
-    cart_token: "tok",
     items: [],
     item_count: itemCount,
     subtotal: 0,

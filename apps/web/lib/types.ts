@@ -150,9 +150,12 @@ export interface CartItem {
   image_path: string | null;
 }
 
-/** DS-API-010〜013 共通のカート応答 */
+/**
+ * DS-API-010〜013 共通のカート応答（ブラウザへ返す形）。
+ * `cart_token` は含めない（S4）。FastAPI の応答には入っているが、BFF が Cookie に移して本文から除く。
+ * BFF 内部の型は lib/server/cart-proxy.ts の `UpstreamCart`。
+ */
 export interface Cart {
-  cart_token: string;
   items: CartItem[];
   item_count: number;
   subtotal: number;

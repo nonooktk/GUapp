@@ -3,6 +3,9 @@
 P1 は `OutboxMailAdapter`: 送信せず `apps/api/.mail-outbox/<order_number>.txt` に本文を書く
 （ディレクトリは gitignore 済み。無ければ作る）。ログには注文番号とマスク済みメールだけを出す
 （規定 §7「ログに個人情報を記録しない」）。例外は呼び手（注文サービス）が握って注文を成立させる。
+
+本番（`APP_ENV=production`）は `LogOnlyMailAdapter`: 宛先・氏名・住所を含む本文をファイルに残さず、
+ログに注文番号だけを 1 行出す（セキュリティ強化 S10）。
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ import logging
 from pathlib import Path
 from typing import Protocol
 
+from app.core.config import get_settings
 from app.schemas.order import OrderOut
 
 logger = logging.getLogger("app.adapters.mail")
@@ -85,5 +89,15 @@ class OutboxMailAdapter:
         )
 
 
+class LogOnlyMailAdapter:
+    """本番用。送信内容を保存せず、ログに注文番号だけを出す（個人情報は出さない）。"""
+
+    async def send_order_confirmation(self, order: OrderOut) -> None:
+        logger.info("注文確認メールの送信対象 order=%s", order.order_number)
+
+
 def get_mail_adapter() -> MailAdapter:
+    """本番は `LogOnlyMailAdapter`、それ以外（開発・テスト）は従来の Outbox。"""
+    if get_settings().is_production:
+        return LogOnlyMailAdapter()
     return OutboxMailAdapter()

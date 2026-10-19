@@ -71,9 +71,26 @@ def order_body(prepared: dict[str, Any], **over: Any) -> dict[str, Any]:
 
 
 async def new_token(client: httpx.AsyncClient) -> str:
-    res = await client.get("/api/v1/cart", headers=h())
+    """空のカートを 1 つ作ってトークンを返す。
+
+    GET /cart はカートを作らない（S3）ので、公開商品の在庫ありバリエーションを 1 点入れて
+    すぐ消す（カートを作れるのは POST /cart/items だけ）。
+    """
+    res = await client.get("/api/v1/products", headers=h(), params={"per_page": 1})
     assert res.status_code == 200, res.text
-    return res.json()["cart_token"]
+    product_id = res.json()["items"][0]["id"]
+    res = await client.get(f"/api/v1/products/{product_id}", headers=h())
+    assert res.status_code == 200, res.text
+    vid = next(v["variant_id"] for v in res.json()["variants"] if v["in_stock"])
+    res = await client.post(
+        "/api/v1/cart/items", json={"variant_id": vid, "quantity": 1}, headers=h()
+    )
+    assert res.status_code == 201, res.text
+    token = res.json()["cart_token"]
+    item_id = res.json()["items"][0]["item_id"]
+    res = await client.delete(f"/api/v1/cart/items/{item_id}", headers=h(token))
+    assert res.status_code == 200 and res.json()["items"] == [], res.text
+    return token
 
 
 async def add_item(client: httpx.AsyncClient, token: str, variant_id: int, quantity: int) -> None:

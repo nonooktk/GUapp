@@ -19,6 +19,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.security_headers import apply_security_headers
+
 logger = logging.getLogger("app.errors")
 
 INTERNAL_ERROR_BODY: dict[str, str] = {
@@ -147,7 +149,10 @@ async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResp
     # 詳細はログのみ（マスクフィルタ経由）。本文は固定文言で、
     # 例外メッセージ・SQL・接続文字列を出さない
     logger.exception("未捕捉例外 %s %s: %s", request.method, request.url.path, type(exc).__name__)
-    return JSONResponse(status_code=500, content=INTERNAL_ERROR_BODY)
+    # 未捕捉例外の 500 はミドルウェアの外側で作られるので、セキュリティヘッダはここで付ける
+    response = JSONResponse(status_code=500, content=INTERNAL_ERROR_BODY)
+    apply_security_headers(response.headers, path=request.url.path)
+    return response
 
 
 def install_error_handlers(app: FastAPI) -> None:

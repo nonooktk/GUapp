@@ -3,7 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { CART_TOKEN_COOKIE } from "@/lib/cookie";
 import { apiFetch, type ApiResult } from "@/lib/server/api";
-import { cartTokenHeaders } from "@/lib/server/cart-proxy";
+import { cartTokenHeaders, stripCartToken, type UpstreamCart } from "@/lib/server/cart-proxy";
 import { getEnv } from "@/lib/server/env";
 import type {
   Cart,
@@ -63,7 +63,9 @@ export async function getCartFromCookie(): Promise<ApiResult<Cart> | null> {
   const store = await cookies();
   const token = store.get(CART_TOKEN_COOKIE)?.value ?? null;
   if (!token) return null;
-  return apiFetch<Cart>("/cart", { headers: cartTokenHeaders(token) });
+  const result = await apiFetch<UpstreamCart>("/cart", { headers: cartTokenHeaders(token) });
+  // Client Component へ props（RSC ペイロード）で渡すので、cart_token は除く（S4）
+  return result.ok ? { ...result, data: stripCartToken(result.data) as Cart } : result;
 }
 
 /** 画像 URL の base（公開 URL。クライアントへ props で渡してよい） */
