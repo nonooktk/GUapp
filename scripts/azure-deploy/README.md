@@ -3,7 +3,7 @@
 Tech0 講義レビュー期間中、レビュワーに GUapp を実際に触ってもらうための Azure App Service へのデプロイ手順（ADR-0004・設計仕様書公開追補）。**手動デプロイ**（Azure CLI）を前提にしたスクリプト群で、GitHub Actions による自動デプロイは講義 Week7 以降に別途整備する。
 
 > [!warning] 実行前に必ず統括の承認を得ること
-> このディレクトリのスクリプトは実際に Azure リソースを作成・変更する。`01-create.sh`・`02-settings.sh`・`03-db-firewall.sh`・`04-deploy-api.sh`・`05-deploy-web.sh`・`06-migrate-seed.sh`・`90-stop.sh`・`99-delete.sh` はいずれも実行前に `az account show` の内容を表示し、確認を求める（`GUAPP_ASSUME_YES=1` で確認をスキップできるが、`99-delete.sh` の最終確認だけは省略できない）。
+> このディレクトリのスクリプトは実際に Azure リソースを作成・変更する。`01-create.sh`・`01b-configure-existing.sh`・`02-settings.sh`・`03-db-firewall.sh`・`04-deploy-api.sh`・`05-deploy-web.sh`・`06-migrate-seed.sh`・`90-stop.sh`・`99-delete.sh` はいずれも実行前に `az account show` の内容を表示し、確認を求める（`GUAPP_ASSUME_YES=1` で確認をスキップできるが、`99-delete.sh` の最終確認だけは省略できない）。
 
 ## 前提
 
@@ -37,6 +37,54 @@ scripts/azure-deploy/06-migrate-seed.sh
 scripts/azure-deploy/04-deploy-api.sh
 scripts/azure-deploy/05-deploy-web.sh
 ```
+
+## 既存の App Service へ配備する場合（tech0 ターゲット）
+
+2026-10-10 以降、`rg-001-gen12` に作成済みの `app-tech0-gen12-01-fe`（web）と `app-tech0-gen12-01-be`（api）へ配備する（ADR-0005）。プラン `asp-tech0-gen12-01` は F1 無料プラン。プランとアプリは作成しない。すべてのコマンドに `GUAPP_TARGET=tech0` を付ける。
+
+`tech0` の値: web=`app-tech0-gen12-01-fe` / api=`app-tech0-gen12-01-be` / SKU=F1 / api のワーカー数 1 / Basic 認証なし / 期間限定バナーなし / MySQL ファイアウォール規則は 26 番から。現行環境（B1）は確認が済むまで残すため、既存の `guapp-appsvc-1〜25` には触れない。
+
+```bash
+cd /path/to/GUapp
+export GUAPP_TARGET=tech0
+
+# 1. 既存アプリに設定を適用する（HTTPS Only・TLS 1.2・ランタイム PYTHON|3.13 / NODE|24-lts・起動コマンド・CA 証明書を /home/site/certs に配置）
+scripts/azure-deploy/01b-configure-existing.sh
+
+# 2. アプリ設定を投入する（BASIC_AUTH_*・DEMO_PUBLIC_UNTIL は設定せず、入っていれば削除する）
+scripts/azure-deploy/02-settings.sh
+
+# 3. be の送信 IP を講義 MySQL のファイアウォールに追加する（guapp-appsvc-26 以降）
+scripts/azure-deploy/03-db-firewall.sh
+
+# 06-migrate-seed.sh は実行しない（DB は従来と同じ guapp_nonooktk のため）
+
+# 4. api・web をデプロイする
+scripts/azure-deploy/04-deploy-api.sh
+scripts/azure-deploy/05-deploy-web.sh
+```
+
+### CA 証明書の置き場所（2026-10-10 の不具合と対応）
+
+- 不具合: 新しい Kudu/Oryx は、ビルド結果を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開して動かす（`oryx-manifest.toml` の `CompressDestinationDir="true"`）。そのため `/home/site/wwwroot/certs/azure-mysql-ca.pem` が存在せず、`DATABASE_URL` の `ssl_ca=` と `DB_SSL_CA_PATH` が指す先が無くなり、`/api/v1/health` が 503 `db_unavailable` を返した。従来の `app-guapp-api-nonooktk` は wwwroot にソース一式が残るため動いていた
+- 対応: tech0 ターゲットの CA パスを、配備で消えない `/home/site/certs/azure-mysql-ca.pem` にした（`config.sh`）。`01b-configure-existing.sh` が、手元の CA（`GUAPP_CA_FILE`）を Kudu の VFS API で、このパスに置く。CA は公開証明書で秘密ではない。nonooktk ターゲットは従来どおり wwwroot のパスで、この処理は飛ばす
+- 実行順: `01b` を `02-settings.sh` より前に実行する。すでに `02` を実行済みの環境では、`01b` → `02` の順でやり直す（CA パスの設定を入れ直すため）
+- 教訓: 配備物の中のファイルを絶対パスで参照しない（配備先によって展開場所が変わる）
+
+動作確認（Basic 認証がないため `-u` は不要）:
+
+```bash
+curl -i https://app-tech0-gen12-01-be.azurewebsites.net/api/v1/health
+curl -i https://app-tech0-gen12-01-fe.azurewebsites.net/
+```
+
+### F1 無料プランの注意
+
+- 1 日の CPU 時間に上限がある。超えると QuotaExceeded になりアプリが停止する
+- QuotaExceeded の間は zip 配備が通らない見込み。UTC 0 時（日本時間 9 時）にリセットされるまで待つ
+- Always On を設定できない。しばらくアクセスが無いと停止し、次のアクセスで起動し直すため、初回応答が遅い
+- メモリは 1 GB のため api のワーカーは 1
+- 現行環境の削除（`99-delete.sh`）は `guapp-appsvc-*` を全部消すため、並行運用中は実行しない
 
 ## 動作確認
 

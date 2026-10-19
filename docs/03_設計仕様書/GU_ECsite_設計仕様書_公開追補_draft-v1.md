@@ -196,3 +196,43 @@ App Service Linux のシステムの信頼ストア（例 `/etc/ssl/certs/ca-cer
 | 本番設定（既存実装の再確認） | 7.2 | ST-SEC-21〜24 | — |
 | App Service 構成・デプロイ（HTTPS リダイレクト含む） | DS-DEC-52〜55、8 章 | ST-SEC-25（Azure 環境要） | — |
 | 検索 API レート制限見送りの継続 | DS-DEC-51、ADR-0003・0004 | — | — |
+
+## 11. 2026-10-10 追補：配備先の変更（ADR-0005）
+
+8 章および 6・7 章の記述（`app-guapp-web-nonooktk`・`app-guapp-api-nonooktk`、B1、Basic 認証、期間限定バナー）は、現行環境の並行運用が終わるまで有効。新しい配備先については次のとおり。
+
+### 11.1 配備先
+
+| 項目 | 値 |
+| --- | --- |
+| リソースグループ | `rg-001-gen12`（変更なし） |
+| App Service Plan | `asp-tech0-gen12-01`（Linux・F1 無料プラン。既存。作成しない） |
+| App Service（web） | `app-tech0-gen12-01-fe`（既存。URL は `https://app-tech0-gen12-01-fe.azurewebsites.net`） |
+| App Service（api） | `app-tech0-gen12-01-be`（既存。URL は `https://app-tech0-gen12-01-be.azurewebsites.net`。ランタイムは PYTHON:3.12 から PYTHON:3.13 に変更） |
+| DB | `gen12-mysql-pos` の `guapp_nonooktk`（変更なし。マイグレーションは実行しない） |
+
+切り替えは `scripts/azure-deploy/config.sh` の `GUAPP_TARGET=tech0` で行う。既存アプリへの設定は `01b-configure-existing.sh` が担当する（プラン作成・Always On は扱わない）。
+
+### 11.2 F1 無料プランの制約
+
+- Always On を設定できない
+- 1 日の CPU 時間に上限がある。超えると QuotaExceeded になり、この間は zip 配備が通らない見込み。UTC 0 時にリセットされる
+- メモリは 1 GB のため、api の起動コマンドは `--workers 1` にする（現行環境は `--workers 2`）
+
+### 11.3 Basic 認証と期間限定バナーを外した決定
+
+- `BASIC_AUTH_USER`・`BASIC_AUTH_PASSWORD` を設定しない。`apps/web/proxy.ts` は両方が未設定なら `NextResponse.next()` で通す。片方だけ設定すると起動時に例外になるため、02-settings.sh は両方を削除する
+- `DEMO_PUBLIC_UNTIL` を設定しない。`apps/web/lib/demo-banner.ts` は未設定・空文字なら null を返し、帯を出さない
+- ADR-0004 が前提にした「認証を通過できるのはレビュワーだけ」は成り立たなくなる。ADR-0003 の再訪対象（ADR-0005 の影響とリスク）
+
+### 11.4 並行運用と MySQL ファイアウォール規則
+
+- 現行環境の api 用に追加済みの規則 `guapp-appsvc-1〜25` は変更しない
+- be の送信 IP は `guapp-appsvc-26` 以降に追加する（`GUAPP_FIREWALL_START_INDEX=26`）
+- 現行環境を削除する `99-delete.sh` は `guapp-appsvc-*` をすべて削除するため、並行運用が終わるまで実行しない
+
+### 11.5 CA 証明書の置き場所（2026-10-10 追記）
+
+- 新しい Kudu/Oryx は配備物を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開する。そのため tech0 の be には `/home/site/wwwroot/certs/azure-mysql-ca.pem` が存在せず、`/api/v1/health` が 503 `db_unavailable` になった（8.4 の配置方針は wwwroot に実体がある前提だった）
+- tech0 ターゲットの `DB_SSL_CA_PATH` と `DATABASE_URL` の `ssl_ca=` は `/home/site/certs/azure-mysql-ca.pem` を指す。`01b-configure-existing.sh` が Kudu の VFS API で CA（公開証明書）を置く。`01b` は `02-settings.sh` より前に実行する
+- 教訓: 配備物の中のファイルを絶対パスで参照しない

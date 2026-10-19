@@ -9,6 +9,11 @@
 # ただし再実行するたびに INTERNAL_TOKEN・BASIC_AUTH_* は新しい値に「ローテーション」される
 # （ADR-0004 の「漏えい時は本スクリプトを再実行して再生成する」という運用を兼ねる）。
 #
+# GUAPP_ENABLE_BASIC_AUTH=0（tech0 ターゲットの既定）のときは BASIC_AUTH_USER・
+# BASIC_AUTH_PASSWORD を生成も設定もせず、.env.basic-auth も書かない。設定済みの場合に
+# 備えて App Service 側の両設定を削除する。GUAPP_DEMO_PUBLIC_UNTIL が空のときも
+# DEMO_PUBLIC_UNTIL を設定せず、削除する（帯を出さない）。
+#
 # 前提: `apps/api/.env.azure`（DB_USER・DB_PASSWORD の2行、権限600）が存在すること。
 # Basic 認証の ID・パスワードは実行後に `apps/web/.env.basic-auth`（権限600）に書く。
 # 統括はそのファイルを見てレビュワーに Slack で個別に伝える。
@@ -70,12 +75,15 @@ if db != os.environ["GUAPP_DB_NAME"]:
 
 # --- 秘密の生成（画面には出さない） ---
 INTERNAL_TOKEN="$(openssl rand -hex 32)"
-BASIC_AUTH_USER="reviewer-$(openssl rand -hex 3)"
-BASIC_AUTH_PASSWORD="$(openssl rand -base64 30 | tr -dc 'A-Za-z0-9' | head -c 24)"
-
-if [[ -z "$BASIC_AUTH_PASSWORD" ]]; then
-  echo "[02-settings] エラー: BASIC_AUTH_PASSWORD の生成に失敗しました。" >&2
-  exit 1
+BASIC_AUTH_USER=""
+BASIC_AUTH_PASSWORD=""
+if [[ "$GUAPP_ENABLE_BASIC_AUTH" == "1" ]]; then
+  BASIC_AUTH_USER="reviewer-$(openssl rand -hex 3)"
+  BASIC_AUTH_PASSWORD="$(openssl rand -base64 30 | tr -dc 'A-Za-z0-9' | head -c 24)"
+  if [[ -z "$BASIC_AUTH_PASSWORD" ]]; then
+    echo "[02-settings] エラー: BASIC_AUTH_PASSWORD の生成に失敗しました。" >&2
+    exit 1
+  fi
 fi
 
 TMP_DIR="$(mktemp -d)"
@@ -103,7 +111,7 @@ with open(os.environ["API_SETTINGS_JSON"], "w") as f:
 '
 chmod 600 "$API_SETTINGS_JSON"
 
-INTERNAL_TOKEN="$INTERNAL_TOKEN" BASIC_AUTH_USER="$BASIC_AUTH_USER" BASIC_AUTH_PASSWORD="$BASIC_AUTH_PASSWORD" WEB_SETTINGS_JSON="$WEB_SETTINGS_JSON" python3 -c '
+INTERNAL_TOKEN="$INTERNAL_TOKEN" BASIC_AUTH_USER="$BASIC_AUTH_USER" BASIC_AUTH_PASSWORD="$BASIC_AUTH_PASSWORD" GUAPP_ENABLE_BASIC_AUTH="$GUAPP_ENABLE_BASIC_AUTH" WEB_SETTINGS_JSON="$WEB_SETTINGS_JSON" python3 -c '
 import json
 import os
 
@@ -111,11 +119,17 @@ settings = [
     {"name": "API_BASE_URL", "value": os.environ["GUAPP_API_URL"]},
     {"name": "IMAGE_BASE_URL", "value": os.environ["GUAPP_WEB_URL"]},
     {"name": "INTERNAL_TOKEN", "value": os.environ["INTERNAL_TOKEN"]},
-    {"name": "BASIC_AUTH_USER", "value": os.environ["BASIC_AUTH_USER"]},
-    {"name": "BASIC_AUTH_PASSWORD", "value": os.environ["BASIC_AUTH_PASSWORD"]},
-    {"name": "DEMO_PUBLIC_UNTIL", "value": os.environ["GUAPP_DEMO_PUBLIC_UNTIL"]},
     {"name": "APP_ENV", "value": "production"},
+    # App Service（ARR）配下は 1。未設定だと全利用者が同じ IP 扱いになり、注文照会の回数制限を共有してしまう（設計仕様書 8.2）
+    {"name": "TRUSTED_PROXY_HOPS", "value": "1"},
 ]
+if os.environ["GUAPP_ENABLE_BASIC_AUTH"] == "1":
+    settings += [
+        {"name": "BASIC_AUTH_USER", "value": os.environ["BASIC_AUTH_USER"]},
+        {"name": "BASIC_AUTH_PASSWORD", "value": os.environ["BASIC_AUTH_PASSWORD"]},
+    ]
+if os.environ["GUAPP_DEMO_PUBLIC_UNTIL"] != "":
+    settings.append({"name": "DEMO_PUBLIC_UNTIL", "value": os.environ["GUAPP_DEMO_PUBLIC_UNTIL"]})
 with open(os.environ["WEB_SETTINGS_JSON"], "w") as f:
     json.dump(settings, f)
 '
@@ -135,23 +149,44 @@ az webapp config appsettings set \
   --settings @"$WEB_SETTINGS_JSON" \
   --output none
 
-# --- Basic 認証の ID・パスワードだけ、統括が確認できるようファイルに残す ---
-umask 077
-{
-  echo "# scripts/azure-deploy/02-settings.sh が生成しました（$(date -u +%Y-%m-%dT%H:%M:%SZ)）"
-  echo "# レビュワーへは Slack で個別に伝える。このファイルは git 管理対象外（.gitignore の .env.* パターン）。"
-  echo "BASIC_AUTH_USER=${BASIC_AUTH_USER}"
-  echo "BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD}"
-} > "$BASIC_AUTH_FILE"
-chmod 600 "$BASIC_AUTH_FILE"
+# --- 設定しない項目は、既に入っている場合に備えて削除する（存在しなくてもエラーにならない） ---
+DELETE_NAMES=()
+if [[ "$GUAPP_ENABLE_BASIC_AUTH" != "1" ]]; then
+  DELETE_NAMES+=(BASIC_AUTH_USER BASIC_AUTH_PASSWORD)
+fi
+if [[ -z "$GUAPP_DEMO_PUBLIC_UNTIL" ]]; then
+  DELETE_NAMES+=(DEMO_PUBLIC_UNTIL)
+fi
+if [[ ${#DELETE_NAMES[@]} -gt 0 ]]; then
+  echo "[02-settings] web から次の設定を削除します（未設定なら何も起きません）: ${DELETE_NAMES[*]}"
+  az webapp config appsettings delete \
+    --name "$GUAPP_WEB_APP_NAME" \
+    --resource-group "$GUAPP_RESOURCE_GROUP" \
+    --setting-names "${DELETE_NAMES[@]}" \
+    --output none
+fi
 
-if git -C "$GUAPP_REPO_ROOT" check-ignore -q "$BASIC_AUTH_FILE"; then
-  echo "[02-settings] 確認: $BASIC_AUTH_FILE は git 管理対象外です（.gitignore の .env.* パターンに一致）。"
+if [[ "$GUAPP_ENABLE_BASIC_AUTH" == "1" ]]; then
+  # --- Basic 認証の ID・パスワードだけ、統括が確認できるようファイルに残す ---
+  umask 077
+  {
+    echo "# scripts/azure-deploy/02-settings.sh が生成しました（$(date -u +%Y-%m-%dT%H:%M:%SZ)）"
+    echo "# レビュワーへは Slack で個別に伝える。このファイルは git 管理対象外（.gitignore の .env.* パターン）。"
+    echo "BASIC_AUTH_USER=${BASIC_AUTH_USER}"
+    echo "BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD}"
+  } > "$BASIC_AUTH_FILE"
+  chmod 600 "$BASIC_AUTH_FILE"
+
+  if git -C "$GUAPP_REPO_ROOT" check-ignore -q "$BASIC_AUTH_FILE"; then
+    echo "[02-settings] 確認: $BASIC_AUTH_FILE は git 管理対象外です（.gitignore の .env.* パターンに一致）。"
+  else
+    echo "[02-settings] 警告: $BASIC_AUTH_FILE が .gitignore に無視されていません。誤ってコミットしないよう注意してください。" >&2
+  fi
+  echo "[02-settings] 完了。Basic 認証の ID・パスワードはこのファイルに書きました: $BASIC_AUTH_FILE"
 else
-  echo "[02-settings] 警告: $BASIC_AUTH_FILE が .gitignore に無視されていません。誤ってコミットしないよう注意してください。" >&2
+  echo "[02-settings] 完了。Basic 認証は設定していません（GUAPP_ENABLE_BASIC_AUTH=0）。"
 fi
 
 unset INTERNAL_TOKEN BASIC_AUTH_USER BASIC_AUTH_PASSWORD DATABASE_URL
 
-echo "[02-settings] 完了。Basic 認証の ID・パスワードはこのファイルに書きました: $BASIC_AUTH_FILE"
 echo "[02-settings] 次は 03-db-firewall.sh で講義 MySQL のファイアウォールに api の送信 IP を追加してください。"
