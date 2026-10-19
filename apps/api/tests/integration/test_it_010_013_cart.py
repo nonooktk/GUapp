@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from app import seed_data
 from app.models import Cart, CartItem, CartStatus, Product, Variant
 from tests.conftest import TEST_INTERNAL_TOKEN
+from tests.integration import order_helpers as oh
 
 HEADERS = {"X-Internal-Token": TEST_INTERNAL_TOKEN}
 CART_KEYS = {
@@ -77,40 +78,117 @@ async def _stocked_variant_id(engine: AsyncEngine, number: int = 1) -> int:
 
 
 async def _new_token(client) -> str:
-    res = await client.get("/api/v1/cart", headers=_h())
-    assert res.status_code == 200
-    return res.json()["cart_token"]
+    """空のカートを作ってトークンを返す（GET /cart は作らないので POST→DELETE で作る）。"""
+    return await oh.new_token(client)
 
 
 # ── IT-010 ────────────────────────────────────────────────────────────────────
 
 
-async def test_it_010_01_no_token_creates_cart_and_issues_token(client, seed_db) -> None:
+async def _count_carts(engine: AsyncEngine) -> int:
+    return await oh.count_rows(engine, "carts")
+
+
+async def test_it_010_01_no_token_returns_empty_cart_without_creating(client, seed_db) -> None:
+    """S3: トークン無しの GET は空カート（cart_token=null）を返し、DB に何も作らない。"""
     res = await client.get("/api/v1/cart", headers=_h())
     assert res.status_code == 200, res.text
     body = res.json()
     assert set(body) == CART_KEYS
-    token = body["cart_token"]
-    assert len(token) == 43
+    assert body["cart_token"] is None
     assert body["items"] == [] and body["item_count"] == 0
     assert body["subtotal"] == body["shipping_fee"] == body["total"] == 0
     assert body["free_shipping_threshold"] == 4990
     assert body["can_checkout"] is False
     assert "cart_id" not in body
+    assert await _count_carts(seed_db) == 0
 
-    # 同じトークンで再取得すると同じカート（新規発行されない）
-    res2 = await client.get("/api/v1/cart", headers=_h(token))
-    assert res2.json()["cart_token"] == token
+
+async def test_it_010_01_get_with_existing_token_returns_same_cart(client, seed_db) -> None:
+    token = await _new_token(client)
+    assert len(token) == 43
+    assert await _count_carts(seed_db) == 1
+
+    # 同じトークンで再取得すると同じカート（増えない）
+    res = await client.get("/api/v1/cart", headers=_h(token))
+    assert res.status_code == 200 and res.json()["cart_token"] == token
     async with AsyncSession(seed_db) as session:
         carts = (await session.execute(select(Cart))).scalars().all()
     assert len(carts) == 1 and carts[0].status == CartStatus.active
 
-    # 未知のトークンは無いものとして新規発行
-    res3 = await client.get("/api/v1/cart", headers=_h("A" * 43))
-    assert res3.status_code == 200 and res3.json()["cart_token"] != "A" * 43
+
+async def test_it_sec_s3_get_never_creates_cart(client, seed_db) -> None:
+    """S3: トークン無し・形が不正・未知・ordered のどの GET でも carts の行数が増えない。"""
+    assert await _count_carts(seed_db) == 0
+
+    for headers in (
+        _h(),  # トークン無し
+        _h("bad token!"),  # 形が不正（空白・記号）
+        _h("x" * 65),  # 長すぎる
+        _h("A" * 43),  # 形は正しいが DB に無い
+    ):
+        res = await client.get("/api/v1/cart", headers=headers)
+        assert res.status_code == 200, res.text
+        assert res.json()["cart_token"] is None and res.json()["items"] == []
+        assert await _count_carts(seed_db) == 0
+
+    # ordered のカートは GET で触らない（行数・token・status がそのまま）
+    token = await _new_token(client)
+    async with seed_db.begin() as conn:
+        await conn.execute(
+            update(Cart).where(Cart.anonymous_token == token).values(status=CartStatus.ordered)
+        )
+    before = await _count_carts(seed_db)
+    res = await client.get("/api/v1/cart", headers=_h(token))
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["cart_token"] is None and body["items"] == []
+    assert body["can_checkout"] is False and body["total"] == 0
+    assert await _count_carts(seed_db) == before
+    async with AsyncSession(seed_db) as session:
+        old = (
+            await session.execute(select(Cart).where(Cart.anonymous_token == token))
+        ).scalar_one()
+    assert old.status == CartStatus.ordered
 
 
-async def test_it_010_02_ordered_cart_token_moves_to_new_active_cart(client, seed_db) -> None:
+async def test_it_sec_s3_post_item_is_the_only_place_that_creates_a_cart(client, seed_db) -> None:
+    """S3: 最初の「カートに入れる」で初めてカートとトークンができる。"""
+    vid = await _stocked_variant_id(seed_db)
+    assert await _count_carts(seed_db) == 0
+    res = await client.post(
+        "/api/v1/cart/items", json={"variant_id": vid, "quantity": 1}, headers=_h()
+    )
+    assert res.status_code == 201, res.text
+    token = res.json()["cart_token"]
+    assert isinstance(token, str) and len(token) == 43
+    assert await _count_carts(seed_db) == 1
+
+    # 作られたカートは GET で見える
+    res = await client.get("/api/v1/cart", headers=_h(token))
+    assert res.json()["cart_token"] == token and res.json()["item_count"] == 1
+
+
+async def test_it_sec_s3_patch_delete_without_cart_are_404_and_create_nothing(
+    client, seed_db
+) -> None:
+    """S3: PATCH・DELETE はカートを作らず、無ければ 404（従来どおり）。"""
+    for headers in (_h(), _h("A" * 43)):
+        res = await client.patch("/api/v1/cart/items/1", json={"quantity": 2}, headers=headers)
+        assert res.status_code == 404 and res.json() == {"code": "not_found"}
+        res = await client.delete("/api/v1/cart/items/1", headers=headers)
+        assert res.status_code == 404 and res.json() == {"code": "not_found"}
+    assert await _count_carts(seed_db) == 0
+
+
+async def test_it_010_02_ordered_cart_token_moves_to_new_active_cart_on_post(
+    client, seed_db
+) -> None:
+    """旧 IT-010-02 の GET 版を S3 に合わせ、カートを作る POST で検証する。
+
+    GET は ordered を触らない（空応答）。POST /cart/items で初めて、旧カートの token を NULL に
+    して同じトークンの新 active カートができる。
+    """
     token = await _new_token(client)
     vid = await _stocked_variant_id(seed_db)
     res = await client.post(
@@ -125,11 +203,13 @@ async def test_it_010_02_ordered_cart_token_moves_to_new_active_cart(client, see
             await conn.execute(select(Cart.id).where(Cart.anonymous_token == token))
         ).scalar_one()
 
-    res = await client.get("/api/v1/cart", headers=_h(token))
-    assert res.status_code == 200, res.text
+    res = await client.post(
+        "/api/v1/cart/items", json={"variant_id": vid, "quantity": 1}, headers=_h(token)
+    )
+    assert res.status_code == 201, res.text
     body = res.json()
     assert body["cart_token"] == token  # 同じトークン
-    assert body["items"] == []  # 新しい空カート
+    assert len(body["items"]) == 1 and body["items"][0]["quantity"] == 1  # 新しいカート
 
     async with AsyncSession(seed_db) as session:
         old = await session.get(Cart, old_id)
@@ -141,18 +221,20 @@ async def test_it_010_02_ordered_cart_token_moves_to_new_active_cart(client, see
     assert new.id != old_id and new.status == CartStatus.active
 
 
-async def test_it_010_02_concurrent_get_on_ordered_cart_no_500(client, seed_db) -> None:
-    """同じ ordered トークンで同時 GET → 両方 200・同じトークン・active カートは 1 つ。"""
+async def test_it_010_02_concurrent_post_on_ordered_cart_no_500(client, seed_db) -> None:
+    """同じ ordered トークンで同時 POST → 両方 201・同じトークン・active カートは 1 つ。"""
     token = await _new_token(client)
+    vid = await _stocked_variant_id(seed_db)
     async with seed_db.begin() as conn:
         await conn.execute(
             update(Cart).where(Cart.anonymous_token == token).values(status=CartStatus.ordered)
         )
+    payload = {"variant_id": vid, "quantity": 1}
     r1, r2 = await asyncio.gather(
-        client.get("/api/v1/cart", headers=_h(token)),
-        client.get("/api/v1/cart", headers=_h(token)),
+        client.post("/api/v1/cart/items", json=payload, headers=_h(token)),
+        client.post("/api/v1/cart/items", json=payload, headers=_h(token)),
     )
-    assert r1.status_code == 200 and r2.status_code == 200, (r1.text, r2.text)
+    assert r1.status_code == 201 and r2.status_code == 201, (r1.text, r2.text)
     assert r1.json()["cart_token"] == r2.json()["cart_token"] == token
     async with seed_db.connect() as conn:
         n = (
@@ -289,6 +371,54 @@ async def test_it_011_03_quantity_boundaries(client, seed_db) -> None:
     )
     assert res.status_code == 400
     assert res.json()["fields"] == [{"name": "quantity", "reason": "format"}]
+
+
+async def test_it_sec_s7_quantity_and_variant_id_ranges(client, seed_db) -> None:
+    """S7: 数量 0・100・範囲外の variant_id は 400。11〜99 は従来どおり 422 limit_exceeded。"""
+    token = await _new_token(client)
+    vid = await _stocked_variant_id(seed_db)
+
+    for bad_quantity in (0, 100):
+        res = await client.post(
+            "/api/v1/cart/items",
+            json={"variant_id": vid, "quantity": bad_quantity},
+            headers=_h(token),
+        )
+        assert res.status_code == 400, res.text
+        assert res.json() == {
+            "code": "validation_error",
+            "fields": [{"name": "quantity", "reason": "out_of_range"}],
+        }
+    for bad_variant in (0, 9223372036854775808):
+        res = await client.post(
+            "/api/v1/cart/items",
+            json={"variant_id": bad_variant, "quantity": 1},
+            headers=_h(token),
+        )
+        assert res.status_code == 400, res.text
+        assert res.json() == {
+            "code": "validation_error",
+            "fields": [{"name": "variant_id", "reason": "out_of_range"}],
+        }
+
+    for over_limit in (11, 99):
+        res = await client.post(
+            "/api/v1/cart/items",
+            json={"variant_id": vid, "quantity": over_limit},
+            headers=_h(token),
+        )
+        assert res.status_code == 422, res.text
+        assert res.json() == {"code": "limit_exceeded", "field": "quantity", "limit": 10}
+
+    # 範囲内の最大の variant_id は 400 ではなく（存在しないので）404
+    res = await client.post(
+        "/api/v1/cart/items",
+        json={"variant_id": 9223372036854775807, "quantity": 1},
+        headers=_h(token),
+    )
+    assert res.status_code == 404, res.text
+    res = await client.get("/api/v1/cart", headers=_h(token))
+    assert res.json()["items"] == []  # どれも追加されていない
 
 
 async def test_it_011_04_cart_total_50_ok_51_rejected(client, seed_db) -> None:

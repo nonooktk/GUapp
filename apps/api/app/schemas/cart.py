@@ -14,18 +14,25 @@ StockStatus = Literal["ok", "insufficient", "out_of_stock"]
 
 CART_TOKEN_HEADER = "X-Cart-Token"
 
+# 入力の範囲（BFF と同じ。業務上限 10／50 は別で 422 になる）。variant_id は BIGINT の最大値
+QUANTITY_MAX = 99
+VARIANT_ID_MAX = 9223372036854775807
+
 
 class CartItemIn(BaseModel):
-    """POST /cart/items。上限（10・50）は業務規則なのでここには書かない（422 で返す）。"""
+    """POST /cart/items。上限（10・50）は業務規則なのでここには書かない（422 で返す）。
 
-    variant_id: int
-    quantity: int = Field(gt=0)
+    ここで縛るのは入力の範囲だけ（数量 1〜99・variant_id は 1 以上）。範囲外は 400。
+    """
+
+    variant_id: int = Field(ge=1, le=VARIANT_ID_MAX)
+    quantity: int = Field(ge=1, le=QUANTITY_MAX)
 
 
 class CartItemPatchIn(BaseModel):
     """PATCH /cart/items/{item_id}。"""
 
-    quantity: int = Field(gt=0)
+    quantity: int = Field(ge=1, le=QUANTITY_MAX)
 
 
 class CartLineOut(BaseModel):
@@ -43,7 +50,9 @@ class CartLineOut(BaseModel):
 
 
 class CartResponse(BaseModel):
-    cart_token: str
+    cart_token: str | None = Field(
+        description="匿名カートトークン。カートがまだ無い GET（空応答）では null"
+    )
     items: list[CartLineOut]
     item_count: int = Field(description="数量の合計")
     subtotal: int

@@ -3,7 +3,8 @@
 プロセス内メモリのスライディングウィンドウ。IP ごとに直近 `window_seconds` の呼び出し時刻を
 持ち、`limit` 回を超えたら 429 `rate_limited` ＋ `Retry-After`。
 P1 はローカル 1 プロセス前提なのでプロセス内で十分（複数インスタンスでは Redis 等に置き換える）。
-IP は `X-Forwarded-For` の先頭、無ければ接続元。
+IP は `X-Forwarded-For` の末尾の要素（BFF が検証済みの 1 要素を付ける前提。
+複数なら末尾が直前のホップ）、無ければ接続元。
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from collections.abc import Callable
 from fastapi import Request
 
 from app.core.errors import AppError
+from app.core.reject_log import log_rejection
 
 LOOKUP_LIMIT = 100
 LOOKUP_WINDOW_SECONDS = 3600
@@ -51,17 +53,20 @@ class SlidingWindowRateLimiter:
 
 
 def client_ip(request: Request) -> str:
+    """`X-Forwarded-For` の末尾の要素。先頭は呼び出し元が偽れるので使わない（G-14）。"""
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        first = forwarded.split(",")[0].strip()
-        if first:
-            return first
+        last = forwarded.split(",")[-1].strip()
+        if last:
+            return last
     return request.client.host if request.client else "unknown"
 
 
 def lookup_rate_limit(request: Request) -> None:
     """DS-API-023 用の依存関数。制限器は `app.state.lookup_rate_limiter`（app ごとに 1 つ）。"""
     limiter: SlidingWindowRateLimiter = request.app.state.lookup_rate_limiter
-    retry_after = limiter.hit(client_ip(request))
+    ip = client_ip(request)
+    retry_after = limiter.hit(ip)
     if retry_after is not None:
+        log_rejection(request, status=429, code="rate_limited", ip=ip)
         raise AppError(429, "rate_limited", headers={"Retry-After": str(retry_after)})

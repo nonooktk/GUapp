@@ -11,6 +11,7 @@ from app.core.errors import install_error_handlers
 from app.core.logging import setup_logging
 from app.core.rate_limit import SlidingWindowRateLimiter
 from app.core.security import install_cors, verify_internal_token
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.routers import cart, catalog, checkout, content, health, orders, search
 from app.routers import settings as settings_router
 
@@ -28,6 +29,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     install_error_handlers(app)
     install_cors(app, settings)
+    # 全応答にセキュリティヘッダ（S5）。CORS より外側に置き、CORS の応答にも付ける
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # ゲスト注文照会のレート制限器（app ごとに 1 つ。100 回/時/IP。設計仕様書 7.5）
     app.state.lookup_rate_limiter = SlidingWindowRateLimiter()

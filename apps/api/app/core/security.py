@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+from app.core.rate_limit import client_ip
+from app.core.reject_log import log_rejection
 
 INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 # 内部トークン検証の対象外パス（死活監視）
@@ -22,6 +24,7 @@ INTERNAL_TOKEN_EXEMPT_PATHS: frozenset[str] = frozenset({"/api/v1/health"})
 
 
 def verify_internal_token(
+    request: Request,
     x_internal_token: str | None = Header(default=None, alias=INTERNAL_TOKEN_HEADER),
     settings: Settings = Depends(get_settings),
 ) -> None:
@@ -31,9 +34,13 @@ def verify_internal_token(
     期待値が未設定なら全リクエストを拒否する（設定漏れで素通しにしない）。
     """
     expected = settings.INTERNAL_TOKEN
-    if not expected or not x_internal_token:
-        raise AppError(401, "unauthorized")
-    if not hmac.compare_digest(x_internal_token.encode(), expected.encode()):
+    if (
+        not expected
+        or not x_internal_token
+        or not hmac.compare_digest(x_internal_token.encode(), expected.encode())
+    ):
+        # 拒否ログは 1 行（トークンの値は出さない。S9）
+        log_rejection(request, status=401, code="unauthorized", ip=client_ip(request))
         raise AppError(401, "unauthorized")
 
 

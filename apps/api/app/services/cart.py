@@ -1,9 +1,13 @@
 """カート（DS-API-010〜013・DS-PRC-011）のサービス。
 
-トークンの扱い（DS-API-010）:
-- ヘッダ無し／未知 → 新カート＋新トークン発行
-- トークンのカートが `ordered` → 旧カートの `anonymous_token` を NULL にし、同じトークンで
-  新 `active` カートを作る（同時 GET で UNIQUE 違反したらロック読みで再 SELECT）
+トークンの扱い（DS-API-010・セキュリティ強化 S3）:
+- GET /cart はカートを作らない（DB に書かない）。ヘッダ無し・形が不正・未知・`active` でない
+  （ordered など）なら、空カートを `cart_token=null` で返す
+- カートを新しく作るのは POST /cart/items（`resolve_cart`）だけ:
+  ヘッダ無し／未知 → 新カート＋新トークン発行。トークンのカートが `ordered` → 旧カートの
+  `anonymous_token` を NULL にし、同じトークンで新 `active` カートを作る
+  （同時 POST で UNIQUE 違反したらロック読みで再 SELECT）
+- PATCH・DELETE は active カートを探すだけ。無ければ 404
 
 数量の上限（10／50）は加算後に検査し、超過なら ROLLBACK して 422（DS-PRC-011）。
 """
@@ -21,8 +25,22 @@ from app.services.pricing import calc_totals
 from app.services.settings import get_public_settings
 
 
+async def find_active_cart(session: AsyncSession, token: str | None) -> Cart | None:
+    """トークンから active カートを探す。DB に書かない。無ければ None。"""
+    normalized = cart_rules.normalize_token(token)
+    if normalized is None:
+        return None
+    cart = await carts_repo.get_by_token(session, normalized)
+    if cart is not None and cart.status == CartStatus.active:
+        return cart
+    return None
+
+
 async def resolve_cart(session: AsyncSession, token: str | None) -> Cart:
-    """トークンから active カートを得る。無ければ作る（呼び手が commit する）。"""
+    """トークンから active カートを得る。無ければ作る（呼び手が commit する）。
+
+    書き込みを伴うので、カートを作ってよい POST /cart/items だけが呼ぶ。
+    """
     token = cart_rules.normalize_token(token)
     reuse_token = False
     if token is not None:
@@ -45,10 +63,13 @@ async def resolve_cart(session: AsyncSession, token: str | None) -> Cart:
     return existing
 
 
-async def build_cart_response(session: AsyncSession, cart: Cart) -> CartResponse:
-    """明細と金額を組み立てる。空カートは金額 0（pricing の empty_cart は呼ばない）。"""
+async def build_cart_response(session: AsyncSession, cart: Cart | None) -> CartResponse:
+    """明細と金額を組み立てる。空カートは金額 0（pricing の empty_cart は呼ばない）。
+
+    `cart` が None のときは、カートがまだ無い GET 用の空応答（`cart_token=null`）を返す。
+    """
     settings = await get_public_settings(session)
-    rows = await carts_repo.fetch_lines(session, cart.id)
+    rows = await carts_repo.fetch_lines(session, cart.id) if cart is not None else []
     items: list[CartLineOut] = []
     for r in rows:
         items.append(
@@ -73,9 +94,8 @@ async def build_cart_response(session: AsyncSession, cart: Cart) -> CartResponse
         subtotal, shipping_fee, total = totals.subtotal, totals.shipping_fee, totals.total
     else:
         subtotal = shipping_fee = total = 0
-    assert cart.anonymous_token is not None
     return CartResponse(
-        cart_token=cart.anonymous_token,
+        cart_token=cart.anonymous_token if cart is not None else None,
         items=items,
         item_count=sum(i.quantity for i in items),
         subtotal=subtotal,
@@ -87,8 +107,8 @@ async def build_cart_response(session: AsyncSession, cart: Cart) -> CartResponse
 
 
 async def get_cart(session: AsyncSession, token: str | None) -> CartResponse:
-    cart = await resolve_cart(session, token)
-    await session.commit()
+    """DS-API-010。読むだけ。カートが無ければ空応答（`cart_token=null`）で、何も作らない。"""
+    cart = await find_active_cart(session, token)
     return await build_cart_response(session, cart)
 
 
@@ -120,7 +140,9 @@ async def add_item(
 async def update_item(
     session: AsyncSession, token: str | None, *, item_id: int, quantity: int
 ) -> CartResponse:
-    cart = await resolve_cart(session, token)
+    cart = await find_active_cart(session, token)
+    if cart is None:
+        raise AppError(404, "not_found")
     item = await carts_repo.get_item(session, cart.id, item_id)
     if item is None:
         await session.rollback()
@@ -137,7 +159,9 @@ async def update_item(
 
 
 async def remove_item(session: AsyncSession, token: str | None, *, item_id: int) -> CartResponse:
-    cart = await resolve_cart(session, token)
+    cart = await find_active_cart(session, token)
+    if cart is None:
+        raise AppError(404, "not_found")
     item = await carts_repo.get_item(session, cart.id, item_id)
     if item is None:
         await session.rollback()
