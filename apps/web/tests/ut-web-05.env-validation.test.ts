@@ -60,3 +60,27 @@ describe("UT-WEB-05 validateEnv", () => {
     expect(() => validateEnv({ ...validEnv, APP_ENV: "staging" })).toThrow(EnvValidationError);
   });
 });
+
+// セキュリティ強化 S1: 回数制限の環境変数（任意。1 以上の整数）
+describe("S1 RATE_LIMIT_* 環境変数", () => {
+  it("未設定・空は既定値（api 120・page 600）", () => {
+    expect(validateEnv(validEnv)).toMatchObject({ RATE_LIMIT_API_PER_MIN: 120, RATE_LIMIT_PAGE_PER_MIN: 600 });
+    expect(validateEnv({ ...validEnv, RATE_LIMIT_API_PER_MIN: " ", RATE_LIMIT_PAGE_PER_MIN: "" })).toMatchObject({
+      RATE_LIMIT_API_PER_MIN: 120,
+      RATE_LIMIT_PAGE_PER_MIN: 600,
+    });
+  });
+
+  it("正の整数なら上書きされる", () => {
+    expect(validateEnv({ ...validEnv, RATE_LIMIT_API_PER_MIN: "30", RATE_LIMIT_PAGE_PER_MIN: "200" })).toMatchObject({
+      RATE_LIMIT_API_PER_MIN: 30,
+      RATE_LIMIT_PAGE_PER_MIN: 200,
+    });
+  });
+
+  it.each(["0", "-1", "1.5", "abc", "1e3"])("%s は EnvValidationError", (bad) => {
+    expect(() => validateEnv({ ...validEnv, RATE_LIMIT_API_PER_MIN: bad })).toThrow(EnvValidationError);
+    expect(() => validateEnv({ ...validEnv, RATE_LIMIT_PAGE_PER_MIN: bad })).toThrow(EnvValidationError);
+  });
+});
+

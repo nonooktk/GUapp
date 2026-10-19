@@ -1,7 +1,7 @@
 # CI 骨格（P1 実装プラン 2 章・設計仕様書 8.4）。
 # api: MySQL 8.4 サービスに対して alembic upgrade head → pytest。
 # web: Vitest → server-only ガード（違反ファイルで build が失敗すること。UT-WEB-06 の CI 移管）→ build →
-#      ST-SEC-09 先行（.next/static に INTERNAL_TOKEN の値が無い）。deps-audit は非ブロック。
+#      ST-SEC-09 先行（.next/static に INTERNAL_TOKEN の値が無い）。deps-audit は critical の脆弱性だけで失敗させる（セキュリティ強化 S12）。
 # apps/api・apps/web が無い間は各 job の "存在確認" ステップで skip する（Wave 0 並行作成中の暫定措置）。
 # 秘密スキャンは secrets-scan.yml（gitleaks）が別途担当する。
 name: ci
@@ -211,11 +211,13 @@ jobs:
           echo "OK: .next/static（$(find .next/static -type f | wc -l) ファイル）に INTERNAL_TOKEN の値は 0 件"
 
   deps-audit:
-    name: deps-audit (non-blocking)
+    name: deps-audit (fail on critical)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # 既知脆弱性の報告のみ。PR をブロックしない（Dependabot が更新 PR を出す。プラン 4.5 #6）
-    continue-on-error: true
+    # 失敗させるのは critical だけ（セキュリティ強化 S12）。high 以下の既知脆弱性はログに出すだけで PR を止めない
+    # （Dependabot が更新 PR を出す。プラン 4.5 #6）。
+    # pnpm audit は --audit-level critical で critical のみ終了コード 1。
+    # pip-audit は重大度で絞り込めない（critical 相当の判定ができない）ため、報告のみ（|| true）で job は落とさない。
     steps:
       - uses: actions/checkout@v7
 
@@ -228,7 +230,8 @@ jobs:
         run: |
           # --no-emit-project: プロジェクト自身（requires-python >=3.13）を含めない。pip-audit は 3.13 で動かす
           uv export --frozen --no-dev --no-emit-project --format requirements-txt --no-hashes -o requirements-audit.txt
-          uvx --python 3.13 pip-audit -r requirements-audit.txt --strict
+          # 報告のみ: pip-audit には重大度の指定が無く、critical だけで落とす判定ができない。結果はログで確認する
+          uvx --python 3.13 pip-audit -r requirements-audit.txt --strict || true
 
       - name: pnpm をセットアップ
         if: hashFiles('apps/web/package.json') != ''
@@ -245,4 +248,5 @@ jobs:
       - name: pnpm audit（apps/web）
         if: hashFiles('apps/web/package.json') != ''
         working-directory: apps/web
-        run: pnpm audit --audit-level high
+        # critical が 1 件でもあれば失敗（終了コード 1）。high 以下は表示のみ
+        run: pnpm audit --prod --audit-level critical

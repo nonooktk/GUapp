@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Cart } from "@/lib/types";
+import type { UpstreamCart } from "@/lib/server/cart-proxy";
 
 // BFF カートルート（DS-API-010〜013 取り次ぎ・設計仕様書 4.3・7.3）。FastAPI は fetch をモックして差し替える。
 // getEnv() は初回呼び出しで process.env を読むため、import より前に env を用意する。
@@ -13,7 +13,7 @@ const CSRF = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde"; // gitleaks:allow //
 const CART_TOKEN_A = "cartTokenAAAA_-0123456789abcdefghijklmnopq"; // gitleaks:allow // pragma: allowlist secret
 const CART_TOKEN_B = "cartTokenBBBB_-0123456789abcdefghijklmnopq"; // gitleaks:allow // pragma: allowlist secret
 
-function cart(token: string, itemCount = 0): Cart {
+function cart(token: string | null, itemCount = 0): UpstreamCart {
   return {
     cart_token: token,
     items: [],
@@ -61,7 +61,10 @@ describe("GET /api/cart", () => {
     const cookies = setCookies(res);
     expect(cookies.some((c) => c.startsWith(`cart_token=${CART_TOKEN_A}`) && c.includes("HttpOnly"))).toBe(true);
     expect(cookies.some((c) => c.startsWith("csrf_token=") && !c.includes("HttpOnly"))).toBe(true);
-    expect(await res.json()).toMatchObject({ cart_token: CART_TOKEN_A, item_count: 0 });
+    // 本文には cart_token を含めない（S4）
+    const json = await res.json();
+    expect(json).toMatchObject({ item_count: 0 });
+    expect(json).not.toHaveProperty("cart_token");
 
     // FastAPI へは X-Internal-Token 付き・X-Cart-Token 無しで /api/v1/cart を呼ぶ
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];

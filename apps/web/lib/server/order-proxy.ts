@@ -3,7 +3,7 @@ import "server-only";
 import { CART_TOKEN_COOKIE, readCookie } from "@/lib/cookie";
 import { resolveClientIp } from "@/lib/client-ip";
 import { apiFetch, UpstreamUnavailableError } from "@/lib/server/api";
-import { cartTokenHeaders } from "@/lib/server/cart-proxy";
+import { cartTokenHeaders, stripCartToken } from "@/lib/server/cart-proxy";
 import { getEnv } from "@/lib/server/env";
 
 /**
@@ -58,5 +58,6 @@ export async function proxyOrderRequest(request: Request, path: string, init: Or
     }
     return Response.json(result.error, { status: result.status, headers });
   }
-  return Response.json(result.data, { status: result.status, headers });
+  // 念のため最上位の cart_token は本文から除く（S4）
+  return Response.json(stripCartToken(result.data), { status: result.status, headers });
 }

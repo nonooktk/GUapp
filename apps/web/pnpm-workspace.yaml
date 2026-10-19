@@ -1,3 +1,8 @@
 allowBuilds:
   sharp: false
   unrs-resolver: false
+# next の依存に残る high の修正版を固定する（next 16.3.8 時点で sharp 0.35.4・source-map-js 1.2.1 を引くため。
+# next 側が追随したら外す）
+overrides:
+  sharp: ">=0.35.5"
+  source-map-js: ">=1.2.2"
