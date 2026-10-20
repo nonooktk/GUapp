@@ -8,8 +8,8 @@ import { useCart } from "@/components/CartProvider";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { AmountSummary, OrderItemsList, ShippingSummary } from "@/components/OrderSummary";
 import { useToast } from "@/components/Toast";
-import { mapServerFieldErrors, toShippingBody } from "@/lib/checkout-validation";
-import { CHECKOUT_KEY, clearCheckoutSession, saveCheckoutSession, saveLastOrder, type CheckoutSession } from "@/lib/checkout-session";
+import { mapServerFieldErrors, toContactBody, toShippingBody } from "@/lib/checkout-validation";
+import { carryReceive, CHECKOUT_KEY, clearCheckoutSession, saveCheckoutSession, saveLastOrder, type CheckoutSession } from "@/lib/checkout-session";
 import { parseJsonOrNull, useHydrated, useSessionItem } from "@/lib/client/use-session-item";
 import { CartApiError } from "@/lib/client/cart-api";
 import { createOrder } from "@/lib/client/order-api";
@@ -20,7 +20,8 @@ import type { OrderCreateBody } from "@/lib/types";
 /**
  * 注文確認 DS-SCR-006（確認）（設計仕様書 6.8・DS-PRC-014-1・DS-PRC-036、テスト AT-01・AT-05・ST-F013-01・ST-F036-01・UT-WEB-02/03）。
  * - sessionStorage（guapp.checkout）から prepare 応答とフォーム値を復元。無ければ／prepare が捨てられていれば /checkout へ戻す
- * - 注文内容・お届け先・メール・受け取り／支払い方法・金額（小計・送料・合計・うち消費税）
+ * - 注文内容・お届け先（店舗受け取りは店舗名・住所と受け取る方）・メール・受け取り／支払い方法・金額（小計・送料・合計・うち消費税）。
+ *   店舗受け取りは送料 ¥0 と「店舗受け取りのため送料はかかりません」を出す（P2-b。設計仕様書 6.8）
  * - 「注文を確定する」→ ConfirmDialog → OK で busy（両ボタン無効・処理中…・再クリックで 2 回目の送信をしない）→ `POST /api/orders`
  *   `display` には表示中の 3 金額を入れ、FastAPI が再計算と照合する（price_changed）
  * - 成功（201／200）: 応答を guapp.lastOrder に保存、バッジ 0、guapp.checkout を削除、/orders/complete?n=… へ。トースト「ご注文ありがとうございます」
@@ -50,6 +51,7 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
   }, [raw]);
   const prepare = session?.prepare ?? null;
   const loaded = hydrated;
+  const isStore = session?.receive_method === "store" && Boolean(session.store_code);
 
   // 復元できない（直接開いた・prepare を捨てた後）なら SCR-005 へ
   useEffect(() => {
@@ -66,13 +68,24 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
     inflight.current = true;
     setBusy(true);
 
-    const body: OrderCreateBody = {
-      idempotency_key: prepare.idempotency_key,
-      ...toShippingBody(session.form),
-      receive_method: "delivery",
-      payment_method: "card",
-      display: { subtotal: prepare.subtotal, shipping_fee: prepare.shipping_fee, total: prepare.total },
-    };
+    const display = { subtotal: prepare.subtotal, shipping_fee: prepare.shipping_fee, total: prepare.total };
+    // 店舗受け取りは郵便番号・住所を送らず store_code を送る（FastAPI が店舗の値で埋める。設計仕様書 4.4）
+    const body: OrderCreateBody = isStore
+      ? {
+          idempotency_key: prepare.idempotency_key,
+          ...toContactBody(session.form),
+          receive_method: "store",
+          store_code: session.store_code,
+          payment_method: "card",
+          display,
+        }
+      : {
+          idempotency_key: prepare.idempotency_key,
+          ...toShippingBody(session.form),
+          receive_method: "delivery",
+          payment_method: "card",
+          display,
+        };
 
     try {
       const { data: order } = await createOrder(body);
@@ -94,6 +107,7 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
             form: session.form,
             prepare,
             serverErrors: mapServerFieldErrors(route.fields),
+            ...carryReceive(session),
           });
           toast.show({ kind: "error", message: route.message });
           go("/checkout");
@@ -107,7 +121,7 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
         }
         case "checkout":
           // prepare を捨てる → 次に「確認画面へ」を押すと新しい冪等キーで prepare を呼び直す
-          saveCheckoutSession({ form: session.form, prepare: null, focus: route.focus });
+          saveCheckoutSession({ form: session.form, prepare: null, focus: route.focus, ...carryReceive(session) });
           toast.show({ kind: "error", message: route.message });
           go("/checkout");
           break;
@@ -134,7 +148,9 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
     );
   }
 
-  const shipping = toShippingBody(session.form);
+  const shipping = isStore
+    ? { ...toContactBody(session.form), ship_postal_code: undefined, ship_address: undefined }
+    : toShippingBody(session.form);
   const items = prepare.items.map((it) => ({
     ...it,
     image_url: imageUrl(imageBaseUrl, it.image_path),
@@ -156,13 +172,18 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
           <section aria-labelledby="ship-heading" className="space-y-3">
             <div className="flex items-baseline justify-between">
               <h2 id="ship-heading" className="text-lg font-light tracking-heading">
-                お届け先・お支払い
+                {isStore ? "受け取り・お支払い" : "お届け先・お支払い"}
               </h2>
               <Link href="/checkout" className="text-sm underline underline-offset-2">
                 変更する
               </Link>
             </div>
-            <ShippingSummary {...shipping} receive_method="delivery" payment_method="card" />
+            <ShippingSummary
+              {...shipping}
+              receive_method={isStore ? "store" : "delivery"}
+              payment_method="card"
+              store={isStore ? (session.store ?? null) : null}
+            />
           </section>
         </div>
 
@@ -173,6 +194,7 @@ export default function OrderConfirm({ imageBaseUrl }: OrderConfirmProps) {
             total={prepare.total}
             tax_included={prepare.tax_included}
             free_shipping_threshold={prepare.free_shipping_threshold}
+            receiveMethod={isStore ? "store" : "delivery"}
           />
           {/* 冪等キーは hidden 相当としてクライアント状態に保持（画面には出さない） */}
           <input type="hidden" name="idempotency_key" value={prepare.idempotency_key} readOnly data-testid="idempotency-key" />

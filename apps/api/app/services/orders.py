@@ -12,11 +12,22 @@
 6. ok → accepted・order_items・payments・audit_logs を COMMIT。ng → payment_failed・payments・
    audit_logs を COMMIT した後、別トランザクションで在庫とカートを戻して 409 payment_failed
 7. メールアダプタ。例外でも注文は成立（audit_logs に mail.failed）
+
+P2-b の差分（設計仕様書 P2 追補b 4.8 DS-PRC-014-3）:
+- 手順 0: 有効な会員セッションがあれば会員を得る（無効ならゲスト。エラーにしない）。
+  `receive_method` は delivery・store、`delivery` で `store_code` があれば 422
+- 手順 0.5: `store` のとき `stores` を code かつ pickup_enabled で検索
+  （無ければ 409 invalid_reference）。冪等キーの再送（カートが active でない）では検索しない
+  （受け取り停止後も再送は既存注文を返す）
+- 手順 1: member_id・receive_method・store_id・pickup_code を INSERT。`store` は配送先を店舗の値に
+- 手順 3: 金額の再計算で `store` は送料 0
+- 手順 6: audit_logs の detail に receive_method・member_linked
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import UTC
 from typing import Literal
 
@@ -27,25 +38,36 @@ from app.adapters.mail import MailAdapter, mask_email
 from app.adapters.payment import PaymentAdapter
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.models import CartStatus, Order, OrderStatus, PaymentResult
+from app.core.session import CurrentMember
+from app.models import CartStatus, Order, OrderStatus, PaymentResult, ReceiveMethod
 from app.repositories import carts as carts_repo
 from app.repositories import orders as orders_repo
+from app.repositories import stores as stores_repo
 from app.repositories.carts import CartLineRow
 from app.repositories.orders import DuplicateIdempotencyKey, OrderItemInput, PendingOrderInput
-from app.schemas.order import OrderCreateIn, OrderItemOut, OrderOut
-from app.services import order_state
+from app.schemas.order import OrderCreateIn, OrderItemOut, OrderOut, OrderStoreOut
+from app.services import order_state, order_status
 from app.services.checkout import resolve_existing_cart
 from app.services.pricing import calc_tax_included, calc_totals
 from app.services.settings import get_public_settings
 
 logger = logging.getLogger("app.services.orders")
 
-SUPPORTED_RECEIVE_METHODS = frozenset({"delivery"})
+SUPPORTED_RECEIVE_METHODS = frozenset({"delivery", "store"})
 SUPPORTED_PAYMENT_METHODS = frozenset({"card"})
 
-# P1 は配送・カードのみなので応答値は固定（orders 表に payment_method 列は無い）
-RECEIVE_METHOD_OUT = "delivery"
+# 支払い方法はカードのみなので応答値は固定（orders 表に payment_method 列は無い）
 PAYMENT_METHOD_OUT = "card"
+
+
+@dataclass(frozen=True, slots=True)
+class StoreSnapshot:
+    """受け取り店舗の値のコピー（ROLLBACK 後も安全に使えるよう ORM 行を持ち回らない）。"""
+
+    id: int
+    postal_code: str
+    address: str
+
 
 AUDIT_ORDER_CONFIRM = "order.confirm"
 AUDIT_PAYMENT_FAILED = "order.payment_failed"
@@ -56,7 +78,16 @@ AUDIT_MAIL_FAILED = "mail.failed"
 
 
 async def build_order_response(session: AsyncSession, order: Order) -> OrderOut:
+    """DS-API-022・023・024a 共通の注文応答。表示名・表示条件は `order_status` の 1 か所。"""
     items = await orders_repo.list_items(session, order.id)
+    receive_method = ReceiveMethod(order.receive_method)
+    store_out: OrderStoreOut | None = None
+    if receive_method == ReceiveMethod.store and order.store_id is not None:
+        store = await stores_repo.get_by_id(session, order.store_id)
+        if store is not None:
+            store_out = OrderStoreOut(
+                name=store.name, prefecture=store.prefecture, address=store.address
+            )
     return OrderOut(
         order_number=order.order_number,
         status=order.status.value,
@@ -81,9 +112,18 @@ async def build_order_response(session: AsyncSession, order: Order) -> OrderOut:
         ship_address=order.ship_address,
         ship_phone=order.ship_phone,
         guest_email=order.guest_email,
-        receive_method=RECEIVE_METHOD_OUT,
+        receive_method=receive_method.value,
         payment_method=PAYMENT_METHOD_OUT,
         ordered_at=order.created_at.replace(tzinfo=UTC),
+        status_label=order_status.status_label(order.status, receive_method),
+        store=store_out,
+        pickup_code=order_status.visible_pickup_code(
+            order.status, receive_method, order.pickup_code
+        ),
+        tracking_number=order_status.visible_tracking_number(
+            order.status, receive_method, order.tracking_number
+        ),
+        is_member_order=order.member_id is not None,
     )
 
 
@@ -91,11 +131,16 @@ async def build_order_response(session: AsyncSession, order: Order) -> OrderOut:
 
 
 def _check_supported(body: OrderCreateIn) -> None:
-    """P1 未対応の値は 422 unsupported_value（形は正しいので 400 ではない。4.5 の順序 4）。"""
+    """未対応の値は 422 unsupported_value（形は正しいので 400 ではない。4.5 の順序 4）。
+
+    `delivery` で `store_code` があるのも 422（field `store_code`。設計仕様書 4.8 手順 0）。
+    """
     if body.receive_method not in SUPPORTED_RECEIVE_METHODS:
         raise AppError(422, "unsupported_value", field="receive_method")
     if body.payment_method not in SUPPORTED_PAYMENT_METHODS:
         raise AppError(422, "unsupported_value", field="payment_method")
+    if body.receive_method == "delivery" and body.store_code is not None:
+        raise AppError(422, "unsupported_value", field="store_code")
 
 
 async def _existing_order_result(
@@ -123,7 +168,8 @@ async def _recalculate_and_compare(
     unpublished = [r.variant_id for r in rows if not r.published]
     if unpublished:
         raise AppError(409, "out_of_stock", items=unpublished)
-    totals = calc_totals([(r.unit_price, r.quantity) for r in rows], settings)  # 空なら empty_cart
+    # 空なら empty_cart。`store` は送料 0（DS-PRC-021a。prepare と同じ関数・同じ引数）
+    totals = calc_totals([(r.unit_price, r.quantity) for r in rows], settings, body.receive_method)
     d = body.display
     if (d.subtotal, d.shipping_fee, d.total) != (
         totals.subtotal,
@@ -168,15 +214,24 @@ async def _confirm(
     cart_id: int,
     body: OrderCreateIn,
     payment: PaymentAdapter,
+    *,
+    member_id: int | None = None,
+    store: StoreSnapshot | None = None,
 ) -> Order:
     """手順 1〜6。成功なら COMMIT 済みの注文（accepted）を返す。失敗は AppError。
 
-    `cart_id` は int で受ける（ROLLBACK 後は ORM オブジェクトが expire され、
-    属性参照が I/O になるため）。
+    `cart_id`・`member_id`・`store` は素の値で受ける（ROLLBACK 後は ORM オブジェクトが
+    expire され、属性参照が I/O になるため）。
     """
     try:
         # orders.tax_rate_at_order に要るので先に設定を読む（金額の照合自体は手順 3）
         settings = await get_public_settings(session)
+        if store is not None:
+            # 店舗受け取りの配送先は店舗の値で上書きする（入力値は使わない。mass assignment 防止）
+            ship_postal_code, ship_address = store.postal_code, store.address
+        else:
+            assert body.ship_postal_code is not None and body.ship_address is not None
+            ship_postal_code, ship_address = body.ship_postal_code, body.ship_address
         pending = PendingOrderInput(
             idempotency_key=body.idempotency_key,
             cart_id=cart_id,
@@ -186,9 +241,12 @@ async def _confirm(
             total=body.display.total,
             tax_rate_at_order=settings.tax_rate,
             ship_name=body.ship_name,
-            ship_postal_code=body.ship_postal_code,
-            ship_address=body.ship_address,
+            ship_postal_code=ship_postal_code,
+            ship_address=ship_address,
             ship_phone=body.ship_phone,
+            member_id=member_id,
+            receive_method=body.receive_method,
+            store_id=store.id if store is not None else None,
         )
 
         # 1. INSERT orders（pending_payment）
@@ -240,7 +298,13 @@ async def _confirm(
                 session,
                 action=AUDIT_ORDER_CONFIRM,
                 order_number=order.order_number,
-                detail={"total": order.total, "provider": payment.provider},
+                # メールアドレス・氏名・受け取りコードは書かない（DS-PRC-014-3 手順 6）
+                detail={
+                    "total": order.total,
+                    "provider": payment.provider,
+                    "receive_method": body.receive_method,
+                    "member_linked": member_id is not None,
+                },
             )
             await session.commit()
             return order
@@ -285,17 +349,25 @@ async def create_order(
     *,
     payment: PaymentAdapter,
     mail: MailAdapter,
+    member: CurrentMember | None = None,
 ) -> tuple[Literal[200, 201], OrderOut]:
-    """注文確定の入口。戻り値は (HTTP ステータス, 注文応答)。"""
+    """注文確定の入口。戻り値は (HTTP ステータス, 注文応答)。
+
+    `member` は有効な会員セッションから得た会員（ゲストなら None）。注文の紐づけは
+    セッションからだけ決め、本文の値は使わない（DS-DEC-77・mass assignment 防止）。
+    """
     settings = get_settings()
+    member_id = member.id if member is not None else None
     if settings.is_test:
         from app.core import testing_hooks
 
         async with testing_hooks.allocation_counter.track():
             return await _create_order_with_deadlock_retry(
-                session, token, body, payment=payment, mail=mail
+                session, token, body, payment=payment, mail=mail, member_id=member_id
             )
-    return await _create_order_with_deadlock_retry(session, token, body, payment=payment, mail=mail)
+    return await _create_order_with_deadlock_retry(
+        session, token, body, payment=payment, mail=mail, member_id=member_id
+    )
 
 
 # MySQL: 1213 = Deadlock found、1205 = Lock wait timeout exceeded
@@ -314,6 +386,7 @@ async def _create_order_with_deadlock_retry(
     *,
     payment: PaymentAdapter,
     mail: MailAdapter,
+    member_id: int | None = None,
 ) -> tuple[Literal[200, 201], OrderOut]:
     """デッドロック（1213）なら ROLLBACK して手順 0 から 1 回だけやり直す。
 
@@ -324,7 +397,9 @@ async def _create_order_with_deadlock_retry(
     """
     for attempt in range(2):
         try:
-            return await _create_order(session, token, body, payment=payment, mail=mail)
+            return await _create_order(
+                session, token, body, payment=payment, mail=mail, member_id=member_id
+            )
         except OperationalError as exc:
             if attempt == 0 and _is_retryable_lock_error(exc):
                 logger.warning(
@@ -343,8 +418,9 @@ async def _create_order(
     *,
     payment: PaymentAdapter,
     mail: MailAdapter,
+    member_id: int | None = None,
 ) -> tuple[Literal[200, 201], OrderOut]:
-    # 0. カート特定（404）→ P1 未対応値（422）
+    # 0. カート特定（404）→ 未対応値（422）
     cart = await resolve_existing_cart(session, token)
     cart_id, cart_status = cart.id, cart.status  # ROLLBACK 後も使えるよう素の値で持つ
     _check_supported(body)
@@ -354,9 +430,19 @@ async def _create_order(
             return await _existing_order_result(session, existing, cart_id)
         raise await _reject_already_ordered(session, cart_id)
 
+    # 0.5 店舗受け取りは店舗を引く（トランザクションの前の読み取り。無ければ 409。DB の状態に
+    # 依存するので 422 ではなく 409）。冪等キーの再送（上の分岐）では引かない
+    store: StoreSnapshot | None = None
+    if body.receive_method == ReceiveMethod.store.value:
+        assert body.store_code is not None  # OrderCreateIn が必須にしている
+        row = await stores_repo.get_pickup_enabled_by_code(session, body.store_code)
+        if row is None:
+            raise AppError(409, "invalid_reference", field="store_code")
+        store = StoreSnapshot(id=row.id, postal_code=row.postal_code, address=row.address)
+
     # 1〜6
     try:
-        order = await _confirm(session, cart_id, body, payment)
+        order = await _confirm(session, cart_id, body, payment, member_id=member_id, store=store)
     except AppError:
         # ROLLBACK 済み（または NG を COMMIT 済み）のまま伝える
         await session.rollback()

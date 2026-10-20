@@ -9,10 +9,23 @@ from fastapi import APIRouter, Depends, FastAPI
 from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import setup_logging
-from app.core.rate_limit import SlidingWindowRateLimiter
+from app.core.rate_limit import SlidingWindowRateLimiter, build_rate_limiters
 from app.core.security import install_cors, verify_internal_token
 from app.core.security_headers import SecurityHeadersMiddleware
-from app.routers import cart, catalog, checkout, content, health, orders, search
+from app.routers import (
+    auth,
+    cart,
+    catalog,
+    checkout,
+    content,
+    health,
+    me,
+    me_orders,
+    orders,
+    restock,
+    search,
+    stores,
+)
 from app.routers import settings as settings_router
 
 
@@ -34,6 +47,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ゲスト注文照会のレート制限器（app ごとに 1 つ。100 回/時/IP。設計仕様書 7.5）
     app.state.lookup_rate_limiter = SlidingWindowRateLimiter()
+    # P2-b の個別制限器（名前つき。IP ごとに 10 回/時 など。DS-DEC-84）。`enforce_rate_limit`・
+    # `ip_rate_limit` が `app.state.rate_limiters[名前]` を引く
+    app.state.rate_limiters = build_rate_limiters()
 
     # 死活監視だけは内部トークン不要
     app.include_router(health.router)
@@ -64,6 +80,13 @@ def build_protected_router(*extra: APIRouter) -> APIRouter:
     api.include_router(content.router)
     # P2-a: 商品検索・検索サジェスト（DS-API-004・004a）
     api.include_router(search.router)
+    # P2-b: 認証・会員・注文履歴・店舗・再入荷（DS-API-030〜036・024・024a・026・007）。
+    # レーン A は骨格（501）。中身は B（auth・me）と C（me_orders・stores・restock）
+    api.include_router(auth.router)
+    api.include_router(me.router)
+    api.include_router(me_orders.router)
+    api.include_router(stores.router)
+    api.include_router(restock.router)
     for router in extra:
         api.include_router(router)
     return api

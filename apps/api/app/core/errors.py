@@ -85,6 +85,14 @@ def internal_error() -> AppError:
     return AppError(500, "internal_error", message=INTERNAL_ERROR_BODY["message"])
 
 
+def not_implemented() -> AppError:
+    """P2-b のレーン A が置いたルーター骨格の未実装エンドポイント用（501 `not_implemented`）。
+
+    B・C が中身を実装するときに、この呼び出しごと置き換える。本番に残さない。
+    """
+    return AppError(501, "not_implemented")
+
+
 def map_reason(error_type: str, input_value: Any = None) -> str:
     """Pydantic のエラー型文字列を reason 固定語へ対応付ける。
 

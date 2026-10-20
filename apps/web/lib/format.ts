@@ -17,3 +17,19 @@ export function formatYen(amount: number): string {
 export function formatNumber(amount: number): string {
   return Math.trunc(amount).toLocaleString("ja-JP");
 }
+
+/**
+ * 受け取りコード（API の値は区切りなしの 8 文字）を 4 文字ずつハイフンで区切る（設計仕様書 6.5・6.8）。
+ * 8 文字の英数字でない値はそのまま返す（表示を壊さない）。
+ */
+export function formatPickupCode(code: string): string {
+  return /^[A-Za-z0-9]{8}$/.test(code) ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+}
+
+/**
+ * 店舗の住所の表示。API の `address` は都道府県から始まる（seed は「東京都千代田区…」）ので、先頭が都道府県と同じなら重ねない。
+ * 都道府県で始まらない住所には都道府県を前に付ける（設計仕様書 4.3 は `prefecture` と `address` を別項目で返す）。
+ */
+export function formatStoreAddress(store: { prefecture: string; address: string }): string {
+  return store.address.startsWith(store.prefecture) ? store.address : `${store.prefecture} ${store.address}`;
+}

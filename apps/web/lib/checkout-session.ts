@@ -1,5 +1,5 @@
 import type { CheckoutErrors, CheckoutFormValues } from "@/lib/checkout-validation";
-import type { OrderResponse, PrepareResponse } from "@/lib/types";
+import type { OrderResponse, PrepareResponse, ReceiveMethod, StoreSummary } from "@/lib/types";
 
 /**
  * 注文手続きの画面間で持ち回る状態を `sessionStorage` に置く（DS-SCR-005 → 006）。
@@ -15,7 +15,13 @@ export const CHECKOUT_KEY = "guapp.checkout";
 export const LAST_ORDER_KEY = "guapp.lastOrder";
 
 export interface CheckoutSession {
+  /** 店舗受け取りのときは郵便番号・住所の欄を空にして保存する（送信しない値を残さない）。復元は lib/checkout-validation の ADDRESS_FIELDS */
   form: CheckoutFormValues;
+  /** P2-b: 受け取り方法。無ければ配送（古い保存値） */
+  receive_method?: ReceiveMethod;
+  /** P2-b: 店舗受け取りの店舗コードと表示用の店舗情報（確認画面は店舗一覧を取得しないため、名前・住所を持ち回る） */
+  store_code?: string;
+  store?: StoreSummary;
   /** 確認画面の元データ。null なら SCR-005 からやり直す */
   prepare: PrepareResponse | null;
   /** サーバーの 400 を SCR-005 に持ち帰るときの項目エラー */
@@ -62,4 +68,9 @@ export function clearCheckoutSession(): void {
 
 export function saveLastOrder(order: OrderResponse): void {
   write(LAST_ORDER_KEY, order);
+}
+
+/** 画面間で持ち回る受け取り方法の項目だけを取り出す（serverErrors・focus を消して保存し直すときに使う） */
+export function carryReceive(session: CheckoutSession): Pick<CheckoutSession, "receive_method" | "store_code" | "store"> {
+  return { receive_method: session.receive_method, store_code: session.store_code, store: session.store };
 }

@@ -1,6 +1,7 @@
 """確認画面用の金額計算と冪等キー発行（DS-API-021・DS-PRC-021）。
 
 - カート無し／未知 → 404、`ordered` → 409 already_ordered
+- P2-b: 本文の `receive_method`（既定 `delivery`）。`store` は送料 0
 - 空カート → 409 empty_cart、`stock_status` が ok 以外の明細 → 409 out_of_stock {items}
 - 金額は `services/pricing`（カート応答と同じ計算）。冪等キーは 32 バイト乱数の base64url（43 文字）
 """
@@ -16,7 +17,7 @@ from app.models import Cart, CartStatus
 from app.repositories import carts as carts_repo
 from app.repositories import orders as orders_repo
 from app.schemas.cart import CartLineOut
-from app.schemas.order import PrepareOut
+from app.schemas.order import PrepareOut, ReceiveMethodLiteral
 from app.services import cart_rules
 from app.services.pricing import calc_totals
 from app.services.settings import get_public_settings
@@ -35,7 +36,10 @@ async def resolve_existing_cart(session: AsyncSession, token: str | None) -> Car
     return cart
 
 
-async def prepare(session: AsyncSession, token: str | None) -> PrepareOut:
+async def prepare(
+    session: AsyncSession, token: str | None, receive_method: ReceiveMethodLiteral = "delivery"
+) -> PrepareOut:
+    """確認画面用の金額と冪等キー。`receive_method="store"` は送料 0（DS-PRC-021a）。"""
     cart = await resolve_existing_cart(session, token)
     if cart.status != CartStatus.active:
         number = await orders_repo.get_latest_order_number_of_cart(session, cart.id)
@@ -70,7 +74,7 @@ async def prepare(session: AsyncSession, token: str | None) -> PrepareOut:
     if not_ok:
         raise AppError(409, "out_of_stock", items=not_ok)
 
-    totals = calc_totals([(r.unit_price, r.quantity) for r in rows], settings)
+    totals = calc_totals([(r.unit_price, r.quantity) for r in rows], settings, receive_method)
     return PrepareOut(
         idempotency_key=new_idempotency_key(),
         items=items,
@@ -80,4 +84,5 @@ async def prepare(session: AsyncSession, token: str | None) -> PrepareOut:
         tax_included=totals.tax_included,
         tax_rate=settings.tax_rate,
         free_shipping_threshold=settings.free_shipping_threshold,
+        receive_method=receive_method,
     )

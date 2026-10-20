@@ -123,7 +123,7 @@ async def it_engine(migrated_schema: str) -> AsyncIterator[AsyncEngine]:
 
 @pytest.fixture
 async def seed_db(it_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
-    """各テストの前に 12 表を空にして seed を投入し、後で TRUNCATE する（Wave 1 の IT 用）。"""
+    """各テストの前に全 21 表を空にして seed を投入し、後で TRUNCATE する（IT 用）。"""
     result = await seed(it_engine, reset=True)
     assert not result.skipped, "reset=True なのに seed が skip された"
     try:

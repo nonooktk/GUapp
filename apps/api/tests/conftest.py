@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from app.core.config import get_settings
 from app.core.db import reset_engine_cache
+from tests.recording_mail import RecordingMailAdapter
 
 # テスト用のダミー値（実在しない）。秘匿値ではない
 TEST_INTERNAL_TOKEN = "test-internal-token-0123456789"
@@ -27,6 +28,9 @@ _SETTING_KEYS = (
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "DB_SSL_CA_PATH",
+    "PUBLIC_WEB_BASE_URL",
+    "DEMO_EMAIL_DOMAINS",
+    "SEED_MEMBER_PASSWORD",
 )
 
 
@@ -85,3 +89,9 @@ async def client_factory() -> AsyncIterator[Callable[[FastAPI], httpx.AsyncClien
     yield _factory
     for client in clients:
         await client.aclose()
+
+
+@pytest.fixture
+def recording_mail() -> RecordingMailAdapter:
+    """記録用メールアダプタ。`recording_mail.install(app)` で app に差し替える（設計 4.10）。"""
+    return RecordingMailAdapter()

@@ -8,6 +8,15 @@ import { CSRF_TOKEN_COOKIE } from "@/lib/csrf-validation";
 export const CART_TOKEN_COOKIE = "cart_token";
 export const CART_TOKEN_MAX_AGE_SEC = 60 * 60 * 24 * 90; // 90 日
 
+/** 会員セッション Cookie（設計仕様書 7.3・DS-DEC-72）。値は FastAPI が発行した 43 文字の base64url。BFF は中身を解釈しない */
+export const SESSION_COOKIE = "sid";
+export const SESSION_MAX_AGE_SEC = 60 * 60 * 24; // 24 時間（作成から固定。延長しない）
+/** `sid`・`X-Session-Token` の値の形（32 バイト乱数の base64url 43 文字） */
+export const SESSION_TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
+/** BFF → FastAPI の会員セッション用ヘッダ名（`X-Cart-Token` と同じ方式。設計仕様書 4.0） */
+export const SESSION_TOKEN_HEADER = "X-Session-Token";
+
 export interface CookieOptions {
   /** `production` のときだけ Secure を付ける（ローカル http では保存されないため。設計 7.3） */
   appEnv: string;
@@ -60,6 +69,19 @@ export function buildCsrfTokenCookie(token: string, appEnv: string, domain = "")
   });
 }
 
+/**
+ * 会員セッション Cookie `sid`（HttpOnly・SameSite=Lax・Path=/・Max-Age=86400。Secure は production のみ）。
+ * 値に使えない文字（改行・`;` など）を含むと例外（ヘッダ注入を防ぐ）。
+ */
+export function buildSessionCookie(token: string, appEnv: string, domain = ""): string {
+  return buildSetCookie(SESSION_COOKIE, token, { appEnv, domain, maxAgeSec: SESSION_MAX_AGE_SEC });
+}
+
+/** `sid` の削除用 Cookie（値は空・Max-Age=0）。ログアウトの応答で必ず返す */
+export function buildSessionDeleteCookie(appEnv: string, domain = ""): string {
+  return buildSetCookie(SESSION_COOKIE, "", { appEnv, domain, maxAgeSec: 0 });
+}
+
 /** `Cookie` リクエストヘッダから指定名の値を取り出す（無ければ null） */
 export function readCookie(cookieHeader: string | null, name: string): string | null {
   if (!cookieHeader) return null;
@@ -68,4 +90,13 @@ export function readCookie(cookieHeader: string | null, name: string): string | 
     if (k === name) return rest.join("=");
   }
   return null;
+}
+
+/**
+ * リクエストの Cookie から `sid` を取り出す。形（43 文字の base64url）が違う値は「セッションなし」として null を返す
+ * （ヘッダにそのまま載せて注入や 500 になるのを避ける。値の意味は解釈しない）。
+ */
+export function readSessionToken(cookieHeader: string | null): string | null {
+  const v = readCookie(cookieHeader, SESSION_COOKIE);
+  return v !== null && SESSION_TOKEN_SHAPE.test(v) ? v : null;
 }

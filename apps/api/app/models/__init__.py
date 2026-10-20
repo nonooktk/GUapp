@@ -1,5 +1,6 @@
-"""P1・P2-a のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表、
-P2 追補a 5.1: DS-TBL-22 contents を加えた 13 表）。
+"""P1・P2-a・P2-b のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表、
+P2 追補a 5.1: DS-TBL-22 contents を加えた 13 表、
+P2 追補b 5.1: DS-TBL-01・03・04・10・19・20・26・27 の 8 表を加えた 21 表）。
 
 設計書本文は「13 表」と書くが、P1 時点で列挙された DS-TBL を数えると 12
 （P2-a の DS-TBL-22 追加で実際に 13 になった）。
@@ -17,6 +18,7 @@ from app.models.catalog import (
     Variant,
 )
 from app.models.content import Content, ContentKind
+from app.models.member import EmailToken, EmailTokenPurpose, Member, MemberGender
 from app.models.order import (
     Order,
     OrderItem,
@@ -26,11 +28,17 @@ from app.models.order import (
     PaymentResult,
     ReceiveMethod,
 )
+from app.models.restock import RestockNotification
+from app.models.review import Review, ReviewFit
+from app.models.session import AuthSession, LoginAttempt, SubjectType
+from app.models.staff import Staff
+from app.models.store import Store
 from app.models.system import ActorType, AuditLog, SystemSetting
 
 __all__ = [
     "ActorType",
     "AuditLog",
+    "AuthSession",
     "Base",
     "Cart",
     "CartItem",
@@ -38,7 +46,12 @@ __all__ = [
     "Category",
     "Content",
     "ContentKind",
+    "EmailToken",
+    "EmailTokenPurpose",
     "Gender",
+    "LoginAttempt",
+    "Member",
+    "MemberGender",
     "Order",
     "OrderItem",
     "OrderStatus",
@@ -49,6 +62,12 @@ __all__ = [
     "ProductCategory",
     "ProductImage",
     "ReceiveMethod",
+    "RestockNotification",
+    "Review",
+    "ReviewFit",
+    "Staff",
+    "Store",
+    "SubjectType",
     "SystemSetting",
     "Variant",
 ]
@@ -74,5 +93,19 @@ P1_TABLES: frozenset[str] = frozenset(
 # P2-a で追加した表（設計仕様書 P2 追補a 5.1 DS-TBL-22）
 P2A_TABLES: frozenset[str] = frozenset({"contents"})
 
-# 全表（P1 + P2-a）
-ALL_TABLES: frozenset[str] = P1_TABLES | P2A_TABLES
+# P2-b で追加した 8 表（設計仕様書 P2 追補b 5.1）
+P2B_TABLES: frozenset[str] = frozenset(
+    {
+        "members",
+        "sessions",
+        "staff",
+        "stores",
+        "reviews",
+        "restock_notifications",
+        "login_attempts",
+        "email_tokens",
+    }
+)
+
+# 全表（P1 + P2-a + P2-b = 21 表）
+ALL_TABLES: frozenset[str] = P1_TABLES | P2A_TABLES | P2B_TABLES

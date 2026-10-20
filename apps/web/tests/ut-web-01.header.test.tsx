@@ -25,13 +25,13 @@ describe("UT-WEB-01 Header", () => {
     expect(screen.getByTestId("cart-count-badge")).toHaveTextContent("99+");
   });
 
-  it("メニューボタン・ロゴ・検索・お気に入り・会員がアクセシブル名付きで存在する", () => {
+  it("メニューボタン・ロゴ・検索・お気に入り・会員（P2-b: 未ログインは「ログイン」）がアクセシブル名付きで存在する", () => {
     render(<Header cartCount={0} />);
     expect(screen.getByRole("button", { name: "メニューを開く" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GU ホーム" })).toHaveAttribute("href", "/");
     // 検索は P2-a で実装（モバイルはパネルを開くボタン、デスクトップは常設の入力欄。SearchBox.test.tsx 参照）
     expect(screen.getByRole("button", { name: "検索" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "お気に入り" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "会員" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ログイン" })).toBeInTheDocument();
   });
 });

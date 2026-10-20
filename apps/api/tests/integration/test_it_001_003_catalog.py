@@ -209,6 +209,7 @@ async def test_it_003_01_product_detail_variants_and_related(client, seed_db) ->
         "sizes",
         "variants",
         "related",
+        "fit_summary",  # P2-b（DS-API-003・4.6）。レビューが 0 件でもキーは常に出す
     }
     assert body["id"] == v.product_id
     assert len(body["variants"]) == 6

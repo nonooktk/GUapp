@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
+import FitSummary from "@/components/FitSummary";
 import LoadError from "@/components/LoadError";
 import Price from "@/components/Price";
 import ProductCard from "@/components/ProductCard";
@@ -13,6 +14,8 @@ import { getImageBaseUrl, getProduct } from "@/lib/server/catalog";
  * 画像（複数）・名称・税込価格（--text-2xl・700）・色/サイズ/数量（PurchasePanel）・説明・素材・関連商品。
  * FastAPI の 404 は notFound()、接続不可は「読み込めませんでした」。Next.js 16 では params が Promise。
  * 375px では PurchasePanel の下部固定バーに隠れないよう本文下に余白を取る。
+ * P2-b（設計仕様書 6.6）: 商品説明の後・関連商品の前にサイズ感の集計（FitSummary。レビュー本体は P3）。在庫切れの組み合わせには
+ * PurchasePanel の中に再入荷のお知らせ申込が出る。
  */
 
 export const dynamic = "force-dynamic";
@@ -100,6 +103,8 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
           ))}
         </ul>
       </section>
+
+      <FitSummary summary={product.fit_summary} />
 
       {product.related.length > 0 && (
         <section aria-labelledby="related-heading">

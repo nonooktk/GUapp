@@ -96,15 +96,17 @@ def test_ut_hooks_not_imported_by_production_path() -> None:
     assert proc.stdout.strip() == "False", proc.stdout + proc.stderr
 
 
-def test_ut_models_export_13_tables() -> None:
-    from app.models import ALL_TABLES, P1_TABLES, P2A_TABLES, Base
+def test_ut_models_export_21_tables() -> None:
+    from app.models import ALL_TABLES, P1_TABLES, P2A_TABLES, P2B_TABLES, Base
 
     names = set(Base.metadata.tables)
-    # P1（12 表）に P2-a の DS-TBL-22 contents（1 表）を加えて 13 表になった
-    assert P1_TABLES | P2A_TABLES == ALL_TABLES
+    # P1（12 表）に P2-a の DS-TBL-22 contents（1 表）と P2-b の 8 表を加えて 21 表になった
+    assert P1_TABLES | P2A_TABLES | P2B_TABLES == ALL_TABLES
     assert names == ALL_TABLES
     assert len(P1_TABLES) == 12
-    assert len(names) == 13
+    assert len(P2A_TABLES) == 1
+    assert len(P2B_TABLES) == 8
+    assert len(names) == 21
 
 
 def test_ut_models_key_constraints() -> None:
@@ -145,9 +147,11 @@ def test_ut_models_key_constraints() -> None:
         "cancelled",
         "payment_failed",
     }
-    # P1 では member_id に FK 無し
-    assert not t["orders"].c.member_id.foreign_keys
-    assert not t["carts"].c.member_id.foreign_keys
+    # P2-b（設計仕様書 P2 追補b 5.3）: member_id・store_id に外部キーを張った
+    assert {fk.column.table.name for fk in t["orders"].c.member_id.foreign_keys} == {"members"}
+    assert {fk.column.table.name for fk in t["carts"].c.member_id.foreign_keys} == {"members"}
+    assert {fk.column.table.name for fk in t["orders"].c.store_id.foreign_keys} == {"stores"}
+    assert t["orders"].c.pickup_code.unique and t["orders"].c.pickup_code.nullable
     # 索引
     assert any(ix.columns.keys() == ["at"] for ix in t["audit_logs"].indexes)
     assert any(ix.columns.keys() == ["published"] for ix in t["products"].indexes)

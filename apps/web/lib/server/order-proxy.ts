@@ -1,6 +1,6 @@
 import "server-only";
 
-import { CART_TOKEN_COOKIE, readCookie } from "@/lib/cookie";
+import { CART_TOKEN_COOKIE, readCookie, readSessionToken, SESSION_TOKEN_HEADER } from "@/lib/cookie";
 import { resolveClientIp } from "@/lib/client-ip";
 import { apiFetch, UpstreamUnavailableError } from "@/lib/server/api";
 import { cartTokenHeaders, stripCartToken } from "@/lib/server/cart-proxy";
@@ -9,6 +9,8 @@ import { getEnv } from "@/lib/server/env";
 /**
  * 注文系 BFF の共通取り次ぎ（DS-API-021〜023・設計仕様書 4.3・7.2、テスト IT-BFF-01/02）。
  * - Cookie `cart_token` を `X-Cart-Token` に載せる（カートの特定。lookup では不要だが付いても害はない）
+ * - `session: true` のとき、有効な形の Cookie `sid` を `X-Session-Token` に載せる（注文確定で会員に紐づける。DS-PRC-014-3）。
+ *   無効・期限切れのセッションは FastAPI 側でゲスト扱いになる。値は解釈しない
  * - `X-Internal-Token` は apiFetch が付ける
  * - `X-Forwarded-For` に利用者の送信元 IP を載せる（lookup のレート制限 100 回/時/IP が使う）。
  *   **利用者が送ってきた `X-Forwarded-For` は転送しない**（偽装でレート制限を回避／他人を 429 にできるため。ST 実施記録 2026-09-24 🟡）。
@@ -27,10 +29,14 @@ export function clientIp(request: Request): string {
 
 export interface OrderProxyInit {
   json?: unknown;
+  /** `sid` があれば `X-Session-Token` を付ける（注文確定のみ） */
+  session?: boolean;
 }
 
 export async function proxyOrderRequest(request: Request, path: string, init: OrderProxyInit = {}): Promise<Response> {
-  const cartToken = readCookie(request.headers.get("cookie"), CART_TOKEN_COOKIE);
+  const cookieHeader = request.headers.get("cookie");
+  const cartToken = readCookie(cookieHeader, CART_TOKEN_COOKIE);
+  const sid = init.session ? readSessionToken(cookieHeader) : null;
   const headers = new Headers({ "Cache-Control": "no-store" });
 
   let result;
@@ -38,7 +44,11 @@ export async function proxyOrderRequest(request: Request, path: string, init: Or
     result = await apiFetch<unknown>(path, {
       method: "POST",
       json: init.json ?? {},
-      headers: { ...cartTokenHeaders(cartToken), [FORWARDED_FOR_HEADER]: clientIp(request) },
+      headers: {
+        ...cartTokenHeaders(cartToken),
+        [FORWARDED_FOR_HEADER]: clientIp(request),
+        ...(sid ? { [SESSION_TOKEN_HEADER]: sid } : {}),
+      },
       // 注文確定は在庫引当・決済スタブを含むため、カート系より少し長めに待つ
       timeoutMs: 15000,
     });

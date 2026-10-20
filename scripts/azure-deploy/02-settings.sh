@@ -105,6 +105,8 @@ settings = [
     {"name": "DB_SSL_CA_PATH", "value": os.environ["GUAPP_DB_SSL_CA_PATH_ON_APPSERVICE"]},
     {"name": "INTERNAL_TOKEN", "value": os.environ["INTERNAL_TOKEN"]},
     {"name": "CORS_ALLOW_ORIGIN", "value": os.environ["GUAPP_WEB_URL"]},
+    # 公開環境は誰でも会員登録できるため、登録・再設定に使えるメールをダミーのドメインに限る（DS-DEC-88）
+    {"name": "DEMO_EMAIL_DOMAINS", "value": "example.com"},
 ]
 with open(os.environ["API_SETTINGS_JSON"], "w") as f:
     json.dump(settings, f)

@@ -6,7 +6,7 @@ import DemoPeriodBanner from "@/components/DemoPeriodBanner";
 import Footer from "@/components/Footer";
 import HeaderWithCart from "@/components/HeaderWithCart";
 import { ToastProvider } from "@/components/Toast";
-import { CART_TOKEN_COOKIE } from "@/lib/cookie";
+import { CART_TOKEN_COOKIE, SESSION_COOKIE } from "@/lib/cookie";
 import { parseDemoPublicUntil } from "@/lib/demo-banner";
 import { getCategories, loadOrNull } from "@/lib/server/catalog";
 import "./globals.css";
@@ -16,6 +16,8 @@ import "./globals.css";
  * カート点数は CartProvider が `GET /api/cart` で取得し HeaderWithCart のバッジに出す（UT-WEB-01）。
  * Cookie `cart_token` が無い訪問者にはカートを作らない（取得を省いて 0 を描く）。
  * オールメニュー（AT-07）のカテゴリ階層は GET /categories をここで取得して props で渡す。失敗時は null（メニュー側で案内を出し、ヘッダーは描く）。
+ * 会員アイコンは Cookie `sid` の有無だけで「ログイン」「マイページ」を切り替える（DS-DEC-86。FastAPI は呼ばない。失効した `sid` が
+ * 残っていても、マイページを開いた時点で 401 → /login?next=/mypage へ移る）。Server Component は Cookie を発行・削除できないので読み取りだけ。
  * Next.js 16 では `cookies()` が Promise なので await する。
  *
  * 書体はデザイン基準 v1 2.2 の Noto Sans JP（300/400/700）。`variable` で <html> に CSS 変数を付け、
@@ -42,6 +44,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const store = await cookies();
   const hasCartCookie = store.has(CART_TOKEN_COOKIE);
+  const signedIn = store.has(SESSION_COOKIE);
   const cats = await loadOrNull(getCategories(), "categories (layout)");
   // 期間限定公開の帯（公開追補 設計仕様書 6 章・DS-DEC-50）。DEMO_PUBLIC_UNTIL は実行時の
   // 環境変数なので、ここで process.env を直接読む（NEXT_PUBLIC_ にしない＝ビルド後も延長できる）。
@@ -53,7 +56,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ToastProvider>
           <DemoPeriodBanner untilDisplay={demoUntilDisplay} />
           <CartProvider hasCartCookie={hasCartCookie}>
-            <HeaderWithCart categories={cats?.categories ?? null} />
+            <HeaderWithCart categories={cats?.categories ?? null} signedIn={signedIn} />
             <main id="main" className="mx-auto w-full max-w-page flex-1 px-4 py-6">
               {children}
             </main>
