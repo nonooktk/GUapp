@@ -16,13 +16,25 @@ export const SECURITY_HEADERS = [
   },
 ];
 
+/**
+ * `/admin` 配下の応答に足すヘッダー（P2 追補c DS-DEC-122・126、ST-SEC-91）。全パスのヘッダーとは別の規則にして、
+ * 検索エンジンに載せず、ブラウザ・中継にキャッシュさせない（管理画面は個人情報を含む）。
+ */
+export const ADMIN_HEADERS = [
+  { key: "Cache-Control", value: "no-store" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+];
+
 const nextConfig: NextConfig = {
   // 設計仕様書 8.1: App Service で `node server.js` を起動するため standalone 出力にする
   output: "standalone",
   // `X-Powered-By: Next.js` を出さない（S5）
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      { source: "/admin/:path*", headers: ADMIN_HEADERS },
+    ];
   },
 };
 

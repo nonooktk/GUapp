@@ -524,6 +524,31 @@ MEMBERS: tuple[MemberSeed, ...] = (
 EXPECTED_MEMBER_COUNT = len(MEMBERS)
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# P2-c: staff（DS-TBL-04。設計仕様書 P2 追補c 5.7・DS-DEC-112）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 管理者は 1 件。パスワードは下の定数（ダミー値。設計書・報告には書かない）または環境変数
+# `SEED_STAFF_PASSWORD`、login_id は環境変数 `SEED_STAFF_LOGIN_ID` で置き換えられる。
+# `APP_ENV=production` では `SEED_STAFF_PASSWORD` が必須で 12 文字以上、無ければ管理者を入れない
+# （既知のパスワードの管理者を公開環境に残さない。点検の B-07）。
+
+# seed 管理者の既定パスワード（ダミー値）。開発・テストだけで使う
+DEMO_STAFF_PASSWORD = "DemoStaff-Seed-2026"  # pragma: allowlist secret（ダミー値）
+# production で `SEED_STAFF_PASSWORD` に求める最小の文字数（NFKC 正規化後。DS-DEC-112）
+STAFF_PASSWORD_MIN_LENGTH_PRODUCTION = 12
+
+
+@dataclass(frozen=True)
+class StaffSeed:
+    login_id: str
+    role: str = "staff"
+
+
+STAFF: tuple[StaffSeed, ...] = (StaffSeed("demo-staff"),)
+EXPECTED_STAFF_COUNT = len(STAFF)
+
+
 @dataclass(frozen=True)
 class StoreSeed:
     code: str

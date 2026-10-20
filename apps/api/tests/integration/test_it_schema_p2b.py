@@ -66,7 +66,9 @@ async def test_it_schema_09_upgrade_head_creates_21_tables(it_engine: AsyncEngin
 def test_it_schema_10_single_head_and_revision_order(migrated_schema: str) -> None:
     """head が 1 本（F-029 などの別ブランチが head を増やさないための検査。DS-DEC-83）。"""
     script = ScriptDirectory.from_config(alembic_config(migrated_schema))
-    assert script.get_heads() == [REV_FK], "head が 1 本で p2b_orders_pickup_fk であること"
+    # P2-c 以降は head が進む。P2-b の最後が履歴にあることだけ確かめる（head は IT-SCHEMA-20）
+    revisions = [r.revision for r in script.walk_revisions()]
+    assert REV_FK in revisions, "p2b_orders_pickup_fk が履歴にあること"
 
     chain: list[str] = []
     rev = script.get_revision(REV_FK)

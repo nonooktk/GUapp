@@ -6,7 +6,7 @@ import enum
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, DateTime, Enum, String, func
+from sqlalchemy import JSON, BigInteger, DateTime, Enum, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import MYSQL_TABLE_ARGS, Base, IdMixin, TimestampMixin
@@ -30,10 +30,18 @@ class ActorType(enum.StrEnum):
 
 
 class AuditLog(IdMixin, TimestampMixin, Base):
-    """DS-TBL-23 audit_logs。`at` に索引（90 日削除ジョブ用。P2）。"""
+    """DS-TBL-23 audit_logs。`at` に索引（90 日削除ジョブ用。P2）。
+
+    P2-c で `(target_type, target_id, at)` の索引を足した（「ある注文・ある SKU に誰がいつ何を
+    したか」を引く。REQ-NFR-04。設計仕様書 P2 追補c 5.2）。アプリのコードは INSERT しかしない
+    （UPDATE・DELETE を書かない。DS-DEC-120）。
+    """
 
     __tablename__ = "audit_logs"
-    __table_args__ = (MYSQL_TABLE_ARGS,)
+    __table_args__ = (
+        Index("ix_audit_logs_target_type_target_id_at", "target_type", "target_id", "at"),
+        MYSQL_TABLE_ARGS,
+    )
 
     actor_type: Mapped[ActorType] = mapped_column(
         Enum(ActorType, name="actor_type", native_enum=False, length=20), nullable=False

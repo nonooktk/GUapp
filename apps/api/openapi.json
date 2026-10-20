@@ -1876,6 +1876,1080 @@
           }
         }
       }
+    },
+    "/api/v1/admin/auth/login": {
+      "post": {
+        "tags": [
+          "admin-auth"
+        ],
+        "summary": "DS-API-050 管理ログイン（DB の login_attempts で制限。DS-DEC-110）",
+        "description": "設計書: 3.1（シーケンス）、4.1 DS-API-050、4.6 DS-PRC-050、5.6、7.3。\n\n`X-Admin-Session-Token` は古いセッションの削除（再発行）にだけ使う。IP は `client_ip(request)`。\nエラー: 400／401 `invalid_credentials`／403 `account_locked`／429（`Retry-After: 900`）。",
+        "operationId": "admin_login_api_v1_admin_auth_login_post",
+        "parameters": [
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLoginIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/auth/logout": {
+      "post": {
+        "tags": [
+          "admin-auth"
+        ],
+        "summary": "DS-API-050a 管理ログアウト（無効・不明なセッションでも 204）",
+        "description": "設計書: 4.1 DS-API-050a。`require_staff` は通さない（冪等）。\n\n`subject_type=staff` の該当行だけを削除し、行があったときだけ `admin.logout` を記録する。",
+        "operationId": "admin_logout_api_v1_admin_auth_logout_post",
+        "parameters": [
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/me": {
+      "get": {
+        "tags": [
+          "admin-auth"
+        ],
+        "summary": "DS-API-050b 管理者情報の取得",
+        "description": "設計書: 4.1 DS-API-050b、4.6 DS-PRC-050b。`{login_id, role}` のみ（内部 ID・ハッシュなし）。\n\nエラー: 401 `unauthorized`／403 `forbidden`（会員のセッション・許可外のロール）。",
+        "operationId": "admin_me_api_v1_admin_me_get",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStaffOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/products": {
+      "get": {
+        "tags": [
+          "admin-products"
+        ],
+        "summary": "DS-API-051 商品一覧",
+        "description": "設計書: 4.2 DS-API-051、4.6 DS-PRC-051。\n`GET /products?q=&visibility=&stock=&page=&per_page=`。`product_id` の昇順。\nエラー: 400 `validation_error`／401／403。",
+        "operationId": "list_products_api_v1_admin_products_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "visibility",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "public",
+                "private"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Visibility"
+            }
+          },
+          {
+            "name": "stock",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "out"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Stock"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AdminProductListItemOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/products/{product_id}": {
+      "get": {
+        "tags": [
+          "admin-products"
+        ],
+        "summary": "DS-API-051a 商品詳細（非公開でも返す）",
+        "description": "設計書: 4.2 DS-API-051a。`restock_waiting` は未通知の申込の件数だけ（メールは返さない）。\nエラー: 400／401／403／404 `not_found`。",
+        "operationId": "get_product_api_v1_admin_products__product_id__get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProductDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin-products"
+        ],
+        "summary": "DS-API-051b 商品の更新（公開・価格。expected_* 必須）",
+        "description": "設計書: 4.2 DS-API-051b、4.6 DS-PRC-051b。\nエラー: 400／401／403／404／422 `unsupported_value`・`limit_exceeded`（価格）／\n409 `stale_data`。",
+        "operationId": "update_product_api_v1_admin_products__product_id__patch",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Product Id"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductUpdateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/variants/{variant_id}/stock": {
+      "patch": {
+        "tags": [
+          "admin-products"
+        ],
+        "summary": "DS-API-051c 在庫の更新（絶対値の SET。0→正で再入荷通知を起動）",
+        "description": "設計書: 4.2 DS-API-051c、4.6 DS-PRC-051c、DS-DEC-114・115。\n\n再入荷（0 から 1 以上）のときだけ、COMMIT のあとの後処理で `notify_restock` を呼ぶ。\nエラー: 400／401／403／404／422 `unsupported_value`・`limit_exceeded`／409 `stale_data`。",
+        "operationId": "set_variant_stock_api_v1_admin_variants__variant_id__stock_patch",
+        "parameters": [
+          {
+            "name": "variant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Variant Id"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockUpdateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "DS-API-052 設定の取得",
+        "description": "設計書: 4.3 DS-API-052。4 件（tax_rate・shipping_fee・free_shipping_threshold・\npayment_timeout_minutes〈表示のみ〉）をこの順で返す。エラー: 401／403／500 `internal_error`。",
+        "operationId": "get_settings_admin_api_v1_admin_settings_get",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSettingsOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "admin-settings"
+        ],
+        "summary": "DS-API-052a 設定の更新（expected_* 必須。全か無か）",
+        "description": "設計書: 4.3 DS-API-052a、4.6 DS-PRC-052。キー名の昇順に `FOR UPDATE`。\nエラー: 400／401／403／422 `unsupported_value`・`limit_exceeded`／409 `stale_data`。",
+        "operationId": "update_settings_admin_api_v1_admin_settings_patch",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsUpdateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders": {
+      "get": {
+        "tags": [
+          "admin-orders"
+        ],
+        "summary": "DS-API-053 注文の検索",
+        "description": "設計書: 4.4 DS-API-053、4.6 DS-PRC-053。個人情報はマスクしたメールだけ。\n\n新しい順（同時刻は `id` の降順）。0 件でも 200。`from` が `to` より後は 422\n`unsupported_value`、期間が 366 日を超えると 422 `limit_exceeded`。",
+        "operationId": "search_orders_api_v1_admin_orders_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "pending_payment",
+                "accepted",
+                "preparing",
+                "shipped",
+                "delivered",
+                "pickup_expired",
+                "cancelled",
+                "payment_failed"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "receive_method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "delivery",
+                "store"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Receive Method"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "name": "order_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order Number"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 1024
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Email"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AdminOrderListItemOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{order_number}": {
+      "get": {
+        "tags": [
+          "admin-orders"
+        ],
+        "summary": "DS-API-053a 注文詳細",
+        "description": "設計書: 4.4 DS-API-053a。取得を `admin.order.view` に記録（できなければ 500）。\n\n形が違う・存在しない番号は同じ 404。受け取りコードは返さない。",
+        "operationId": "get_order_api_v1_admin_orders__order_number__get",
+        "parameters": [
+          {
+            "name": "order_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Number"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOrderDetailOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{order_number}/status": {
+      "patch": {
+        "tags": [
+          "admin-orders"
+        ],
+        "summary": "DS-API-053b 注文状態の更新",
+        "description": "設計書: 4.4 DS-API-053b、4.6 DS-PRC-053b。更新先は preparing・shipped・delivered だけ。\n\n422 `unsupported_value`（未対応の更新先・追跡番号を付けられない）／\n409 `invalid_transition`（遷移表に無い）。顧客へのメールは送らない（DS-DEC-117）。",
+        "operationId": "update_order_status_api_v1_admin_orders__order_number__status_patch",
+        "parameters": [
+          {
+            "name": "order_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Number"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          },
+          {
+            "name": "X-Admin-Session-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Admin-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderStatusUpdateIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrderStatusUpdateOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1895,6 +2969,556 @@
         ],
         "title": "AcceptedOut",
         "description": "DS-API-030（202）・DS-API-034（200）の応答。新規でも既登録でも同じ（DS-DEC-71）。"
+      },
+      "AdminCustomerOut": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "AdminLoginIn": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "title": "Login Id"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id",
+          "password"
+        ],
+        "title": "AdminLoginIn",
+        "description": "DS-API-050 管理ログインの要求。"
+      },
+      "AdminLoginOut": {
+        "properties": {
+          "session_token": {
+            "type": "string",
+            "title": "Session Token"
+          },
+          "staff": {
+            "$ref": "#/components/schemas/AdminStaffOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_token",
+          "staff"
+        ],
+        "title": "AdminLoginOut",
+        "description": "DS-API-050 の応答。BFF が `session_token` を Cookie `asid` にして本文から除く。"
+      },
+      "AdminOrderDetailOut": {
+        "properties": {
+          "order_number": {
+            "type": "string",
+            "title": "Order Number"
+          },
+          "ordered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ordered At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          },
+          "receive_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "store"
+            ],
+            "title": "Receive Method"
+          },
+          "store": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminOrderStoreOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminOrderItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "subtotal": {
+            "type": "integer",
+            "title": "Subtotal"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "title": "Shipping Fee"
+          },
+          "discount": {
+            "type": "integer",
+            "title": "Discount"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "tax_included": {
+            "type": "integer",
+            "title": "Tax Included"
+          },
+          "tax_rate": {
+            "type": "string",
+            "title": "Tax Rate"
+          },
+          "payment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminPaymentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer": {
+            "$ref": "#/components/schemas/AdminCustomerOut"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          },
+          "available_transitions": {
+            "items": {
+              "$ref": "#/components/schemas/TransitionOut"
+            },
+            "type": "array",
+            "title": "Available Transitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_number",
+          "ordered_at",
+          "status",
+          "status_label",
+          "receive_method",
+          "store",
+          "items",
+          "subtotal",
+          "shipping_fee",
+          "discount",
+          "total",
+          "tax_included",
+          "tax_rate",
+          "payment",
+          "customer",
+          "tracking_number",
+          "available_transitions"
+        ],
+        "title": "AdminOrderDetailOut",
+        "description": "DS-API-053a 注文詳細。"
+      },
+      "AdminOrderItemOut": {
+        "properties": {
+          "product_name": {
+            "type": "string",
+            "title": "Product Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "size": {
+            "type": "string",
+            "title": "Size"
+          },
+          "unit_price": {
+            "type": "integer",
+            "title": "Unit Price"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_name",
+          "color",
+          "size",
+          "unit_price",
+          "quantity"
+        ],
+        "title": "AdminOrderItemOut",
+        "description": "明細（注文時点の値）。"
+      },
+      "AdminOrderListItemOut": {
+        "properties": {
+          "order_number": {
+            "type": "string",
+            "title": "Order Number"
+          },
+          "ordered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ordered At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          },
+          "receive_method": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "store"
+            ],
+            "title": "Receive Method"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          },
+          "customer_type": {
+            "type": "string",
+            "enum": [
+              "member",
+              "guest"
+            ],
+            "title": "Customer Type"
+          },
+          "email_masked": {
+            "type": "string",
+            "title": "Email Masked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_number",
+          "ordered_at",
+          "status",
+          "status_label",
+          "receive_method",
+          "total",
+          "item_count",
+          "customer_type",
+          "email_masked"
+        ],
+        "title": "AdminOrderListItemOut",
+        "description": "DS-API-053 一覧の 1 行。氏名・電話・住所は出さない。"
+      },
+      "AdminOrderStoreOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "prefecture": {
+            "type": "string",
+            "title": "Prefecture"
+          },
+          "address": {
+            "type": "string",
+            "title": "Address"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "prefecture",
+          "address"
+        ],
+        "title": "AdminOrderStoreOut",
+        "description": "受け取り店舗。内部 ID・郵便番号は含めない。"
+      },
+      "AdminPaymentOut": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "result"
+        ],
+        "title": "AdminPaymentOut",
+        "description": "最新の決済。カード情報は保存していないので出ない。"
+      },
+      "AdminProductDetailOut": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax",
+            "description": "税込・円"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "ISO 8601（UTC）"
+          },
+          "variants": {
+            "items": {
+              "$ref": "#/components/schemas/AdminVariantOut"
+            },
+            "type": "array",
+            "title": "Variants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "price_incl_tax",
+          "published",
+          "updated_at",
+          "variants"
+        ],
+        "title": "AdminProductDetailOut"
+      },
+      "AdminProductListItemOut": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax",
+            "description": "税込・円"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          },
+          "variant_count": {
+            "type": "integer",
+            "title": "Variant Count"
+          },
+          "total_stock": {
+            "type": "integer",
+            "title": "Total Stock"
+          },
+          "out_of_stock_variants": {
+            "type": "integer",
+            "title": "Out Of Stock Variants",
+            "description": "在庫 0 のバリエーションの数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "price_incl_tax",
+          "published",
+          "variant_count",
+          "total_stock",
+          "out_of_stock_variants"
+        ],
+        "title": "AdminProductListItemOut"
+      },
+      "AdminSettingItemOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Value",
+            "description": "`tax_rate` は `\"0.10\"` の文字列、ほかは整数"
+          },
+          "editable": {
+            "type": "boolean",
+            "title": "Editable"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit",
+            "description": "表示用の単位。無ければ null"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min",
+            "description": "更新できる下限。表示のみのキーは null"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max",
+            "description": "更新できる上限。表示のみのキーは null"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "value",
+          "editable",
+          "unit",
+          "min",
+          "max"
+        ],
+        "title": "AdminSettingItemOut"
+      },
+      "AdminSettingsOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSettingItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AdminSettingsOut"
+      },
+      "AdminStaffOut": {
+        "properties": {
+          "login_id": {
+            "type": "string",
+            "title": "Login Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login_id",
+          "role"
+        ],
+        "title": "AdminStaffOut",
+        "description": "管理者の表示用の項目。内部 ID・パスワードのハッシュは返さない（DS-API-050b も同じ形）。"
+      },
+      "AdminVariantOut": {
+        "properties": {
+          "variant_id": {
+            "type": "integer",
+            "title": "Variant Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "size": {
+            "type": "string",
+            "title": "Size"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "restock_waiting": {
+            "type": "integer",
+            "title": "Restock Waiting",
+            "description": "未通知の再入荷申込の件数。メールアドレスは返さない"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "sku",
+          "color",
+          "size",
+          "stock",
+          "restock_waiting"
+        ],
+        "title": "AdminVariantOut"
       },
       "CartItemIn": {
         "properties": {
@@ -2838,6 +4462,90 @@
         "title": "OrderOut",
         "description": "注文応答（DS-API-022／023／024a 共通。P2-b の新項目は 4.4）。\n\n新項目の既定値は、値を入れる前の実装（P1・P2-a のサービス）でも型が通るようにするための\nもの。C が `build_order_response` で必ず実際の値を入れる:\n`status_label` は `services/order_status.py`（DS-PRC-024a）の表示名、`pickup_code`・\n`tracking_number` は同じ関数が決める表示条件を満たすときだけ値、`store` は店舗受け取り\nのときだけ、`is_member_order` は `orders.member_id` が NULL でないか。"
       },
+      "OrderStatus": {
+        "type": "string",
+        "enum": [
+          "pending_payment",
+          "accepted",
+          "preparing",
+          "shipped",
+          "delivered",
+          "pickup_expired",
+          "cancelled",
+          "payment_failed"
+        ],
+        "title": "OrderStatus",
+        "description": "注文状態 8 値（設計仕様書 5.3）。遷移表は要件定義書 5.5 が正本。"
+      },
+      "OrderStatusUpdateIn": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/OrderStatus"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9-]{1,50}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "OrderStatusUpdateIn",
+        "description": "DS-API-053b の要求。`status` は 8 値のどれか（列挙外・null・数値は 400）。\n\n更新先が `preparing`・`shipped`・`delivered` 以外なら、形は正しいのでサービス層が 422。\n`tracking_number` を付けられるのは配送で更新先が `shipped` のときだけ（サービス層が 422）。"
+      },
+      "OrderStatusUpdateOut": {
+        "properties": {
+          "order_number": {
+            "type": "string",
+            "title": "Order Number"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "status_label": {
+            "type": "string",
+            "title": "Status Label"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number"
+          },
+          "available_transitions": {
+            "items": {
+              "$ref": "#/components/schemas/TransitionOut"
+            },
+            "type": "array",
+            "title": "Available Transitions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_number",
+          "status",
+          "status_label",
+          "tracking_number",
+          "available_transitions"
+        ],
+        "title": "OrderStatusUpdateOut",
+        "description": "DS-API-053b の応答（形は DS-API-053a の該当部分と同じ）。"
+      },
       "OrderStoreOut": {
         "properties": {
           "name": {
@@ -2861,6 +4569,78 @@
         ],
         "title": "OrderStoreOut",
         "description": "注文の受け取り店舗（店舗受け取りのときだけ）。内部 ID・郵便番号は含めない（4.4）。"
+      },
+      "Page_AdminOrderListItemOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminOrderListItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "per_page",
+          "total",
+          "has_more"
+        ],
+        "title": "Page[AdminOrderListItemOut]"
+      },
+      "Page_AdminProductListItemOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminProductListItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "per_page",
+          "total",
+          "has_more"
+        ],
+        "title": "Page[AdminProductListItemOut]"
       },
       "PasswordResetConfirmIn": {
         "properties": {
@@ -3142,6 +4922,69 @@
         ],
         "title": "ProductListResponse"
       },
+      "ProductUpdateIn": {
+        "properties": {
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Price Incl Tax"
+          },
+          "expected_published": {
+            "type": "boolean",
+            "title": "Expected Published"
+          },
+          "expected_price_incl_tax": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Expected Price Incl Tax"
+          }
+        },
+        "type": "object",
+        "title": "ProductUpdateIn",
+        "description": "`published`・`price_incl_tax` のうち変更するものと、対応する `expected_*`。\n\n- 変更する項目には対応する `expected_*` が必須（無ければ 400 `required`）\n- 変更する項目が 1 つもなければ 400（`name: \"body\"`、`required`）\n- 明示的な null は型違い（400）。定義外の項目は無視する（Pydantic の既定）\n- 価格の業務の範囲（1〜1,000,000）はここでは検査しない（サービスが 404 のあとで 422 にする）"
+      },
+      "ProductUpdateOut": {
+        "properties": {
+          "product_id": {
+            "type": "integer",
+            "title": "Product Id"
+          },
+          "published": {
+            "type": "boolean",
+            "title": "Published"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed",
+            "description": "値が変わったか。同じ値なら更新も監査ログもしない"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At",
+            "description": "ISO 8601（UTC）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "product_id",
+          "published",
+          "price_incl_tax",
+          "changed",
+          "updated_at"
+        ],
+        "title": "ProductUpdateOut"
+      },
       "PublicSettingsOut": {
         "properties": {
           "tax_rate": {
@@ -3390,6 +5233,135 @@
         ],
         "title": "SearchResponse"
       },
+      "SettingsUpdateIn": {
+        "properties": {
+          "tax_rate": {
+            "type": "string",
+            "pattern": "^[0-9]\\.[0-9]{2}$",
+            "title": "Tax Rate"
+          },
+          "shipping_fee": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Shipping Fee"
+          },
+          "free_shipping_threshold": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Free Shipping Threshold"
+          },
+          "expected_tax_rate": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Expected Tax Rate"
+          },
+          "expected_shipping_fee": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Expected Shipping Fee"
+          },
+          "expected_free_shipping_threshold": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Expected Free Shipping Threshold"
+          }
+        },
+        "type": "object",
+        "title": "SettingsUpdateIn",
+        "description": "変更するキーと、対応する `expected_<key>`（画面が表示していた値）。"
+      },
+      "SettingsUpdateOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminSettingItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Changed",
+            "description": "値が変わったキー。全項目が同じ値なら空配列"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "changed"
+        ],
+        "title": "SettingsUpdateOut"
+      },
+      "StockUpdateIn": {
+        "properties": {
+          "stock": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": -2147483647.0,
+            "title": "Stock"
+          },
+          "expected_stock": {
+            "type": "integer",
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Expected Stock",
+            "description": "画面が表示していた在庫"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stock",
+          "expected_stock"
+        ],
+        "title": "StockUpdateIn",
+        "description": "絶対値の SET。`stock` の業務の範囲（0〜9999）はサービスが 422 にする。"
+      },
+      "StockUpdateOut": {
+        "properties": {
+          "variant_id": {
+            "type": "integer",
+            "title": "Variant Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "stock": {
+            "type": "integer",
+            "title": "Stock"
+          },
+          "previous_stock": {
+            "type": "integer",
+            "title": "Previous Stock"
+          },
+          "changed": {
+            "type": "boolean",
+            "title": "Changed"
+          },
+          "restock_waiting": {
+            "type": "integer",
+            "title": "Restock Waiting",
+            "description": "在庫が 0 から 1 以上になったときだけ、更新の時点の未通知の申込件数（他は 0）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant_id",
+          "sku",
+          "stock",
+          "previous_stock",
+          "changed",
+          "restock_waiting"
+        ],
+        "title": "StockUpdateOut"
+      },
       "StoreListOut": {
         "properties": {
           "items": {
@@ -3469,6 +5441,30 @@
           "items"
         ],
         "title": "SuggestResponse"
+      },
+      "TransitionOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "accepts_tracking_number": {
+            "type": "boolean",
+            "title": "Accepts Tracking Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "label",
+          "accepts_tracking_number"
+        ],
+        "title": "TransitionOut",
+        "description": "次に更新できる状態（`available_transitions` の 1 件）。"
       },
       "ValidationError": {
         "properties": {

@@ -4,9 +4,17 @@
     uv run python -m app.seed --reset    # 全 21 表を TRUNCATE してから投入（確認あり）
     uv run python -m app.seed --reset --yes
     uv run python -m app.seed --only-p2b # 会員・店舗・レビューだけを、各表が空のときに限って投入
+    uv run python -m app.seed --only-p2c # 管理者（staff）だけを、表が空のときに限って投入
+    uv run python -m app.seed --only-p2c --update-staff-password  # 管理者のパスワードだけ更新
 
-`--only-p2b` は、P1・P2-a の seed が入った共用の講義 DB へ P2-b の seed だけを足す手段
-（共用 DB では `--reset` を使わない。ADR-0002）。商品（products）が先に入っている必要がある。
+`--only-p2b`・`--only-p2c` は、P1・P2-a の seed が入った共用の講義 DB へ P2-b・P2-c の seed だけを
+足す手段（共用 DB では `--reset` を使わない。ADR-0002）。`--only-p2b` は商品（products）が
+先に入っている必要がある。
+
+管理者の seed（P2 追補c 5.7・DS-DEC-112）: login_id は `demo-staff`（環境変数
+`SEED_STAFF_LOGIN_ID` で置き換え）、パスワードは `seed_data.DEMO_STAFF_PASSWORD`（ダミー値。環境変数
+`SEED_STAFF_PASSWORD` で置き換え）。`APP_ENV=production` では `SEED_STAFF_PASSWORD` が必須で
+12 文字以上、無ければ管理者を入れない。
 
 接続先は環境変数 `DATABASE_URL`（`app.core.config`）。Alembic のマイグレーションとは分離し、
 schema は先に `alembic upgrade head` で作っておく（本モジュールは DDL を発行しない）。
@@ -19,11 +27,12 @@ import argparse
 import asyncio
 import random
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from argon2 import PasswordHasher
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
@@ -45,10 +54,12 @@ from app.models import (
     ProductImage,
     Review,
     ReviewFit,
+    Staff,
     Store,
     SystemSetting,
     Variant,
 )
+from app.services.admin_auth import is_valid_login_id, normalize_login_id
 
 # TRUNCATE の順（FK の子 → 親）。FOREIGN_KEY_CHECKS=0 で囲うが、順も守っておく
 TRUNCATE_ORDER: tuple[str, ...] = (
@@ -103,6 +114,7 @@ COUNT_TABLES: tuple[str, ...] = (
     "members",
     "stores",
     "reviews",
+    "staff",
 )
 
 
@@ -136,6 +148,43 @@ def member_seed_password(settings: Settings) -> str | None:
     if settings.is_production:
         return None
     return seed_data.DEMO_MEMBER_PASSWORD
+
+
+@dataclass(frozen=True)
+class StaffSeedCredentials:
+    """seed する管理者の login_id（正規化済み）と、NFKC 正規化済みのパスワード。"""
+
+    login_id: str
+    password: str
+
+
+def staff_seed_credentials(settings: Settings) -> tuple[StaffSeedCredentials | None, str | None]:
+    """seed する管理者の資格情報を決める（DS-DEC-112）。`(資格情報, 投入しない理由)`。
+
+    - login_id: 環境変数 `SEED_STAFF_LOGIN_ID`、無ければ `seed_data.STAFF[0].login_id`。
+      NFKC・小文字化のあと DS-API-050 の形式に合わないときは投入しない
+    - パスワード: 環境変数 `SEED_STAFF_PASSWORD` があればそれ、無ければ
+      `seed_data.DEMO_STAFF_PASSWORD`。ハッシュ化の前に NFKC 正規化する（ログインの検証と同じ）
+    - `APP_ENV=production` では `SEED_STAFF_PASSWORD` が必須で、NFKC 正規化後に 12 文字以上。
+      無い・短いときは投入しない（既知のパスワードの管理者を公開環境に残さない。点検の B-07）
+    """
+    raw_login_id = settings.SEED_STAFF_LOGIN_ID.strip() or seed_data.STAFF[0].login_id
+    if not is_valid_login_id(raw_login_id):
+        return None, "SEED_STAFF_LOGIN_ID の形式が正しくないため、管理者の seed を行いません"
+    login_id = normalize_login_id(raw_login_id)
+
+    explicit = unicodedata.normalize("NFKC", settings.SEED_STAFF_PASSWORD)
+    if settings.is_production:
+        if len(explicit) < seed_data.STAFF_PASSWORD_MIN_LENGTH_PRODUCTION:
+            return None, (
+                "APP_ENV=production で SEED_STAFF_PASSWORD が無い、または"
+                f" {seed_data.STAFF_PASSWORD_MIN_LENGTH_PRODUCTION} 文字未満のため、"
+                "管理者の seed を行いません"
+            )
+        return StaffSeedCredentials(login_id, explicit), None
+    if explicit:
+        return StaffSeedCredentials(login_id, explicit), None
+    return StaffSeedCredentials(login_id, seed_data.DEMO_STAFF_PASSWORD), None
 
 
 async def count_rows(
@@ -252,6 +301,58 @@ async def _insert_p2b(
     return inserted, notes
 
 
+def _warn(message: str) -> None:
+    """管理者の seed を行わなかった理由を標準エラーに出す（DS-DEC-112）。
+
+    `SeedResult.notes` には入れない（P2-b の会員の seed の補足と混ぜず、他の seed は続ける）。
+    """
+    print(f"[seed] 注意: {message}", file=sys.stderr)
+
+
+async def _insert_p2c(session: AsyncSession) -> dict[str, int]:
+    """P2-c の seed（staff 1 件。DS-DEC-112）。`staff` が空のときに限って投入する。
+
+    資格情報が決まらない（production で `SEED_STAFF_PASSWORD` が無い・短い、login_id の形式不正）
+    ときは投入せず、理由を標準エラーに出す（他の seed は続ける）。
+    """
+    inserted = {"staff": 0}
+    if await _table_is_empty(session, Staff):
+        creds, reason = staff_seed_credentials(get_settings())
+        if creds is None:
+            _warn(reason or "管理者の seed を行いません")
+        else:
+            session.add(
+                Staff(
+                    login_id=creds.login_id,
+                    password_hash=_hash_password(creds.password),
+                    role=seed_data.STAFF[0].role,
+                )
+            )
+            inserted["staff"] = 1
+    await session.flush()
+    return inserted
+
+
+async def _update_staff_password(session: AsyncSession) -> int:
+    """`--update-staff-password`: 同じ login_id の行のパスワードのハッシュだけを更新する。
+
+    更新した件数を返す。更新しなかった理由は標準エラーに出す。
+    """
+    creds, reason = staff_seed_credentials(get_settings())
+    if creds is None:
+        _warn(reason or "管理者のパスワードを更新しません")
+        return 0
+    result = await session.execute(
+        update(Staff)
+        .where(Staff.login_id == creds.login_id)
+        .values(password_hash=_hash_password(creds.password))
+    )
+    if result.rowcount == 0:
+        _warn("同じ login_id の管理者がいないため、パスワードを更新しませんでした")
+        return 0
+    return int(result.rowcount)
+
+
 async def _insert_all(session: AsyncSession) -> list[str]:
     # categories（親 → 子。slug → id を控える）
     category_ids: dict[str, int] = {}
@@ -326,19 +427,43 @@ async def _insert_all(session: AsyncSession) -> list[str]:
 
     # P2-b: 会員・店舗・レビュー（DS-DEC-87）
     _, notes = await _insert_p2b(session, product_ids)
+    # P2-c: 管理者（DS-DEC-112）。投入しない理由は標準エラーに出す（`notes` には入れない）
+    await _insert_p2c(session)
     return notes
 
 
-async def seed(engine: AsyncEngine, *, reset: bool = False, only_p2b: bool = False) -> SeedResult:
+async def seed(
+    engine: AsyncEngine,
+    *,
+    reset: bool = False,
+    only_p2b: bool = False,
+    only_p2c: bool = False,
+    update_staff_password: bool = False,
+) -> SeedResult:
     """seed を投入する。
 
     - `reset=False`（既定）: products に 1 行でもあれば何もせず `skipped=True` を返す
     - `reset=True`: 全 21 表を TRUNCATE してから投入
     - `only_p2b=True`: 会員・店舗・レビューだけを、各表が空のときに限って投入する
       （2 回目は何もしない。`reset` とは併用できない）。投入が 0 件なら `skipped=True`
+    - `only_p2c=True`: 管理者（staff）だけを、表が空のときに限って投入する（2 回目は何もしない）。
+      `update_staff_password=True` を足すと、同じ login_id の行のパスワードのハッシュだけを更新する
+      （他の列は変えない）。`reset`・`only_p2b` とは併用できない
     """
-    if reset and only_p2b:
-        raise ValueError("reset と only_p2b は併用できません")
+    if sum((reset, only_p2b, only_p2c)) > 1:
+        raise ValueError("reset・only_p2b・only_p2c は併用できません")
+    if update_staff_password and not only_p2c:
+        raise ValueError("update_staff_password は only_p2c とだけ併用できます")
+
+    if only_p2c:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            if update_staff_password:
+                changed = await _update_staff_password(session)
+            else:
+                changed = sum((await _insert_p2c(session)).values())
+            await session.commit()
+        async with engine.connect() as conn:
+            return SeedResult(skipped=changed == 0, counts=await count_rows(conn))
 
     if only_p2b:
         async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -398,11 +523,27 @@ async def _amain(args: argparse.Namespace) -> int:
         url, pool_size=settings.DB_POOL_SIZE, max_overflow=settings.DB_MAX_OVERFLOW
     )
     try:
-        result = await seed(engine, reset=args.reset, only_p2b=args.only_p2b)
+        result = await seed(
+            engine,
+            reset=args.reset,
+            only_p2b=args.only_p2b,
+            only_p2c=args.only_p2c,
+            update_staff_password=args.update_staff_password,
+        )
     finally:
         await engine.dispose()
 
-    if result.skipped and args.only_p2b:
+    if args.only_p2c and args.update_staff_password:
+        if result.skipped:
+            print(f"[seed] DB '{db_name}': 管理者のパスワードは更新しませんでした")
+        else:
+            print(f"[seed] DB '{db_name}': 管理者のパスワードを更新しました")
+    elif result.skipped and args.only_p2c:
+        print(
+            f"[seed] DB '{db_name}': 管理者の表が空ではない、または投入できないため"
+            f"何もしませんでした（{_format_counts(result.counts)}）"
+        )
+    elif result.skipped and args.only_p2b:
         print(
             f"[seed] DB '{db_name}': 会員・店舗・レビューの表がすべて空ではないため"
             f"何もしませんでした（{_format_counts(result.counts)}）"
@@ -431,10 +572,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="会員・店舗・レビューだけを、各表が空のときに限って投入する（--reset とは併用不可）",
     )
+    parser.add_argument(
+        "--only-p2c",
+        action="store_true",
+        help="管理者（staff）だけを、表が空のときに限って投入する（他の --reset 等とは併用不可）",
+    )
+    parser.add_argument(
+        "--update-staff-password",
+        action="store_true",
+        help="--only-p2c と併用: 同じ login_id の管理者のパスワードのハッシュだけを更新する",
+    )
     parser.add_argument("--yes", action="store_true", help="--reset の確認プロンプトを省略する")
     args = parser.parse_args(argv)
-    if args.reset and args.only_p2b:
-        parser.error("--reset と --only-p2b は併用できません")
+    if sum((args.reset, args.only_p2b, args.only_p2c)) > 1:
+        parser.error("--reset・--only-p2b・--only-p2c は併用できません")
+    if args.update_staff_password and not args.only_p2c:
+        parser.error("--update-staff-password は --only-p2c と一緒に指定してください")
     return asyncio.run(_amain(args))
 
 

@@ -15,6 +15,10 @@
  *   （`RATE_LIMIT_API_PER_MIN`・`RATE_LIMIT_PAGE_PER_MIN` で上書き）。超えたら 429 `{"code":"rate_limited"}` と
  *   `Retry-After`。Basic 認証より前に判定し、総当たりも数える。429 のとき FastAPI は呼ばない。
  *   カウンタはこのプロセスのメモリ内（lib/server/rate-limit.ts。複数インスタンスでは共有されない）
+ * - 管理画面の枠の切り替え（P2 追補c DS-DEC-122）: `/admin` 配下のリクエストにだけリクエストヘッダー `x-admin-area: 1` を付けて下流（ルートレイアウト）へ渡す。
+ *   それ以外のリクエストでは、利用者が付けた同名のヘッダーを取り除く（顧客向けのページの枠を利用者が消せないように）。
+ *   `NextResponse.next({ request: { headers } })` はブラウザへは出ず、サーバー側のページ・Route Handler にだけ届く
+ *   （同梱ドキュメント `next-response.md` の「forward headers upstream」）。Basic 認証の通過時もこの経路を通す
  * - 静的アセット（`_next/static`・`_next/image`・favicon 等）は対象外にする。理由は
  *   公開追補 設計仕様書 7 章参照（ハッシュ付きファイル名で認証済み HTML 経由でしか
  *   URL を知り得ず、内容もビルド成果物であって個人情報・非公開の業務データを含まないため）
@@ -22,6 +26,7 @@
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ADMIN_AREA_HEADER, isAdminPath } from "@/lib/admin-types";
 import { parseBasicAuthConfig, verifyBasicAuthHeader } from "@/lib/basic-auth";
 import { resolveClientIp } from "@/lib/client-ip";
 import { parseRateLimitEnv, parseTrustedProxyHops } from "@/lib/env-validation";
@@ -43,6 +48,17 @@ export const config = {
 
 const WWW_AUTHENTICATE = 'Basic realm="GUapp demo", charset="UTF-8"';
 
+/**
+ * 下流へ渡すリクエストヘッダーを組んで通す。`/admin` 配下だけ `x-admin-area: 1` を付け、それ以外は利用者が付けた値を除く。
+ * 他のリクエストヘッダーは変えない。
+ */
+function passThrough(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  if (isAdminPath(request.nextUrl.pathname)) headers.set(ADMIN_AREA_HEADER, "1");
+  else headers.delete(ADMIN_AREA_HEADER);
+  return NextResponse.next({ request: { headers } });
+}
+
 export function proxy(request: NextRequest): Response {
   const { pathname } = request.nextUrl;
   const ip = resolveClientIp(request.headers, { trustedProxyHops });
@@ -60,12 +76,12 @@ export function proxy(request: NextRequest): Response {
   }
 
   if (basicAuthConfig === null) {
-    return NextResponse.next();
+    return passThrough(request);
   }
 
   const header = request.headers.get("authorization");
   if (verifyBasicAuthHeader(header, basicAuthConfig.user, basicAuthConfig.password)) {
-    return NextResponse.next();
+    return passThrough(request);
   }
 
   return new Response(null, {
