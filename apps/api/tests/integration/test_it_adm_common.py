@@ -160,7 +160,12 @@ async def test_it_adm_02b_a_valid_staff_session_passes_the_gate(
     token = await ah.make_admin_session(engine, staff_id)
     for method, path in guarded_routes(admin_app):
         res = await call(client, method, path, ah.admin_headers(token))
-        assert res.status_code in {200, 501}, (method, path, res.status_code, res.text)
+        # 注文 API（C-3）は実装済み。空の本文は 400、存在しない注文番号は 404 になる
+        allowed = {200, 501} | ({400, 404} if f"{ADMIN_PREFIX}/orders" in path else set())
+        # 商品・在庫・設定 API（C-2）も実装済み。PATCH の空の本文は 400
+        if any(f"{ADMIN_PREFIX}{seg}" in path for seg in ("/products", "/variants", "/settings")):
+            allowed |= {400}
+        assert res.status_code in allowed, (method, path, res.status_code, res.text)
         if res.status_code == 501:
             assert res.json() == {"code": "not_implemented"}
 
@@ -209,7 +214,8 @@ async def test_it_adm_04_security_headers_on_every_status(
         (404, "GET", f"{ADMIN_PREFIX}/no-such-route", ah.admin_headers(token)),
         (409, "GET", f"{ADMIN_PREFIX}/_probe/409", ah.admin_headers(token)),
         (422, "GET", f"{ADMIN_PREFIX}/_probe/422", ah.admin_headers(token)),
-        (501, "GET", f"{ADMIN_PREFIX}/products", ah.admin_headers(token)),
+        (200, "GET", f"{ADMIN_PREFIX}/products", ah.admin_headers(token)),  # 実ルート（C-2）
+        (404, "GET", f"{ADMIN_PREFIX}/products/999999", ah.admin_headers(token)),
     ]
     for status, method, path, headers in cases:
         res = await call(client, method, path, headers)
