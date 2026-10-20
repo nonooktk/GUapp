@@ -27,6 +27,7 @@ from app.routers import (
     stores,
 )
 from app.routers import settings as settings_router
+from app.routers.admin import router as admin_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -87,6 +88,9 @@ def build_protected_router(*extra: APIRouter) -> APIRouter:
     api.include_router(me_orders.router)
     api.include_router(stores.router)
     api.include_router(restock.router)
+    # P2-c: 管理 API（DS-API-050〜053b）。ログイン・ログアウトを除き、ルーター単位で
+    # `require_staff` を掛けた既定拒否（DS-DEC-109）。骨格（501）は C-2・C-3 が埋める
+    api.include_router(admin_router)
     for router in extra:
         api.include_router(router)
     return api

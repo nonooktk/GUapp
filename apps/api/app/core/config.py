@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     # （seed_data の定数を使う）。`APP_ENV=production` では必須で、無ければ会員の seed を行わない
     SEED_MEMBER_PASSWORD: str = ""
 
+    # ── P2-c（設計仕様書 P2 追補c 8.1・DS-DEC-112）─────────────────────────────
+    # seed の管理者のパスワード・login_id（seed 実行時のみ）。開発・テストは未設定でよい
+    # （seed_data の定数を使う）。`APP_ENV=production` では `SEED_STAFF_PASSWORD` が必須で
+    # 12 文字以上。無い、または短ければ管理者の seed を行わない（管理画面にログインできない状態）
+    SEED_STAFF_PASSWORD: str = ""
+    SEED_STAFF_LOGIN_ID: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
