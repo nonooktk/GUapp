@@ -82,3 +82,31 @@ uv run --with openai --with pillow python scripts/images/contact_sheet.py
 | `generate.py` | 画像生成。`--only` / `--force` / `--dry-run` / `--budget-usd` / 1 回だけ再試行 / ログ追記 |
 | `process.py` | 切り抜き・縮小・JPEG 化（80KB 以下）・メタデータなし |
 | `contact_sheet.py` | 番号と商品名つきの確認用 HTML |
+| `generate_hero.py` | トップの NEW ARRIVALS 帯の背景画像（秋、3 案）。`gen` / `process` / `sheet` の 3 つの段階を持つ（5 章） |
+
+## 5. トップのヒーロー画像（NEW ARRIVALS の背景）
+
+トップページの NEW ARRIVALS の帯に敷く、秋らしい背景画像を 3 案作る道具である。商品画像とは別の `generate_hero.py` を使う。
+`generate.py` の費用見積もりと実費計算の関数を流用し、ログと予算は別にしてある（`out/hero/log.jsonl`）。
+
+- モデルは `gpt-image-2.5-flare`、品質は `medium`、サイズは `1920x800`（2.4:1）、1 案 1 枚の計 3 枚。
+- 3 案は A（紅葉の並木道）、B（ニット・コート・マフラーの平置き）、C（夕暮れの街角）。画面の中央に白い文字とボタンを重ねるため、依頼文で「中央はすっきり、主題は左右」と指定している。
+- 加工は、中央を基準に 2.4:1 へ切り抜き、幅 1920 の JPEG（品質 80 から下げて 250KB 以下）にする。
+
+```bash
+# 1) API を呼ばずに依頼文と見積もりを見る
+uv run --with openai --with pillow python scripts/images/generate_hero.py gen --dry-run
+
+# 2) 生成（累計の上限は --budget-usd。既にある案は飛ばす。作り直しは --only a --force）
+uv run --env-file /Users/mitsuru/GUapp/apps/api/.env --with openai --with pillow python scripts/images/generate_hero.py gen --budget-usd 0.6
+
+# 3) 加工して apps/web/public/hero/autumn-{a,b,c}.jpg に書く
+uv run --with openai --with pillow python scripts/images/generate_hero.py process
+
+# 4) 3 案を横に並べた確認画像（out/hero/contact_sheet.jpg）
+uv run --with openai --with pillow python scripts/images/generate_hero.py sheet
+```
+
+- API に `size 1920x800` を拒否されたら、`gen --size 1536x1024` で作る。`process` が中央基準で 2.4:1 に切り抜く。
+- 生の PNG・確認画像・ログは `out/hero/` に置く（`out/` は `.gitignore` で除外済み）。コミットするのは `apps/web/public/hero/` の JPEG だけだ。
+- 使う案は `apps/web/app/page.tsx` の定数 `HERO_IMAGE` の 1 行で切り替える（`/hero/autumn-a.jpg`・`-b`・`-c`）。

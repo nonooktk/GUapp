@@ -9,7 +9,7 @@ import { getContents } from "@/lib/server/contents";
 
 /**
  * ホーム DS-SCR-001（設計仕様書 6.3・U-01〜U-03、デザイン基準 v1 4 章 SCR-001）。
- * トップ画像（プレースホルダー）→ 性別カテゴリ（375px で 3 列）→ おすすめ商品（P1 は新着 8 件 = DS-API-002 page=1・per_page=8。
+ * トップ画像（AI 生成の秋の背景画像。`HERO_IMAGE` で 3 案を切り替え）→ 性別カテゴリ（375px で 3 列）→ おすすめ商品（P1 は新着 8 件 = DS-API-002 page=1・per_page=8。
  * 375px 2 列／1280px 4 列）→ お知らせ（P2-a: DS-API-005 の `news` 上位 3 件。設計仕様書 P2 追補a 6.3）。
  * FastAPI 停止時はおすすめ・お知らせのどちらも「読み込めませんでした」。
  */
@@ -17,6 +17,12 @@ import { getContents } from "@/lib/server/contents";
 export const dynamic = "force-dynamic";
 
 const HOME_NEWS_LIMIT = 3;
+
+/**
+ * トップ画像の背景（public/hero/ の AI 生成 3 案。scripts/images/generate_hero.py で作成）。
+ * 切り替えるときはこの 1 行だけ変える: autumn-a.jpg（紅葉の並木道）／autumn-b.jpg（ニットとコートの平置き）／autumn-c.jpg（夕暮れの街角）。
+ */
+const HERO_IMAGE = "/hero/autumn-a.jpg";
 
 const headingClass = "text-xl font-light tracking-heading";
 
@@ -29,9 +35,12 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-12">
-      {/* トップ画像（U-01）: P1 はプレースホルダー（GU の写真・文言は使わない） */}
+      {/* トップ画像（U-01）: 背景は AI 生成の秋の画像（HERO_IMAGE）。暗い膜を重ねて白い文字を読ませる。画像が読めないときはグラデーションが残る */}
       <section aria-label="特集" className="relative overflow-hidden rounded-sm bg-linear-to-br from-fg to-fg-muted">
-        <div className="flex h-48 flex-col items-center justify-center px-4 text-center text-bg sm:h-72">
+        {/* eslint-disable-next-line @next/next/no-img-element -- 他の画像（ProductCard）と同じく <img> で出す。トップの画像なので先に読み込む */}
+        <img src={HERO_IMAGE} alt="" fetchPriority="high" className="absolute inset-0 size-full object-cover object-center" />
+        <div aria-hidden="true" className="absolute inset-0 bg-black/45" />
+        <div className="relative z-10 flex h-48 flex-col items-center justify-center px-4 text-center text-bg sm:h-72">
           <p className="text-xs tracking-heading">2026 AUTUMN</p>
           <p className="mt-2 text-2xl font-light tracking-heading">NEW ARRIVALS</p>
           <Link href="/products" className={buttonClass({ variant: "secondary", size: "md", className: "mt-6 focus-visible:outline-bg" })}>
