@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import OrderComplete from "@/components/OrderComplete";
 import { LAST_ORDER_KEY } from "@/lib/checkout-session";
-import { formatPickupCode } from "@/lib/format";
+import { formatPickupCode, formatStoreAddress } from "@/lib/format";
 import { makeOrder, STORE_PATCH } from "./helpers/fixtures";
 
 // テスト設計書 UT-WEB-21（注文完了の受け取りコード。DS-SCR-006）。設計仕様書 6.8・DS-PRC-014-3・AT-15
@@ -23,6 +23,11 @@ describe("UT-WEB-21 注文完了の受け取りコード", () => {
     expect(formatPickupCode("ABCD2345")).toBe("ABCD-2345");
     expect(formatPickupCode("ABC")).toBe("ABC");
     expect(formatPickupCode("ABCD-2345")).toBe("ABCD-2345");
+  });
+
+  it("formatStoreAddress: API の住所が都道府県から始まるなら重ねない（seed は「東京都千代田区…」）。始まらなければ前に付ける", () => {
+    expect(formatStoreAddress({ prefecture: "東京都", address: "東京都千代田区デモ町1-2-3" })).toBe("東京都千代田区デモ町1-2-3");
+    expect(formatStoreAddress({ prefecture: "東京都", address: "千代田区デモ町1-2-3" })).toBe("東京都 千代田区デモ町1-2-3");
   });
 
   it("店舗受け取り: コードを ABCD-2345 の形で大きく表示し、店舗名・住所・案内を出す。送料は ¥0 と注記", async () => {

@@ -1,5 +1,5 @@
 import Price from "@/components/Price";
-import { formatNumber, formatPickupCode } from "@/lib/format";
+import { formatNumber, formatPickupCode, formatStoreAddress } from "@/lib/format";
 import type { OrderItem, OrderStore } from "@/lib/types";
 
 /**
@@ -168,7 +168,7 @@ export function ShippingSummary(p: ShippingSummaryProps) {
           <p>{receiveMethodLabel(p.receive_method)}</p>
           {isStore && p.store && (
             <p className="mt-0.5 break-words text-fg-muted" data-testid="store-info">
-              {p.store.name}（{p.store.prefecture} {p.store.address}）
+              {p.store.name}（{formatStoreAddress(p.store)}）
             </p>
           )}
         </dd>

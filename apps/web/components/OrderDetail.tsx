@@ -2,6 +2,7 @@ import Link from "next/link";
 import { buttonClass } from "@/components/Button";
 import { AmountSummary, OrderItemsList, PickupCodeBlock, ShippingSummary } from "@/components/OrderSummary";
 import { formatJst } from "@/lib/datetime";
+import { formatStoreAddress } from "@/lib/format";
 import type { OrderResponse, OrderStatus } from "@/lib/types";
 
 /**
@@ -90,7 +91,7 @@ export default function OrderDetail({ order }: { order: OrderResponse }) {
             <p className="text-sm" data-testid="store-info">
               <span className="font-bold">{order.store.name}</span>
               <span className="mt-0.5 block break-words text-fg-muted">
-                {order.store.prefecture} {order.store.address}
+                {formatStoreAddress(order.store)}
               </span>
             </p>
           )}

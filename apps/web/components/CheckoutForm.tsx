@@ -17,6 +17,7 @@ import {
   type CheckoutFormValues,
 } from "@/lib/checkout-validation";
 import { carryReceive, CHECKOUT_KEY, clearCheckoutSession, saveCheckoutSession, type CheckoutSession } from "@/lib/checkout-session";
+import { formatStoreAddress } from "@/lib/format";
 import { DEMO_CHECKOUT_FORM, DEMO_NOTICE_BODY, DEMO_NOTICE_TITLE } from "@/lib/demo-defaults";
 import { parseJsonOrNull, useHydrated, useSessionItem } from "@/lib/client/use-session-item";
 import { CartApiError } from "@/lib/client/cart-api";
@@ -319,7 +320,7 @@ function CheckoutFormInner({
             <option value="">選択してください</option>
             {stores.map((st) => (
               <option key={st.code} value={st.code}>
-                {st.name}（{st.prefecture} {st.address}）
+                {st.name}（{formatStoreAddress(st)}）
               </option>
             ))}
           </SelectField>
