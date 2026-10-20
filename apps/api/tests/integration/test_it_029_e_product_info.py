@@ -1,4 +1,4 @@
-"""IT-029-31〜34: 文脈の商品への質問（intent=product_info。DS-DEC-107）。
+"""IT-029-31〜34: 文脈の商品への質問（intent=product_info。DS-DEC-127）。
 
 商品詳細の「この商品について質問する」から `product_id` 付きで送ったとき、DB の情報が資料として
 渡り、資料に基づく回答だけが通ること。MySQL（guapp_test）＋ seed 必須。LLM は台本つきのアダプタ。
@@ -78,7 +78,7 @@ async def test_it_029_32_info_missing_from_the_facts_is_not_invented(chat_ctx: C
     assert made_up["sources"][0]["href"] == f"/products/{pid}"
 
     # 数値を含まない創作は、決定的なコードでは止められない
-    # （固定指示の R12 とモデルで防ぐ。DS-DEC-107 の割り切り）
+    # （固定指示の R12 とモデルで防ぐ。DS-DEC-127 の割り切り）
     unchecked = (await send(client, "洗濯方法を教えて", product_id=pid)).json()["reply"]
     assert unchecked["intent"] == "product_info"
 

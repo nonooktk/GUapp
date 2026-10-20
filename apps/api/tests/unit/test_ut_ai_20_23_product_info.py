@@ -1,4 +1,4 @@
-"""UT-AI-20〜23: 文脈の商品への質問（intent=product_info。設計仕様書 P2 追補d DS-DEC-107）。
+"""UT-AI-20〜23: 文脈の商品への質問（intent=product_info。設計仕様書 P2 追補d DS-DEC-127）。
 
 20 build_viewing_product（資料の中身・タグの無害化・切り詰め）／21 finalize_reply の product_info／
 22 StubAdapter の product_info／23 固定指示の product_info。DB・ネットワーク不要。
