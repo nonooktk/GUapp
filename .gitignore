@@ -55,3 +55,6 @@ Thumbs.db
 
 # Agent の worktree 分離（isolation: worktree）の置き場。別ブランチの作業ツリーなので追跡しない
 .claude/worktrees/
+
+# 商品画像の生成作業（生の PNG と費用ログはコミットしない。最終の JPEG だけコミットする）
+scripts/images/out/
