@@ -17,6 +17,7 @@ const getCategories = vi.fn(async () => ({ categories: [] }));
 vi.mock("@/lib/server/catalog", () => ({
   getCategories: () => getCategories(),
   loadOrNull: async (p: Promise<unknown>) => p,
+  getImageBaseUrl: () => "http://localhost:8000/images",
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
@@ -53,6 +54,8 @@ describe("UT-WEB-52 ルートレイアウトの分離", () => {
     expect(html).not.toContain("GU ホーム");
     expect(html).not.toContain("期間限定で公開");
     expect(html).not.toContain('id="main"'); // main は /admin のレイアウト側が出す
+    // F-029: 管理画面には AI アシスタントのボタンもパネルも出さない
+    expect(html).not.toContain("AI アシスタントに相談する");
     expect(getCategories).not.toHaveBeenCalled();
     expect(html).toContain('lang="ja"');
   });
@@ -64,6 +67,7 @@ describe("UT-WEB-52 ルートレイアウトの分離", () => {
     expect(html).toContain("期間限定で公開");
     expect(html).toContain('id="main"');
     expect(html).toContain('id="page-body"');
+    expect(html).toContain("AI アシスタントに相談する"); // F-029: 顧客向けの枠にはチャットのボタンを出す
     expect(getCategories).toHaveBeenCalledTimes(1);
   });
 

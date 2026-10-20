@@ -2950,6 +2950,130 @@
           }
         }
       }
+    },
+    "/api/v1/chat/status": {
+      "get": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "DS-API-040 チャットの状態",
+        "operationId": "chat_status_api_v1_chat_status_get",
+        "parameters": [
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStatusOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/chat/messages": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "DS-API-041 質問の送信と回答（DS-PRC-029-1）",
+        "operationId": "post_chat_message_api_v1_chat_messages_post",
+        "parameters": [
+          {
+            "name": "X-Chat-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Chat-Token"
+            }
+          },
+          {
+            "name": "X-Internal-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatMessageIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3784,6 +3908,280 @@
           "children"
         ],
         "title": "CategoryOut"
+      },
+      "ChatGuideLinkOut": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "href"
+        ],
+        "title": "ChatGuideLinkOut"
+      },
+      "ChatGuideOut": {
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/ChatGuideLinkOut"
+            },
+            "type": "array",
+            "title": "Links"
+          }
+        },
+        "type": "object",
+        "required": [
+          "links"
+        ],
+        "title": "ChatGuideOut"
+      },
+      "ChatMessageIn": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Message"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatMessageIn"
+      },
+      "ChatMessageOut": {
+        "properties": {
+          "chat_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Token",
+            "description": "新規セッションのときだけ値が入る（BFF が除く）"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/ChatReplyOut"
+          },
+          "turns_used": {
+            "type": "integer",
+            "title": "Turns Used"
+          },
+          "turns_limit": {
+            "type": "integer",
+            "title": "Turns Limit"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "masked"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chat_token",
+          "reply",
+          "turns_used",
+          "turns_limit",
+          "notice"
+        ],
+        "title": "ChatMessageOut"
+      },
+      "ChatProductOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_incl_tax": {
+            "type": "integer",
+            "title": "Price Incl Tax"
+          },
+          "image_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Path"
+          },
+          "sold_out": {
+            "type": "boolean",
+            "title": "Sold Out"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "price_incl_tax",
+          "image_path",
+          "sold_out",
+          "reason"
+        ],
+        "title": "ChatProductOut",
+        "description": "商品カード。名称・価格・画像・在庫切れは DB の値。`reason` だけ LLM の文章（検査済み）。"
+      },
+      "ChatReplyOut": {
+        "properties": {
+          "intent": {
+            "type": "string",
+            "enum": [
+              "recommend",
+              "faq",
+              "clarify",
+              "out_of_scope"
+            ],
+            "title": "Intent"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "products": {
+            "items": {
+              "$ref": "#/components/schemas/ChatProductOut"
+            },
+            "type": "array",
+            "title": "Products"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ChatSourceOut"
+            },
+            "type": "array",
+            "title": "Sources"
+          },
+          "guide": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatGuideOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "intent",
+          "message",
+          "products",
+          "sources",
+          "guide"
+        ],
+        "title": "ChatReplyOut"
+      },
+      "ChatSourceOut": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "href": {
+            "type": "string",
+            "title": "Href"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "href"
+        ],
+        "title": "ChatSourceOut"
+      },
+      "ChatStatusOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "disabled",
+                  "daily_limit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openai",
+              "stub",
+              "none"
+            ],
+            "title": "Provider"
+          },
+          "turns_limit": {
+            "type": "integer",
+            "title": "Turns Limit"
+          },
+          "message_max_chars": {
+            "type": "integer",
+            "title": "Message Max Chars"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "reason",
+          "provider",
+          "turns_limit",
+          "message_max_chars"
+        ],
+        "title": "ChatStatusOut"
       },
       "ContentDetailOut": {
         "properties": {
