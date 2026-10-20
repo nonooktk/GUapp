@@ -13,3 +13,8 @@ regexes = [
   '''pragma: allowlist secret''',
   '''gitleaks:allow''',
 ]
+# detect-secrets の許可リスト（.secrets.baseline）は、許容済みのダミー値の SHA-1 ハッシュだけを持つ。
+# ハッシュが generic-api-key に見えて誤検知されるため、このファイルだけを対象から外す（2026-10-21）
+paths = [
+  '''^\.secrets\.baseline$''',
+]
