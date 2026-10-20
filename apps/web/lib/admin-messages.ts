@@ -16,6 +16,8 @@ export const ADMIN_MESSAGES = {
   unavailable: "サーバーに接続できません。しばらくしてからもう一度お試しください",
   invalidTransition: "この注文の状態はすでに変わっています。画面を更新しました",
   trackingNotAllowed: "追跡番号を付けられない注文です",
+  periodTooLong: "期間は 366 日以内で指定してください",
+  periodReversed: "期間の開始日は終了日以前にしてください",
   generic: "処理に失敗しました",
   saved: "保存しました",
   noChange: "変更はありませんでした",
@@ -105,6 +107,8 @@ export function adminErrorMessage(status: number, body: ApiErrorBody | null): st
   if (code === "unsupported_value" || code === "limit_exceeded") {
     const field = failedField(body);
     if (field === "tracking_number") return ADMIN_MESSAGES.trackingNotAllowed;
+    // 注文一覧の期間（DS-API-053）: `to` に対する 422。逆順は unsupported_value、366 日超は limit_exceeded
+    if (field === "to") return code === "limit_exceeded" ? ADMIN_MESSAGES.periodTooLong : ADMIN_MESSAGES.periodReversed;
     return adminRangeMessage(field) ?? ADMIN_MESSAGES.generic;
   }
   if (code === "validation_error") return adminFormatMessage(failedField(body));

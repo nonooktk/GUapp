@@ -40,6 +40,11 @@ describe("UT-WEB-49 管理画面のエラー文言", () => {
     expect(adminErrorMessage(422, { code: "unsupported_value", field: "status" })).toBe("処理に失敗しました");
   });
 
+  it("注文一覧の期間の 422（field=to）: 366 日超と逆順を、それぞれの文言にする（結合確認で汎用文言になっていた不具合の修正）", () => {
+    expect(adminErrorMessage(422, { code: "limit_exceeded", field: "to", limit: 366 })).toBe("期間は 366 日以内で指定してください");
+    expect(adminErrorMessage(422, { code: "unsupported_value", field: "to" })).toBe("期間の開始日は終了日以前にしてください");
+  });
+
   it("400 validation_error は {項目名}の形式が正しくありません。項目が分からなければ入力内容", () => {
     expect(adminErrorMessage(400, { code: "validation_error", fields: [{ name: "stock", reason: "format" }] })).toBe("在庫の形式が正しくありません");
     expect(adminErrorMessage(400, { code: "validation_error", fields: [{ name: "tax_rate", reason: "format" }] })).toBe("消費税率の形式が正しくありません");
