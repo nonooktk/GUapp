@@ -30,7 +30,7 @@ cat apps/web/.env.basic-auth   # 統括が確認し、レビュワーに Slack �
 # 3. api の送信 IP を講義 MySQL のファイアウォールに追加する
 scripts/azure-deploy/03-db-firewall.sh
 
-# 4. マイグレーションを適用する（seed は付けない。統括の指示があるときだけ --seed）
+# 4. マイグレーションを適用する（seed は付けない。P2 の seed は --seed-p2。全件 seed の --seed は使わない）
 scripts/azure-deploy/06-migrate-seed.sh
 
 # 5. api・web をデプロイする
@@ -57,11 +57,54 @@ scripts/azure-deploy/02-settings.sh
 # 3. be の送信 IP を講義 MySQL のファイアウォールに追加する（guapp-appsvc-26 以降）
 scripts/azure-deploy/03-db-firewall.sh
 
-# 06-migrate-seed.sh は実行しない（DB は従来と同じ guapp_nonooktk のため）
+# 06-migrate-seed.sh は P1 までの配備では実行しない（DB は従来と同じ guapp_nonooktk のため）。
+# P2 を配備するときは、次の「P2（会員・管理画面・AI アシスタント）を配備する場合」の手順で実行する
 
 # 4. api・web をデプロイする
 scripts/azure-deploy/04-deploy-api.sh
 scripts/azure-deploy/05-deploy-web.sh
+```
+
+### P2（会員・管理画面・AI アシスタント）を配備する場合（2026-10-21 追加）
+
+順番は 02（設定）→ 06 `--seed-p2`（マイグレーションと P2 の seed）→ 04（api）→ 05（web）。01b・03 は P1 までの配備で実行済みなら不要。
+
+```bash
+cd /path/to/GUapp
+export GUAPP_TARGET=tech0
+
+# 1. アプリ設定を投入する。P2 では次が増える
+#    - api: PUBLIC_WEB_BASE_URL（web の URL）
+#    - api: OPENAI_API_KEY（手元の $HOME/GUapp/apps/api/.env の OPENAI_API_KEY= の行だけを読む。値は表示しない）
+#    - 管理者の初期パスワード: apps/api/.env.admin に、未作成のときだけ 20 文字を作る（App Service には入れない）
+#    OPENAI_API_KEY の読み元を変えるとき: GUAPP_OPENAI_ENV_FILE=/path/to/.env scripts/azure-deploy/02-settings.sh
+#    キーが読めなければ、設定せず警告して続ける（AI アシスタントは本番で無効 = chat_unavailable になる）
+scripts/azure-deploy/02-settings.sh
+
+# 2. マイグレーションを適用し、P2 の seed（会員・店舗・レビュー、管理者）を投入する
+#    各表が空のときに限って投入するため、共用 DB の既存データは消えない。会員のダミーは本番に入れない
+scripts/azure-deploy/06-migrate-seed.sh --seed-p2
+
+# 3. api・web をデプロイする
+scripts/azure-deploy/04-deploy-api.sh
+scripts/azure-deploy/05-deploy-web.sh
+```
+
+> [!warning] `--seed`（全件 seed）は使わない
+> `06-migrate-seed.sh --seed` は `--reset --yes` で既存データを消してから入れ直す。共用 DB の P2 配備では必ず `--seed-p2` を使う。
+
+管理者のパスワードの確かめ方: `apps/api/.env.admin` を本人が開き、`SEED_STAFF_PASSWORD=` の行を見る。スクリプトは値を表示しない。ログイン ID は seed の既定値。
+
+```bash
+open -e apps/api/.env.admin
+```
+
+管理者のパスワードを変えるとき: `.env.admin` の行を書き換えてから、次を実行する（DB の管理者だけ更新する）。
+
+```bash
+cd apps/api
+SEED_STAFF_PASSWORD="$(grep '^SEED_STAFF_PASSWORD=' .env.admin | cut -d= -f2-)" APP_ENV=production \
+  ../../scripts/azure-db/with-azure-db.sh uv run python -m app.seed --only-p2c --update-staff-password
 ```
 
 ### CA 証明書の置き場所（2026-10-10 の不具合と対応）

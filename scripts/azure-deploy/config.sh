@@ -113,6 +113,13 @@ export GUAPP_API_DIR="$GUAPP_REPO_ROOT/apps/api"
 export GUAPP_WEB_DIR="$GUAPP_REPO_ROOT/apps/web"
 export GUAPP_CA_FILE="${GUAPP_CA_DIR:-$HOME/.config/guapp}/azure-mysql-ca.pem"
 
+# --- P2（会員・管理画面・AI アシスタント）の配備で使う手元のファイル（2026-10-21 追加） ---
+# OpenAI のキーを読む元のファイル。02-settings.sh が OPENAI_API_KEY= の行だけを読む（値は表示しない）。
+export GUAPP_OPENAI_ENV_FILE="${GUAPP_OPENAI_ENV_FILE:-$HOME/GUapp/apps/api/.env}"
+# 管理者の初期パスワード（SEED_STAFF_PASSWORD=）を置くファイル。02-settings.sh が未作成のときだけ作り、
+# 06-migrate-seed.sh --seed-p2 が読む。App Service には入れない。.gitignore の .env.* で除外される。
+export GUAPP_ADMIN_ENV_FILE="${GUAPP_ADMIN_ENV_FILE:-$GUAPP_API_DIR/.env.admin}"
+
 echo "[config] サブスクリプション: $GUAPP_SUBSCRIPTION_ID / リソースグループ: $GUAPP_RESOURCE_GROUP / リージョン: $GUAPP_LOCATION" >&2
 echo "[config] target=$GUAPP_TARGET sku=$GUAPP_SKU basic_auth=$GUAPP_ENABLE_BASIC_AUTH" >&2
 echo "[config] plan=$GUAPP_PLAN_NAME web=$GUAPP_WEB_APP_NAME api=$GUAPP_API_APP_NAME" >&2

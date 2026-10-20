@@ -236,3 +236,16 @@ App Service Linux のシステムの信頼ストア（例 `/etc/ssl/certs/ca-cer
 - 新しい Kudu/Oryx は配備物を `/home/site/wwwroot/output.tar.zst` に圧縮し、起動時に `/tmp/<ランダム>/` に展開する。そのため tech0 の be には `/home/site/wwwroot/certs/azure-mysql-ca.pem` が存在せず、`/api/v1/health` が 503 `db_unavailable` になった（8.4 の配置方針は wwwroot に実体がある前提だった）
 - tech0 ターゲットの `DB_SSL_CA_PATH` と `DATABASE_URL` の `ssl_ca=` は `/home/site/certs/azure-mysql-ca.pem` を指す。`01b-configure-existing.sh` が Kudu の VFS API で CA（公開証明書）を置く。`01b` は `02-settings.sh` より前に実行する
 - 教訓: 配備物の中のファイルを絶対パスで参照しない
+
+### 11.6 2026-10-21 追補：P2（会員・管理画面・AI アシスタント）の配備
+
+P2 の配備手順は 02 → 06 `--seed-p2` → 04 → 05 の順。
+
+1. `02-settings.sh`: api に `PUBLIC_WEB_BASE_URL`（web の URL）と `OPENAI_API_KEY` を設定する。`OPENAI_MODEL`・`LLM_PROVIDER`・`SEED_STAFF_LOGIN_ID`・`RATE_LIMIT_*` は設定せず、コードの既定値を使う（`LLM_PROVIDER=auto` は本番でキーがあれば openai）。web の設定は増やさない
+2. `06-migrate-seed.sh --seed-p2`: `alembic upgrade head` のあと、`APP_ENV=production` で `python -m app.seed --only-p2b` と `--only-p2c` を実行する。どちらも各表が空のときに限って投入する。`SEED_MEMBER_PASSWORD` は渡さず、本番に会員のダミーは入れない。全件 seed の `--seed`（`--reset`）は共用 DB の既存データを消すため使わない
+3. `04-deploy-api.sh`・`05-deploy-web.sh`: 従来どおり
+
+管理者・AI のキーの扱い（値はリポジトリにもログにも出さない）:
+
+- `OPENAI_API_KEY`: 手元のファイル（既定 `$HOME/GUapp/apps/api/.env`。`GUAPP_OPENAI_ENV_FILE` で変更）の `OPENAI_API_KEY=` の行だけを `02-settings.sh` が読み、画面に出さず App Service の設定に渡す。読めない場合は設定せず警告して続け、AI アシスタントは本番で無効（`chat_unavailable`）になる
+- 管理者の初期パスワード（`SEED_STAFF_PASSWORD`）: App Service には入れない。`02-settings.sh` が `apps/api/.env.admin`（権限 600、`.gitignore` の `.env.*` で除外。`git check-ignore` で確認）に、未作成のときだけランダムな 20 文字で書く。既にあれば変えない。`06 --seed-p2` が seed の実行時に環境変数で渡す。本人が `apps/api/.env.admin` を開いて確かめる
