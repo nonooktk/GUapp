@@ -5,6 +5,9 @@
 - カートの `active → ordered` も条件付き UPDATE 1 文（DS-DEC-07 層 2）
 - 注文の INSERT は冪等キーの UNIQUE 違反を `DuplicateIdempotencyKey` に、注文番号の衝突は
   1 回だけ再生成に変換する（DS-PRC-014-1 手順 1・8）
+- P2-b: 会員の紐づけ（`member_id`）・店舗受け取り（`store_id`・受け取りコード）を INSERT に含める。
+  受け取りコード（`orders.pickup_code` UNIQUE）の衝突も注文番号と同じく 1 回だけ再生成する
+  （DS-PRC-014-3 手順 1）
 """
 
 from __future__ import annotations
@@ -29,9 +32,11 @@ from app.models import (
     Payment,
     PaymentProvider,
     PaymentResult,
+    ReceiveMethod,
     Variant,
 )
 from app.services.order_number import generate_order_number
+from app.services.pickup_code import generate_pickup_code
 
 logger = logging.getLogger("app.repositories.orders")
 
@@ -53,6 +58,10 @@ class PendingOrderInput:
     ship_postal_code: str
     ship_address: str
     ship_phone: str
+    # ── P2-b（DS-PRC-014-3）。既定値は P1 の呼び出しと互換 ──
+    member_id: int | None = None
+    receive_method: str = "delivery"
+    store_id: int | None = None
 
 
 def _violates(exc: IntegrityError, column: str) -> bool:
@@ -68,19 +77,36 @@ async def insert_pending_order(
     data: PendingOrderInput,
     *,
     generate: Callable[[], str] = generate_order_number,
+    generate_pickup: Callable[[], str] | None = None,
 ) -> Order:
-    """status=pending_payment で INSERT。注文番号の衝突は 1 回だけ再生成、2 回目は 500。
+    """status=pending_payment で INSERT。注文番号・受け取りコードの衝突は 1 回だけ再生成。
 
-    冪等キーの衝突は `DuplicateIdempotencyKey`。SAVEPOINT（begin_nested）で囲むので、
-    失敗しても外側のトランザクションは生きたまま（MySQL・SQLite とも）。
+    2 回目も衝突したら 500。冪等キーの衝突は `DuplicateIdempotencyKey`。SAVEPOINT
+    （begin_nested）で囲むので、失敗しても外側のトランザクションは生きたまま
+    （MySQL・SQLite とも）。受け取りコードは `receive_method="store"` のときだけ作る。
+    `generate_pickup` を省略すると、呼び出し時点の `generate_pickup_code` を使う
+    （テストがモジュール属性を差し替えられる）。
     """
+    is_store = data.receive_method == ReceiveMethod.store.value
+    pickup_gen = generate_pickup if generate_pickup is not None else generate_pickup_code
     last_exc: IntegrityError | None = None
+    number: str | None = None
+    pickup: str | None = None
     for attempt in range(2):
+        # 衝突した項目だけ作り直す（もう一方は同じ値で再試行してよい）
+        if number is None:
+            number = generate()
+        if is_store and pickup is None:
+            pickup = pickup_gen()
         order = Order(
-            order_number=generate(),
+            order_number=number,
             idempotency_key=data.idempotency_key,
+            member_id=data.member_id,
             guest_email=data.guest_email,
             status=OrderStatus.pending_payment,
+            receive_method=ReceiveMethod(data.receive_method),
+            store_id=data.store_id,
+            pickup_code=pickup,
             subtotal=data.subtotal,
             shipping_fee=data.shipping_fee,
             discount=0,
@@ -103,9 +129,15 @@ async def insert_pending_order(
             if _violates(exc, "order_number"):
                 logger.warning("注文番号が衝突しました（再生成 %d 回目）", attempt + 1)
                 last_exc = exc
+                number = None
+                continue
+            if is_store and _violates(exc, "pickup_code"):
+                logger.warning("受け取りコードが衝突しました（再生成 %d 回目）", attempt + 1)
+                last_exc = exc
+                pickup = None
                 continue
             raise
-    logger.error("注文番号の再生成後も衝突しました")
+    logger.error("注文番号または受け取りコードの再生成後も衝突しました")
     raise internal_error() from last_exc
 
 

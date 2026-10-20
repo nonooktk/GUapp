@@ -1,6 +1,8 @@
 """DS-API-022 注文確定・DS-API-023 ゲスト注文照会。ルーターは入出力のみ。
 
 - 確定は新規 201／同じカートの既存注文 200 なので `Response.status_code` で切り替える
+- P2-b: 任意ヘッダ `X-Session-Token` が有効なら注文を会員に紐づける（無効ならゲストの注文。
+  エラーにしない。DS-DEC-77）。紐づけはセッションからだけ決め、本文の値は使わない
 - 照会はメールを本文で受け（URL に個人情報を載せない）、IP ごとのレート制限を依存関数で掛ける
 """
 
@@ -13,6 +15,7 @@ from app.adapters.mail import MailAdapter, get_mail_adapter
 from app.adapters.payment import PaymentAdapter, get_payment_adapter
 from app.core.db import get_session
 from app.core.rate_limit import lookup_rate_limit
+from app.core.session import CurrentMember, get_optional_member
 from app.routers.cart import CartToken
 from app.schemas.order import LookupIn, OrderCreateIn, OrderOut
 from app.services import orders as orders_service
@@ -34,9 +37,10 @@ async def create_order(
     session: AsyncSession = Depends(get_session),
     payment: PaymentAdapter = Depends(get_payment_adapter),
     mail: MailAdapter = Depends(get_mail_adapter),
+    member: CurrentMember | None = Depends(get_optional_member),
 ) -> OrderOut:
     http_status, order = await orders_service.create_order(
-        session, x_cart_token, body, payment=payment, mail=mail
+        session, x_cart_token, body, payment=payment, mail=mail, member=member
     )
     response.status_code = http_status
     return order

@@ -4,6 +4,7 @@
 - `Decimal` は `tax_rate` 文字列の変換にだけ使い、内税は基点整数（10 = 10%）の整数演算
 - 送料無料の閾値は小計（送料・値引き前の明細合計）に対して判定する
 - 空カートは金額計算の前に 409 `empty_cart`
+- 店舗受け取り（`receive_method="store"`）は送料 0（P2 追補b DS-PRC-021a）
 """
 
 from __future__ import annotations
@@ -79,16 +80,32 @@ def calc_tax_included(total: int, tax_rate: str) -> int:
     return total * bp // (_TAX_RATE_SCALE + bp)
 
 
-def calc_totals(lines: list[tuple[int, int]], settings: PricingSettings) -> Totals:
-    """明細から小計・送料・合計・内税を出す。明細 0 件は 409 `empty_cart`。"""
+RECEIVE_METHODS = frozenset({"delivery", "store"})
+
+
+def calc_totals(
+    lines: list[tuple[int, int]], settings: PricingSettings, receive_method: str = "delivery"
+) -> Totals:
+    """明細から小計・送料・合計・内税を出す。明細 0 件は 409 `empty_cart`。
+
+    `receive_method="store"` のとき送料は 0（DS-PRC-021a）。それ以外の計算（小計・内税・閾値の
+    判定）は変えない。未知の値は呼び出し側の不具合として `ValueError`（業務エラーにしない）。
+    """
+    if not isinstance(receive_method, str) or receive_method not in RECEIVE_METHODS:
+        raise ValueError(
+            f"receive_method は delivery か store で与えてください: {receive_method!r}"
+        )
     if not lines:
         raise AppError(409, "empty_cart")
     subtotal = calc_subtotal(lines)
-    shipping_fee = calc_shipping_fee(
-        subtotal,
-        shipping_fee=settings.shipping_fee,
-        free_shipping_threshold=settings.free_shipping_threshold,
-    )
+    if receive_method == "store":
+        shipping_fee = 0
+    else:
+        shipping_fee = calc_shipping_fee(
+            subtotal,
+            shipping_fee=settings.shipping_fee,
+            free_shipping_threshold=settings.free_shipping_threshold,
+        )
     total = subtotal + shipping_fee
     return Totals(
         subtotal=subtotal,

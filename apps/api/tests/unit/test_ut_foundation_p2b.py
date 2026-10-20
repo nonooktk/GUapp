@@ -212,7 +212,7 @@ async def test_dependency_get_current_member_401_unless_valid(
     res = await client.get("/api/v1/me", headers={**HEADERS, "X-Session-Token": "short"})
     assert res.status_code == 401
     res = await client.get("/api/v1/me", headers={**HEADERS, "X-Session-Token": TOKEN_A})
-    assert res.status_code == 501, "有効なセッションは通り、骨格の 501 に着く"
+    assert res.status_code == 200, "有効なセッションは通り、/me が 200 を返す"
 
 
 async def test_dependency_get_optional_member_never_raises(
@@ -224,7 +224,9 @@ async def test_dependency_get_optional_member_never_raises(
     for token in (None, TOKEN_B, "short", TOKEN_A):
         headers = dict(HEADERS) if token is None else {**HEADERS, "X-Session-Token": token}
         res = await client.post("/api/v1/restock-notifications", json=payload, headers=headers)
-        assert res.status_code == 501, token
+        # セッションの有無・有効無効にかかわらず 401 にならず、サービスまで届く
+        # （この DB に variant_id=1 は無いので 404。レーン C が骨格の 501 から置き換えた）
+        assert res.status_code == 404, token
 
 
 async def test_me_orders_query_ranges_are_400_after_authentication(
@@ -240,7 +242,8 @@ async def test_me_orders_query_ranges_are_400_after_authentication(
         assert res.status_code == 400, params
         assert res.json()["code"] == "validation_error"
     res = await client.get("/api/v1/me/orders", params={"per_page": 50}, headers=headers)
-    assert res.status_code == 501, "50 は範囲内"
+    # 50 は範囲内。注文が 0 件の会員の一覧は 200（レーン C が骨格の 501 から置き換えた）
+    assert res.status_code == 200, "50 は範囲内"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -277,12 +280,12 @@ async def test_register_is_limited_to_10_per_hour_per_ip(
     make_app: Callable[..., FastAPI], client_factory: Callable[[FastAPI], httpx.AsyncClient]
 ) -> None:
     client = client_factory(make_app())
-    payload = {"email": "a@example.com", "password": "dummy-password-1", "name": "テスト"}
+    payload: dict[str, str] = {}  # 本文が不正（400）でも回数は数える
     for _ in range(10):
         res = await client.post(
             "/api/v1/auth/register", json=payload, headers={**HEADERS, "X-Forwarded-For": "9.9.9.9"}
         )
-        assert res.status_code == 501
+        assert res.status_code == 400
     res = await client.post(
         "/api/v1/auth/register", json=payload, headers={**HEADERS, "X-Forwarded-For": "9.9.9.9"}
     )
@@ -292,7 +295,7 @@ async def test_register_is_limited_to_10_per_hour_per_ip(
     res = await client.post(
         "/api/v1/auth/register", json=payload, headers={**HEADERS, "X-Forwarded-For": "8.8.8.8"}
     )
-    assert res.status_code == 501
+    assert res.status_code == 400
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -543,15 +546,9 @@ async def test_skeleton_endpoints_require_internal_token_and_return_501(
 ) -> None:
     client = client_factory(make_app())
     assert (await client.get("/api/v1/stores")).status_code == 401, "内部トークン必須"
-    res = await client.get("/api/v1/stores", headers=HEADERS)
-    assert res.status_code == 501 and res.json() == {"code": "not_implemented"}
     res = await client.post(
-        "/api/v1/restock-notifications",
-        json={"variant_id": 1, "email": "a@example.com"},
-        headers=HEADERS,
+        "/api/v1/restock-notifications", json={"variant_id": 1, "email": "a@example.com"}
     )
-    assert res.status_code == 501
-    res = await client.post(
-        "/api/v1/auth/login", json={"email": "a@example.com", "password": "x"}, headers=HEADERS
-    )
-    assert res.status_code == 501
+    assert res.status_code == 401, "内部トークン必須"
+    res = await client.post("/api/v1/auth/login", json={"email": "a@example.com", "password": "x"})
+    assert res.status_code == 401, "内部トークン必須"

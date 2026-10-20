@@ -5,12 +5,14 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.models import Gender
+from app.models import Gender, ReviewFit
 from app.repositories import products as products_repo
+from app.repositories import reviews as reviews_repo
 from app.schemas.catalog import (
     CategoriesResponse,
     CategoryChildOut,
     CategoryOut,
+    FitSummaryOut,
     ProductDetailOut,
     ProductListItemOut,
     ProductListResponse,
@@ -92,6 +94,17 @@ def _unique_in_order(values: list[str]) -> list[str]:
     return out
 
 
+def build_fit_summary(counts: dict[ReviewFit, int]) -> FitSummaryOut:
+    """件数から `fit_summary` を作る。レビューが 0 件でもキーは常に出す（`total` は 3 つの合計）。
+
+    割合は返さない（画面が件数を並べる。丸めで合計が 100 にならない問題を避ける。DS-DEC-81）。
+    """
+    small = counts.get(ReviewFit.small, 0)
+    just = counts.get(ReviewFit.just, 0)
+    large = counts.get(ReviewFit.large, 0)
+    return FitSummaryOut(total=small + just + large, small=small, just=just, large=large)
+
+
 async def get_product_detail(session: AsyncSession, product_id: int) -> ProductDetailOut:
     """非公開・不存在は 404 `not_found`（区別しない）。"""
     product = await products_repo.get_published(session, product_id)
@@ -100,6 +113,7 @@ async def get_product_detail(session: AsyncSession, product_id: int) -> ProductD
     variants = await products_repo.list_variants(session, product_id)
     images = await products_repo.list_image_paths(session, product_id)
     related = await products_repo.list_related(session, product_id, limit=RELATED_LIMIT)
+    fit_summary = build_fit_summary(await reviews_repo.fit_counts(session, product_id))
     return ProductDetailOut(
         id=product.id,
         name=product.name,
@@ -123,4 +137,5 @@ async def get_product_detail(session: AsyncSession, product_id: int) -> ProductD
             )
             for r in related
         ],
+        fit_summary=fit_summary,
     )
