@@ -1,6 +1,7 @@
-"""P1・P2-a・P2-b のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表、
+"""P1・P2-a・P2-b・P2-d のテーブル（設計仕様書 5.2: DS-TBL-05〜09・12〜16・21・23 の 12 表、
 P2 追補a 5.1: DS-TBL-22 contents を加えた 13 表、
-P2 追補b 5.1: DS-TBL-01・03・04・10・19・20・26・27 の 8 表を加えた 21 表）。
+P2 追補b 5.1: DS-TBL-01・03・04・10・19・20・26・27 の 8 表を加えた 21 表、
+P2 追補d 5 章: DS-TBL-24・25 chat_sessions／chat_messages を加えた 23 表。P2-c は表を増やさない）。
 
 設計書本文は「13 表」と書くが、P1 時点で列挙された DS-TBL を数えると 12
 （P2-a の DS-TBL-22 追加で実際に 13 になった）。
@@ -17,6 +18,7 @@ from app.models.catalog import (
     ProductImage,
     Variant,
 )
+from app.models.chat import ChatMessage, ChatRole, ChatSession
 from app.models.content import Content, ContentKind
 from app.models.member import EmailToken, EmailTokenPurpose, Member, MemberGender
 from app.models.order import (
@@ -44,6 +46,9 @@ __all__ = [
     "CartItem",
     "CartStatus",
     "Category",
+    "ChatMessage",
+    "ChatRole",
+    "ChatSession",
     "Content",
     "ContentKind",
     "EmailToken",
@@ -107,5 +112,8 @@ P2B_TABLES: frozenset[str] = frozenset(
     }
 )
 
-# 全表（P1 + P2-a + P2-b = 21 表）
-ALL_TABLES: frozenset[str] = P1_TABLES | P2A_TABLES | P2B_TABLES
+# P2-d で追加した表（設計仕様書 P2 追補d 5 章 DS-TBL-24・25）
+P2D_TABLES: frozenset[str] = frozenset({"chat_sessions", "chat_messages"})
+
+# 全表（P1 + P2-a + P2-b + P2-d = 23 表）
+ALL_TABLES: frozenset[str] = P1_TABLES | P2A_TABLES | P2B_TABLES | P2D_TABLES

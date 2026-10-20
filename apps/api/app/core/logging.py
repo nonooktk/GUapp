@@ -2,10 +2,11 @@
 
 マスク対象:
 - Stripe キー `sk_live_…`／`sk_test_…`（`rk_`／`whsec_` も同様）
+- OpenAI キー `sk-…`／`sk-proj-…`（P2 追補d 7.2）
 - 接続文字列 `scheme://user:pass@host` のユーザー名:パスワード部分  # pragma: allowlist secret
 - `Bearer <token>`
 - `X-Internal-Token: <値>` ヘッダ形式
-- `INTERNAL_TOKEN` の実値（設定から受け取る。空なら対象外）
+- `INTERNAL_TOKEN`・`OPENAI_API_KEY` の実値（設定から受け取る。空なら対象外）
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Stripe 系キー
     (re.compile(r"\b(sk|rk|pk)_(live|test)_[A-Za-z0-9]+"), r"\1_\2_" + MASK),
     (re.compile(r"\bwhsec_[A-Za-z0-9]+"), "whsec_" + MASK),
+    # OpenAI 系キー `sk-…`（`sk-proj-…` を含む。20 文字未満の短い文字列は誤マスクしない）
+    (re.compile(r"\bsk-[A-Za-z0-9_\-]{20,}"), "sk-" + MASK),
     # URL 中の資格情報 scheme://user:pass@  → scheme://***:***@  # pragma: allowlist secret
     (
         re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s:@]+:[^/\s@]+@"),

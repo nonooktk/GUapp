@@ -330,3 +330,53 @@ export interface StoreSummary {
 export interface StoresResponse {
   items: StoreSummary[];
 }
+
+// ---- P2-d: AI アシスタント（F-029。DS-API-040・041。設計仕様書 P2 追補d 4.2・4.3） ----
+
+export type ChatProvider = "openai" | "stub" | "none";
+export type ChatUnavailableReason = "disabled" | "daily_limit";
+
+/** DS-API-040 チャットの状態 */
+export interface ChatStatus {
+  available: boolean;
+  reason: ChatUnavailableReason | null;
+  provider: ChatProvider;
+  turns_limit: number;
+  message_max_chars: number;
+}
+
+export type ChatIntent = "recommend" | "faq" | "clarify" | "out_of_scope";
+
+/** 商品カード 1 件。名称・価格・画像・在庫切れは api が DB から出した値。`reason` だけ LLM の文章（検査済み） */
+export interface ChatProduct {
+  id: number;
+  name: string;
+  price_incl_tax: number;
+  image_path: string | null;
+  sold_out: boolean;
+  reason: string;
+}
+
+export interface ChatLink {
+  /** 表示名（`title` または `label`） */
+  label: string;
+  href: string;
+}
+
+export interface ChatReply {
+  intent: ChatIntent;
+  message: string;
+  products: ChatProduct[];
+  /** FAQ の出典リンク（intent=faq のとき） */
+  sources: ChatLink[];
+  /** 範囲外の案内リンク（intent=out_of_scope のとき） */
+  guide: ChatLink[];
+}
+
+/** DS-API-041 の応答のうち、BFF がブラウザへ返す部分（`chat_token` は BFF が Cookie に載せて本文から除く） */
+export interface ChatMessageResponse {
+  reply: ChatReply;
+  turns_used: number;
+  turns_limit: number;
+  notice: "masked" | null;
+}

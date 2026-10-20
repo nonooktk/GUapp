@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
+import AskAssistantButton from "@/components/chat/AskAssistantButton";
 import FitSummary from "@/components/FitSummary";
 import LoadError from "@/components/LoadError";
 import Price from "@/components/Price";
@@ -91,6 +92,7 @@ export default async function ProductDetailPage({ params }: PageProps<"/products
         <h2 id="desc-heading" className={headingClass}>
           商品説明
         </h2>
+        <AskAssistantButton productId={product.id} productName={product.name} />
         <p className="whitespace-pre-line">{product.description}</p>
         <h3 className="font-bold">素材</h3>
         <p className="whitespace-pre-line">{product.material}</p>

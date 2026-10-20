@@ -16,6 +16,7 @@ dependencies = [
     "pydantic[email]>=2.12",
     "tzdata>=2025.2",
     "argon2-cffi>=25.1.0",
+    "openai>=3.35.1,<4",
 ]
 
 [dependency-groups]

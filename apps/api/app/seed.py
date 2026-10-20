@@ -1,7 +1,7 @@
 """初期データ投入（設計仕様書 5.3・プラン 5 章「seed の冪等性」、P2 追補b 5.8・DS-DEC-87）。
 
     uv run python -m app.seed            # products に行があれば何もしない（データ保護側）
-    uv run python -m app.seed --reset    # 全 21 表を TRUNCATE してから投入（確認あり）
+    uv run python -m app.seed --reset    # 全 23 表を TRUNCATE してから投入（確認あり）
     uv run python -m app.seed --reset --yes
     uv run python -m app.seed --only-p2b # 会員・店舗・レビューだけを、各表が空のときに限って投入
     uv run python -m app.seed --only-p2c # 管理者（staff）だけを、表が空のときに限って投入
@@ -44,6 +44,7 @@ from app.models import (
     P1_TABLES,
     P2A_TABLES,
     P2B_TABLES,
+    P2D_TABLES,
     Category,
     Content,
     ContentKind,
@@ -97,11 +98,20 @@ assert set(P2B_CHILD_TRUNCATE_ORDER + P2B_PARENT_TRUNCATE_ORDER) == set(P2B_TABL
     "P2B_TABLES と一致させる"
 )
 
-# 全表を空にする順（子 → 親）。P2-b の子 → P1（orders などの子 → 親）→ P2-a → P2-b の親
+# P2-d で追加した表（DS-TBL-24・25）。子（chat_messages）→ 親（chat_sessions）の順
+CHAT_TRUNCATE_ORDER: tuple[str, ...] = ("chat_messages", "chat_sessions")
+assert set(CHAT_TRUNCATE_ORDER) == set(P2D_TABLES), "P2D_TABLES と一致させる"
+
+# 全表を空にする順（子 → 親）。チャット（chat_messages → chat_sessions。他表への FK なし）→
+# P2-b の子 → P1（orders などの子 → 親）→ P2-a → P2-b の親
 FULL_TRUNCATE_ORDER: tuple[str, ...] = (
-    P2B_CHILD_TRUNCATE_ORDER + TRUNCATE_ORDER + CONTENT_TRUNCATE_ORDER + P2B_PARENT_TRUNCATE_ORDER
+    CHAT_TRUNCATE_ORDER
+    + P2B_CHILD_TRUNCATE_ORDER
+    + TRUNCATE_ORDER
+    + CONTENT_TRUNCATE_ORDER
+    + P2B_PARENT_TRUNCATE_ORDER
 )
-assert set(FULL_TRUNCATE_ORDER) == set(ALL_TABLES), "FULL_TRUNCATE_ORDER は全 21 表と一致させる"
+assert set(FULL_TRUNCATE_ORDER) == set(ALL_TABLES), "FULL_TRUNCATE_ORDER は全 23 表と一致させる"
 
 COUNT_TABLES: tuple[str, ...] = (
     "categories",
@@ -190,7 +200,7 @@ def staff_seed_credentials(settings: Settings) -> tuple[StaffSeedCredentials | N
 async def count_rows(
     conn: AsyncConnection, tables: tuple[str, ...] = COUNT_TABLES
 ) -> dict[str, int]:
-    """件数を数える。表名は ALL_TABLES（全 21 表）に限定して SQL に埋め込む（外部入力は不可）。"""
+    """件数を数える。表名は ALL_TABLES（全 23 表）に限定して SQL に埋め込む（外部入力は不可）。"""
     out: dict[str, int] = {}
     for name in tables:
         if name not in ALL_TABLES:
@@ -200,7 +210,8 @@ async def count_rows(
 
 
 async def truncate_all_tables(conn: AsyncConnection) -> None:
-    """全 21 表（ALL_TABLES。P1 の 12 表 + P2-a の contents + P2-b の 8 表）を空にする。
+    """全 23 表（ALL_TABLES。P1 の 12 表 + P2-a の contents + P2-b の 8 表 + P2-d のチャット 2 表）
+    を空にする。
 
     --reset とテストの後片付け用。順序は `FULL_TRUNCATE_ORDER`（子 → 親）。`FOREIGN_KEY_CHECKS=0`
     で囲う方式は変えない。P2-a で contents が増えたため、関数名を中身（全表を対象にする）に
@@ -443,7 +454,7 @@ async def seed(
     """seed を投入する。
 
     - `reset=False`（既定）: products に 1 行でもあれば何もせず `skipped=True` を返す
-    - `reset=True`: 全 21 表を TRUNCATE してから投入
+    - `reset=True`: 全 23 表を TRUNCATE してから投入
     - `only_p2b=True`: 会員・店舗・レビューだけを、各表が空のときに限って投入する
       （2 回目は何もしない。`reset` とは併用できない）。投入が 0 件なら `skipped=True`
     - `only_p2c=True`: 管理者（staff）だけを、表が空のときに限って投入する（2 回目は何もしない）。
@@ -510,7 +521,7 @@ async def _amain(args: argparse.Namespace) -> int:
 
     if args.reset and not args.yes:
         answer = input(
-            f"DB '{db_name}' の全 21 表（P1・P2-a・P2-b）を TRUNCATE して"
+            f"DB '{db_name}' の全 23 表（P1・P2-a・P2-b・P2-d）を TRUNCATE して"
             " seed を投入します。続けますか？ [y/N]: "
         )
         if answer.strip().lower() not in {"y", "yes"}:
@@ -565,7 +576,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="全 21 表（P1・P2-a・P2-b）を TRUNCATE してから投入する（破壊的）",
+        help="全 23 表（P1・P2-a・P2-b・P2-d）を TRUNCATE してから投入する（破壊的）",
     )
     parser.add_argument(
         "--only-p2b",

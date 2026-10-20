@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import { CartProvider } from "@/components/CartProvider";
+import ChatLauncher from "@/components/chat/ChatLauncher";
+import ChatPanel from "@/components/chat/ChatPanel";
+import { ChatProvider } from "@/components/chat/ChatProvider";
 import DemoPeriodBanner from "@/components/DemoPeriodBanner";
 import Footer from "@/components/Footer";
 import HeaderWithCart from "@/components/HeaderWithCart";
@@ -9,7 +12,7 @@ import { ToastProvider } from "@/components/Toast";
 import { ADMIN_AREA_HEADER } from "@/lib/admin-types";
 import { CART_TOKEN_COOKIE, SESSION_COOKIE } from "@/lib/cookie";
 import { parseDemoPublicUntil } from "@/lib/demo-banner";
-import { getCategories, loadOrNull } from "@/lib/server/catalog";
+import { getCategories, getImageBaseUrl, loadOrNull } from "@/lib/server/catalog";
 import "./globals.css";
 
 /**
@@ -25,6 +28,8 @@ import "./globals.css";
  * 値が `1` のときだけ顧客向けのヘッダー・フッター・カート・カテゴリの取得（GET /categories）・期間限定公開の帯を省く
  * （`html`／`body`／フォント／トーストだけ残す）。それ以外（ヘッダー無し・`0`・`1` 以外）は従来どおり顧客向けの枠を出す。
  * `/admin` 配下の見出し・メニューは `app/admin/layout.tsx` が出す。
+ *
+ * AI アシスタント（F-029）の ChatProvider・ChatLauncher・ChatPanel は顧客向けの枠の中だけに置く。管理画面（上記の早期 return）にはチャットを出さない。
  *
  * 書体はデザイン基準 v1 2.2 の Noto Sans JP（300/400/700）。`variable` で <html> に CSS 変数を付け、
  * globals.css の `--font-body` / `--font-heading` から参照する。日本語のサブセットは Google Fonts が unicode-range で自動分割する。
@@ -73,11 +78,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <ToastProvider>
           <DemoPeriodBanner untilDisplay={demoUntilDisplay} />
           <CartProvider hasCartCookie={hasCartCookie}>
-            <HeaderWithCart categories={cats?.categories ?? null} signedIn={signedIn} />
-            <main id="main" className="mx-auto w-full max-w-page flex-1 px-4 py-6">
-              {children}
-            </main>
-            <Footer />
+            {/* AI アシスタント（P2 追補d・F-029）。商品詳細のボタンが開けるよう children を包み、右下のボタンとパネルを置く。
+                管理画面は上の早期 return（x-admin-area）で通らないため、チャットは出ない */}
+            <ChatProvider imageBaseUrl={getImageBaseUrl()}>
+              <HeaderWithCart categories={cats?.categories ?? null} signedIn={signedIn} />
+              <main id="main" className="mx-auto w-full max-w-page flex-1 px-4 py-6">
+                {children}
+              </main>
+              <Footer />
+              <ChatLauncher />
+              <ChatPanel />
+            </ChatProvider>
           </CartProvider>
         </ToastProvider>
       </body>
