@@ -25,12 +25,14 @@ class CartStatus(enum.StrEnum):
 
 
 class Cart(IdMixin, TimestampMixin, Base):
-    """DS-TBL-12 carts。member_id は P1 では列のみ（FK は P2 で members 作成後に張る）。"""
+    """DS-TBL-12 carts。member_id は外部キーだけ張り、P2-b では書かない（DS-DEC-73）。"""
 
     __tablename__ = "carts"
     __table_args__ = (MYSQL_TABLE_ARGS,)
 
-    member_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("members.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     anonymous_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     status: Mapped[CartStatus] = mapped_column(
         Enum(CartStatus, name="cart_status", native_enum=False, length=20),

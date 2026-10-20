@@ -42,6 +42,12 @@ ORDER_KEYS = {
     "receive_method",
     "payment_method",
     "ordered_at",
+    # P2-b（設計仕様書 P2 追補b 4.4）
+    "status_label",
+    "store",
+    "pickup_code",
+    "tracking_number",
+    "is_member_order",
 }
 ORDER_ITEM_KEYS = {"product_name", "color", "size", "unit_price", "quantity", "line_total"}
 

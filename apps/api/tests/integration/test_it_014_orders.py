@@ -305,8 +305,9 @@ async def test_it_014_idempotency_key_of_other_cart_is_404_and_retry_is_200(
 
 async def test_it_014_unsupported_receive_or_payment_method_is_422(client, seed_db) -> None:
     token, prepared = await _cart_with(client, seed_db, (5, 1))
+    # `store` は P2-b で対応した（store_code が要る）ので、未対応の値には別の文字列を使う
     res = await client.post(
-        "/api/v1/orders", json=oh.order_body(prepared, receive_method="store"), headers=oh.h(token)
+        "/api/v1/orders", json=oh.order_body(prepared, receive_method="pickup"), headers=oh.h(token)
     )
     assert res.status_code == 422
     assert res.json() == {"code": "unsupported_value", "field": "receive_method"}

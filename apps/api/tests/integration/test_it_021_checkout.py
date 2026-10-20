@@ -22,6 +22,7 @@ PREPARE_KEYS = {
     "tax_included",
     "tax_rate",
     "free_shipping_threshold",
+    "receive_method",  # P2-b（DS-API-021・4.4）
 }
 LINE_KEYS = {
     "item_id",

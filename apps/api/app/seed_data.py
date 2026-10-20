@@ -1,7 +1,7 @@
 """seed の定義データ（設計仕様書 5.3・テスト設計書 1.3・6 章）。
 
 DB に依存しない純粋な定数・関数だけを置く（unit テストから参照できるようにする）。
-個人情報は含まない（会員・注文の seed は P1 では無し）。
+個人情報は含まない（P2-b で会員 5 件・店舗 3 件・レビュー 43 行を足したが、すべてダミー）。
 
 テスト用データの印:
 - `P-UNPUB` … 非公開商品（published=False）1 点
@@ -490,3 +490,135 @@ CONTENTS: tuple[ContentSeed, ...] = (
 )
 
 EXPECTED_CONTENT_COUNT = len(CONTENTS)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# P2-b: members・stores・reviews（DS-TBL-01・10・19。設計仕様書 P2 追補b 5.8・DS-DEC-87）
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 個人情報は入れない。すべてダミーで、メールは `@example.com` のみ。実在の店舗・住所・電話番号に
+# 似せない（DS-DEC-41）。会員のパスワードは下の定数（ダミー値。設計書・報告には書かない）または
+# 環境変数 `SEED_MEMBER_PASSWORD`。`APP_ENV=production` では環境変数が必須で、
+# 無ければ会員の seed を行わない（既知のパスワードの会員を公開環境に残さない。点検の B-07）。
+
+# seed 会員の既定パスワード（ダミー値）。開発・テストだけで使う
+DEMO_MEMBER_PASSWORD = "DemoMember-Seed-2026"  # pragma: allowlist secret（ダミー値）
+
+
+@dataclass(frozen=True)
+class MemberSeed:
+    email: str
+    name: str
+    email_verified: bool = True
+
+
+MEMBERS: tuple[MemberSeed, ...] = (
+    MemberSeed("demo-member1@example.com", "デモ 一郎"),
+    MemberSeed("demo-member2@example.com", "デモ 二郎"),
+    # 3 番目だけメール未確認（マイページの未確認表示の確認用）
+    MemberSeed("demo-member3@example.com", "デモ 三子", email_verified=False),
+    # 注文 0 件の会員（履歴の空表示の確認用）
+    MemberSeed("demo-member4@example.com", "デモ 四郎"),
+    MemberSeed("demo-member5@example.com", "デモ 五子"),
+)
+EXPECTED_MEMBER_COUNT = len(MEMBERS)
+
+
+@dataclass(frozen=True)
+class StoreSeed:
+    code: str
+    name: str
+    prefecture: str
+    postal_code: str  # ハイフンなし 7 桁（ダミー）
+    address: str
+    sort_order: int = 0
+    pickup_enabled: bool = True
+
+
+STORES: tuple[StoreSeed, ...] = (
+    StoreSeed(
+        "demo-tokyo",
+        "デモ店 東京",
+        "東京都",
+        "0000001",
+        "東京都千代田区デモ町1-2-3 デモビル1階",
+        sort_order=1,
+    ),
+    StoreSeed(
+        "demo-osaka",
+        "デモ店 大阪",
+        "大阪府",
+        "0000002",
+        "大阪府大阪市デモ区サンプル町4-5-6 サンプルビル2階",
+        sort_order=2,
+    ),
+    StoreSeed(
+        "demo-fukuoka",
+        "デモ店 福岡",
+        "福岡県",
+        "0000003",
+        "福岡県福岡市デモ区テスト町7-8-9 テストビル3階",
+        sort_order=3,
+    ),
+)
+EXPECTED_STORE_COUNT = len(STORES)
+
+
+@dataclass(frozen=True)
+class ReviewSeed:
+    product_number: int  # 商品番号（PRODUCTS の number）
+    rating: int  # 3〜5
+    body: str
+    fit: str | None  # small / just / large / None
+    approved: bool = True
+    # seed のレビューは会員に紐づけない（会員の seed の有無に依存させない。DS-DEC-81）
+    member_id: int | None = None
+
+
+# 承認済みレビューの内訳（商品番号 → (small, just, large)）。設計仕様書 5.8 の表と一致させる。
+# 商品番号 9 以降は 0 件（「サイズ感のレビューはまだありません」の確認用）
+REVIEW_FIT_COUNTS: dict[int, tuple[int, int, int]] = {
+    1: (2, 6, 2),
+    2: (0, 5, 1),
+    3: (4, 3, 0),
+    4: (1, 1, 1),
+    5: (0, 2, 5),
+    6: (3, 0, 0),
+    7: (1, 4, 0),
+    8: (0, 1, 0),
+}
+
+_FIT_LABEL: dict[str, str] = {"small": "小さめ", "just": "ちょうどよい", "large": "大きめ"}
+
+
+def build_reviews() -> list[ReviewSeed]:
+    """承認済み 42 行 + 未承認 1 行（商品 1・fit=large・approved=False。集計から外れる確認用）。"""
+    rows: list[ReviewSeed] = []
+    n = 0
+    for number, counts in REVIEW_FIT_COUNTS.items():
+        for fit, count in zip(("small", "just", "large"), counts, strict=True):
+            for _ in range(count):
+                rows.append(
+                    ReviewSeed(
+                        product_number=number,
+                        rating=3 + n % 3,  # 3〜5 を順に回す
+                        body=f"サイズ感は{_FIT_LABEL[fit]}です。（ダミーのレビュー）",
+                        fit=fit,
+                    )
+                )
+                n += 1
+    rows.append(
+        ReviewSeed(
+            product_number=1,
+            rating=4,
+            body="承認前のレビューです。（ダミー。集計に入らない）",
+            fit="large",
+            approved=False,
+        )
+    )
+    return rows
+
+
+REVIEWS: tuple[ReviewSeed, ...] = tuple(build_reviews())
+EXPECTED_REVIEW_COUNT = len(REVIEWS)
+EXPECTED_APPROVED_REVIEW_COUNT = sum(1 for r in REVIEWS if r.approved)

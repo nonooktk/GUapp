@@ -5,7 +5,7 @@ from __future__ import annotations
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import MYSQL_TABLE_ARGS, Base, IdMixin, TimestampMixin
@@ -44,12 +44,21 @@ class Order(IdMixin, TimestampMixin, Base):
     """DS-TBL-14 orders。配送先は注文時点の値をコピーして保持する。"""
 
     __tablename__ = "orders"
-    __table_args__ = (MYSQL_TABLE_ARGS,)
+    __table_args__ = (
+        # 注文履歴（DS-PRC-024）
+        Index("ix_orders_member_id_created_at", "member_id", "created_at"),
+        # P2-c の管理画面の注文検索（期間・メール）のため先出し（DS-DEC-82）
+        Index("ix_orders_created_at", "created_at"),
+        Index("ix_orders_guest_email", "guest_email"),
+        MYSQL_TABLE_ARGS,
+    )
 
     order_number: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    # P1 は列のみ。P2 で members への FK を張る
-    member_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    # 会員の注文だけ値が入る（ゲストは NULL。DS-DEC-77）。会員は匿名化で残すので RESTRICT
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("members.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     guest_email: Mapped[str] = mapped_column(String(254), nullable=False)
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="order_status", native_enum=False, length=20),
@@ -62,9 +71,12 @@ class Order(IdMixin, TimestampMixin, Base):
         nullable=False,
         default=ReceiveMethod.delivery,
     )
-    # stores は P3 なので FK 無し
-    store_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    pickup_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 店舗受け取りのときだけ値が入る（DS-DEC-79）
+    store_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("stores.id", ondelete="RESTRICT"), nullable=True
+    )
+    # 8 文字（注文番号と同じ文字集合）。UNIQUE（NULL は重複可）
+    pickup_code: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True)
     tracking_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # 金額（整数円。DS-DEC-31）

@@ -45,9 +45,28 @@ class Settings(BaseSettings):
     # 第1案（DATABASE_URL の ssl_ca クエリ）で接続できれば未設定のままでよい
     DB_SSL_CA_PATH: str = ""
 
+    # ── P2-b（設計仕様書 P2 追補b 8.1）──────────────────────────────────────
+    # メールのリンク（確認・再設定・再入荷）のホスト部。リクエストの `Host` ヘッダは使わない
+    # （DS-DEC-75）。ローカルは `http://localhost:3000`。末尾の `/` は付けない。
+    # 未設定のときは、リンクを含むメールを送る処理が 500 になる（設定漏れを黙って許さない）
+    PUBLIC_WEB_BASE_URL: str = ""
+    # 登録・再設定の要求・再入荷の申込で許すメールのドメイン（カンマ区切り、小文字化して
+    # 完全一致。DS-DEC-88）。未設定は制限なし。判定は `demo_email_domains` を使う
+    DEMO_EMAIL_DOMAINS: str = ""
+    # seed の会員のパスワード（seed 実行時のみ。DS-DEC-87）。開発・テストは未設定でよい
+    # （seed_data の定数を使う）。`APP_ENV=production` では必須で、無ければ会員の seed を行わない
+    SEED_MEMBER_PASSWORD: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
+
+    @property
+    def demo_email_domains(self) -> frozenset[str]:
+        """`DEMO_EMAIL_DOMAINS` を小文字化・前後空白除去して分けた集合。空なら制限なし。"""
+        return frozenset(
+            part.strip().lower() for part in self.DEMO_EMAIL_DOMAINS.split(",") if part.strip()
+        )
 
     @property
     def is_test(self) -> bool:
