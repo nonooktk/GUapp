@@ -585,13 +585,13 @@ async def test_it_031_03_expiry_boundary(
     dead = await _registered_token(client, recording_mail, "dead@example.com")
     await sql(
         engine,
-        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() + INTERVAL 1 SECOND "
+        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() + INTERVAL 5 SECOND "
         "WHERE token_hash=:h",
         h=hash_token(alive),
     )
     await sql(
         engine,
-        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND "
+        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() - INTERVAL 5 SECOND "
         "WHERE token_hash=:h",
         h=hash_token(dead),
     )
@@ -831,7 +831,7 @@ async def test_it_032_09_expired_sessions_are_removed_on_login(
     client: httpx.AsyncClient, engine: AsyncEngine
 ) -> None:
     await login_ok(client, MEMBER1)
-    await sql(engine, "UPDATE sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND")
+    await sql(engine, "UPDATE sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 5 SECOND")
     await login_ok(client, MEMBER1)
     assert await scalar(engine, "SELECT COUNT(*) FROM sessions") == 1
 
@@ -1232,13 +1232,13 @@ async def test_it_035_04_expiry_boundary(
     dead = await _reset_token(client, recording_mail, MEMBER2)
     await sql(
         engine,
-        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() + INTERVAL 1 SECOND "
+        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() + INTERVAL 5 SECOND "
         "WHERE token_hash=:h",
         h=hash_token(alive),
     )
     await sql(
         engine,
-        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND "
+        "UPDATE email_tokens SET expires_at = UTC_TIMESTAMP() - INTERVAL 5 SECOND "
         "WHERE token_hash=:h",
         h=hash_token(dead),
     )
@@ -1315,7 +1315,7 @@ async def test_it_036_02_missing_malformed_unknown_and_expired_sessions_are_401(
         res = await me(client, token)
         assert (res.status_code, res.json()) == (401, {"code": "unauthorized"}), token
     token = await login_ok(client)
-    await sql(engine, "UPDATE sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 1 SECOND")
+    await sql(engine, "UPDATE sessions SET expires_at = UTC_TIMESTAMP() - INTERVAL 5 SECOND")
     assert (await me(client, token)).status_code == 401
 
 

@@ -11,6 +11,21 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AppEnv = Literal["development", "test", "production"]
+LlmProvider = Literal["auto", "openai", "stub"]
+ReasoningEffort = Literal["none", "low", "medium", "high"]
+# スタブの動き（P2 追補d 8.4）。本番では無視される
+StubScenario = Literal[
+    "ok",
+    "unknown_id",
+    "out_of_pool",
+    "price_tamper",
+    "faq_number_tamper",
+    "html",
+    "canary",
+    "timeout",
+    "error",
+    "refusal",
+]
 
 
 class Settings(BaseSettings):
@@ -63,6 +78,20 @@ class Settings(BaseSettings):
     # 12 文字以上。無い、または短ければ管理者の seed を行わない（管理画面にログインできない状態）
     SEED_STAFF_PASSWORD: str = ""
     SEED_STAFF_LOGIN_ID: str = ""
+
+    # ── F-029 AI アシスタント（設計仕様書 P2 追補d 8.1。範囲外の値は起動時に例外）──
+    # OpenAI のキー。空ならスタブ（開発・テスト）または無効（本番）。repr に出さない
+    OPENAI_API_KEY: str = Field(default="", repr=False)
+    OPENAI_MODEL: str = "gpt-6-luna"
+    OPENAI_REASONING_EFFORT: ReasoningEffort = "none"
+    OPENAI_TIMEOUT_SECONDS: int = Field(default=10, ge=1, le=60)
+    OPENAI_MAX_OUTPUT_TOKENS: int = Field(default=600, ge=16, le=4000)
+    LLM_PROVIDER: LlmProvider = "auto"
+    LLM_STUB_SCENARIO: StubScenario = "ok"
+    CHAT_ENABLED: bool = True
+    CHAT_DAILY_LIMIT: int = Field(default=300, ge=1)
+    CHAT_IP_LIMIT_PER_HOUR: int = Field(default=30, ge=1)
+    CHAT_TURN_LIMIT: int = Field(default=10, ge=1, le=50)
 
     @property
     def is_production(self) -> bool:

@@ -1,6 +1,7 @@
 """IT-SCHEMA-20〜22: P2-c のスキーマ（MySQL 必須。テスト設計書 P2 追補c 4.5）。
 
-20: Alembic の head が 1 本。… → f16be26dc48a → p2c_admin_constraints（14aa9b4157c2）の順
+20: Alembic の head が 1 本。… → f16be26dc48a → p2c_admin_constraints（14aa9b4157c2）→
+    p2d_chat（81517cba8cf1。F-029 の統合後）の順
 21: 管理者とセッションの行を入れたまま f16be26dc48a へ downgrade し、head へ upgrade し直す
 22: `staff.role` の CHECK 制約と `audit_logs` の索引（列の順序）
 """
@@ -25,6 +26,7 @@ REV_OLD = "ad00074244c2"  # pragma: allowlist secret（P2-b の 1 つ前の版�
 REV_AUTH = "13e0c198634f"  # pragma: allowlist secret（p2b_auth_tables）
 REV_FK = "f16be26dc48a"  # pragma: allowlist secret（p2b_orders_pickup_fk）
 REV_P2C = "14aa9b4157c2"  # pragma: allowlist secret（p2c_admin_constraints）
+REV_P2D = "81517cba8cf1"  # pragma: allowlist secret（p2d_chat。F-029。統合後の head）
 INDEX_NAME = "ix_audit_logs_target_type_target_id_at"
 CHECK_NAME = "ck_staff_role_allowed"
 ER_CHECK_VIOLATED = 3819
@@ -34,9 +36,13 @@ ER_CHECK_VIOLATED = 3819
 
 
 def test_it_schema_20_single_head_and_revision_order(migrated_schema: str) -> None:
-    """head が 1 本で、P2-b の最後のリビジョンの次に p2c_admin_constraints が付く（DS-DEC-123）。"""
+    """head が 1 本で、P2-b の最後のリビジョンの次に p2c_admin_constraints が付く（DS-DEC-123）。
+
+    P2-d（F-029）の統合後は head が p2d_chat に進む。P2-c の次に p2d_chat が付く。
+    """
     script = ScriptDirectory.from_config(alembic_config(migrated_schema))
-    assert script.get_heads() == [REV_P2C], "head が 1 本で p2c_admin_constraints であること"
+    assert script.get_heads() == [REV_P2D], "head が 1 本で p2d_chat であること"
+    assert script.get_revision(REV_P2D).down_revision == REV_P2C
     assert script.get_revision(REV_P2C).down_revision == REV_FK
     assert script.get_revision(REV_FK).down_revision == REV_AUTH
     assert script.get_revision(REV_AUTH).down_revision == REV_OLD

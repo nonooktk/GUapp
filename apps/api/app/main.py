@@ -6,6 +6,7 @@ import logging
 
 from fastapi import APIRouter, Depends, FastAPI
 
+from app.adapters.llm import warn_if_misconfigured
 from app.core.config import Settings, get_settings
 from app.core.errors import install_error_handlers
 from app.core.logging import setup_logging
@@ -16,6 +17,7 @@ from app.routers import (
     auth,
     cart,
     catalog,
+    chat,
     checkout,
     content,
     health,
@@ -32,7 +34,8 @@ from app.routers.admin import router as admin_router
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    setup_logging(logging.INFO, extra_secrets=[settings.INTERNAL_TOKEN])
+    setup_logging(logging.INFO, extra_secrets=[settings.INTERNAL_TOKEN, settings.OPENAI_API_KEY])
+    warn_if_misconfigured(settings)
 
     docs_kwargs: dict[str, str | None] = {}
     if settings.is_production:
@@ -51,6 +54,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # P2-b の個別制限器（名前つき。IP ごとに 10 回/時 など。DS-DEC-84）。`enforce_rate_limit`・
     # `ip_rate_limit` が `app.state.rate_limiters[名前]` を引く
     app.state.rate_limiters = build_rate_limiters()
+    # AI アシスタントの IP 回数制限器（既定 30 回/時/IP。P2 追補d DS-PRC-029-4）
+    app.state.chat_rate_limiter = SlidingWindowRateLimiter(
+        limit=settings.CHAT_IP_LIMIT_PER_HOUR, window_seconds=3600
+    )
 
     # 死活監視だけは内部トークン不要
     app.include_router(health.router)
@@ -91,6 +98,8 @@ def build_protected_router(*extra: APIRouter) -> APIRouter:
     # P2-c: 管理 API（DS-API-050〜053b）。ログイン・ログアウトを除き、ルーター単位で
     # `require_staff` を掛けた既定拒否（DS-DEC-109）。骨格（501）は C-2・C-3 が埋める
     api.include_router(admin_router)
+    # P2-d: AI アシスタント（DS-API-040・041）
+    api.include_router(chat.router)
     for router in extra:
         api.include_router(router)
     return api

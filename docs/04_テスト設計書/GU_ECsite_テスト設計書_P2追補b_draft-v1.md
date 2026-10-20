@@ -14,6 +14,7 @@
 | 版 | 日付 | 内容 | 作成 | 承認 |
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-10-20 | 初稿。設計仕様書 P2 追補b の設計 ID に対応する AT／ST／IT／UT を新設した。件数は 10 章の冒頭に示す。実施結果と関数名の対応は、実装の検収後に 10・11 章へ転記する | Claude | — |
+| draft-v1.1 | 2026-10-20 | 実装と手元の検収で見つかった食い違いを修正。ST-SEC-56 の未ログインの `/mypage` を「302 または 307」にした（Next.js 16 の `redirect` の既定は 307） | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -156,7 +157,7 @@
 | ST-SEC-53 | F-05・DS-DEC-89 | 正常 | 登録・ログイン失敗・ロック・再設定・再入荷の各操作のあとに、アプリのログ、`audit_logs`、outbox のファイル名を調べる | パスワード・トークン・平文のメールがログと `audit_logs` と outbox のファイル名に無い（ログのメールは `t***@example.com` の形に隠す）。`audit_logs` の `detail` にメール・氏名・受け取りコードが無い。本番設定（`APP_ENV=production`）では outbox にファイルが作られず、ログに種別だけが出る |
 | ST-SEC-54 | C-01・C-02 | 異常 | 会員登録の氏名と、再入荷のメール欄に `' OR 1=1 --`、`<script>alert(1)</script>`、`"><img src=x onerror=alert(1)>` を入れる。登録した氏名がマイページ、注文詳細に出る場面を確認する | SQL エラーが出ない。氏名は文字列として保存され、マイページと注文詳細の HTML ではエスケープされて表示される（スクリプトが動かない）。メール欄の不正値は 400 |
 | ST-SEC-55 | A-07・DS-DEC-12 | 正常 | `/me`・`/me/orders`・`/me/orders/<番号>`・店舗一覧・商品詳細・再入荷の応答の全キーを調べる | 内部 ID（`id`・`member_id`・`order_id`・`store_id`）、`password_hash`、`token_hash`、生年月日、性別が無い。例外は `variant_id`（本編 7.5） |
-| ST-SEC-56 | D-01〜D-03・DS-DEC-61 | 正常 | `/login`・`/register`・`/mypage`・`/mypage/orders/<番号>` の応答ヘッダーを確認する。`/mypage` を未ログインで開く | ST-SEC-30 のヘッダー（`nosniff`・`X-Frame-Options`・CSP・HSTS・`Referrer-Policy`・`Permissions-Policy`）が付く。ログイン後のページは `Cache-Control` が `no-store` を含み、共有キャッシュに残らない。未ログインの `/mypage` は 302 で `/login?next=/mypage` |
+| ST-SEC-56 | D-01〜D-03・DS-DEC-61 | 正常 | `/login`・`/register`・`/mypage`・`/mypage/orders/<番号>` の応答ヘッダーを確認する。`/mypage` を未ログインで開く | ST-SEC-30 のヘッダー（`nosniff`・`X-Frame-Options`・CSP・HSTS・`Referrer-Policy`・`Permissions-Policy`）が付く。ログイン後のページは `Cache-Control` が `no-store` を含み、共有キャッシュに残らない。未ログインの `/mypage` は 302 または 307 で `/login?next=/mypage`（Next.js 16 の `redirect` の既定は 307） |
 | ST-SEC-57 | B-07・DS-DEC-88 | 異常・境界 | `DEMO_EMAIL_DOMAINS=example.com` で api を起動し、`@example.com`、`@sub.example.com`、`@example.org`、`@EXAMPLE.COM` のメールで、登録・再設定の要求・再入荷の申込を送る。未設定で起動して同じことをする | 設定ありでは `@example.com` と `@EXAMPLE.COM`（小文字化後に一致）が通り、`@sub.example.com`・`@example.org` は 422 `unsupported_value`（`field:"email"`）。サブドメインは一致とみなさない。未設定では制限なし |
 | ST-SEC-58 | B-04・DS-DEC-84 | 境界 | 同じ IP から会員登録を 10 回、11 回、再入荷の申込を 20 回、21 回、再設定の要求を 5 回、6 回（メール替え）、同じメールで再設定の要求を 3 回、4 回送る | 10 回目・20 回目・5 回目・3 回目まで通り、次の 1 回が 429 `rate_limited`（`Retry-After` つき）。窓（1 時間）が過ぎると通る。登録の 11 回目は、メールが新規でも既登録でも同じ 429 |
 | ST-SEC-59 | A-02・DS-DEC-72 | 異常 | `subject_type=staff` の `sessions` 行（管理者は P2-c で作るため、テストでは行だけを直接作る）のトークンで、`GET /me`・`GET /me/orders`・`POST /orders` を呼ぶ | `/me` と `/me/orders` は 401。`POST /orders` はゲスト扱いで成立し、`member_id` は NULL（スタッフのセッションは会員として通らない） |

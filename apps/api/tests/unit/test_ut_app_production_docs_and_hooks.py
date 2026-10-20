@@ -96,17 +96,19 @@ def test_ut_hooks_not_imported_by_production_path() -> None:
     assert proc.stdout.strip() == "False", proc.stdout + proc.stderr
 
 
-def test_ut_models_export_21_tables() -> None:
-    from app.models import ALL_TABLES, P1_TABLES, P2A_TABLES, P2B_TABLES, Base
+def test_ut_models_export_23_tables() -> None:
+    from app.models import ALL_TABLES, P1_TABLES, P2A_TABLES, P2B_TABLES, P2D_TABLES, Base
 
     names = set(Base.metadata.tables)
-    # P1（12 表）に P2-a の DS-TBL-22 contents（1 表）と P2-b の 8 表を加えて 21 表になった
-    assert P1_TABLES | P2A_TABLES | P2B_TABLES == ALL_TABLES
+    # P1（12 表）に P2-a の DS-TBL-22 contents（1 表）、P2-b の 8 表、P2-d の chat_sessions・
+    # chat_messages（2 表）を加えて 23 表になった（P2-c は表を増やさない）
+    assert P1_TABLES | P2A_TABLES | P2B_TABLES | P2D_TABLES == ALL_TABLES
     assert names == ALL_TABLES
     assert len(P1_TABLES) == 12
     assert len(P2A_TABLES) == 1
     assert len(P2B_TABLES) == 8
-    assert len(names) == 21
+    assert len(P2D_TABLES) == 2
+    assert len(names) == 23
 
 
 def test_ut_models_key_constraints() -> None:

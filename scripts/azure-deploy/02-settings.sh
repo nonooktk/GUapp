@@ -14,6 +14,14 @@
 # 備えて App Service 側の両設定を削除する。GUAPP_DEMO_PUBLIC_UNTIL が空のときも
 # DEMO_PUBLIC_UNTIL を設定せず、削除する（帯を出さない）。
 #
+# P2（会員・管理画面・AI アシスタント。2026-10-21 追加）:
+#   - api に PUBLIC_WEB_BASE_URL（= web の URL）を設定する。
+#   - OPENAI_API_KEY は手元のファイル（既定 $HOME/GUapp/apps/api/.env。GUAPP_OPENAI_ENV_FILE で変更可）の
+#     OPENAI_API_KEY= の行だけを読み、値は表示しない。ファイルや行が無ければ設定せず、警告して続ける
+#     （AI アシスタントは本番で無効になる）。OPENAI_MODEL・LLM_PROVIDER は設定しない（コードの既定値）。
+#   - 管理者の初期パスワードは App Service には入れない。apps/api/.env.admin（権限600）に、
+#     未作成のときだけランダムな 20 文字を SEED_STAFF_PASSWORD= として書く（06 --seed-p2 が読む）。
+#
 # 前提: `apps/api/.env.azure`（DB_USER・DB_PASSWORD の2行、権限600）が存在すること。
 # Basic 認証の ID・パスワードは実行後に `apps/web/.env.basic-auth`（権限600）に書く。
 # 統括はそのファイルを見てレビュワーに Slack で個別に伝える。
@@ -73,6 +81,22 @@ if db != os.environ["GUAPP_DB_NAME"]:
     print(f"安全装置: DB 名が一致しません: {db!r}", file=sys.stderr); sys.exit(1)
 ' || { echo "[02-settings] 安全装置により中止しました。" >&2; exit 1; }
 
+# --- OPENAI_API_KEY を手元のファイルから読む（値は表示しない） ---
+OPENAI_API_KEY=""
+if [[ -r "$GUAPP_OPENAI_ENV_FILE" ]]; then
+  OPENAI_API_KEY="$(grep -E '^OPENAI_API_KEY=' "$GUAPP_OPENAI_ENV_FILE" | head -n1 | cut -d= -f2- | tr -d '\r' || true)"
+  # 値を囲む引用符があれば外す
+  OPENAI_API_KEY="${OPENAI_API_KEY#\"}"; OPENAI_API_KEY="${OPENAI_API_KEY%\"}"
+  OPENAI_API_KEY="${OPENAI_API_KEY#\'}"; OPENAI_API_KEY="${OPENAI_API_KEY%\'}"
+fi
+if [[ -z "$OPENAI_API_KEY" ]]; then
+  echo "[02-settings] 警告: OPENAI_API_KEY を読み取れませんでした（ファイル: $GUAPP_OPENAI_ENV_FILE）。" >&2
+  echo "[02-settings] OPENAI_API_KEY は設定しません。AI アシスタントは本番で無効（chat_unavailable）になります。" >&2
+  echo "[02-settings] App Service に既に入っている値があれば、そのまま残ります。" >&2
+else
+  echo "[02-settings] OPENAI_API_KEY を $GUAPP_OPENAI_ENV_FILE から読みました（値は表示しません）。"
+fi
+
 # --- 秘密の生成（画面には出さない） ---
 INTERNAL_TOKEN="$(openssl rand -hex 32)"
 BASIC_AUTH_USER=""
@@ -93,7 +117,7 @@ API_SETTINGS_JSON="$TMP_DIR/api-settings.json"
 WEB_SETTINGS_JSON="$TMP_DIR/web-settings.json"
 
 # JSON はコマンドライン引数に載せず、権限 600 の一時ファイル経由で az に渡す（ps 対策）。
-DATABASE_URL="$DATABASE_URL" INTERNAL_TOKEN="$INTERNAL_TOKEN" API_SETTINGS_JSON="$API_SETTINGS_JSON" python3 -c '
+DATABASE_URL="$DATABASE_URL" INTERNAL_TOKEN="$INTERNAL_TOKEN" OPENAI_API_KEY="$OPENAI_API_KEY" API_SETTINGS_JSON="$API_SETTINGS_JSON" python3 -c '
 import json
 import os
 
@@ -107,7 +131,12 @@ settings = [
     {"name": "CORS_ALLOW_ORIGIN", "value": os.environ["GUAPP_WEB_URL"]},
     # 公開環境は誰でも会員登録できるため、登録・再設定に使えるメールをダミーのドメインに限る（DS-DEC-88）
     {"name": "DEMO_EMAIL_DOMAINS", "value": "example.com"},
+    # P2: 会員向けメール等に載せる web の URL（2026-10-21）
+    {"name": "PUBLIC_WEB_BASE_URL", "value": os.environ["GUAPP_WEB_URL"]},
 ]
+# OPENAI_MODEL・LLM_PROVIDER・SEED_STAFF_LOGIN_ID は設定しない（コードの既定値を使う）
+if os.environ["OPENAI_API_KEY"] != "":
+    settings.append({"name": "OPENAI_API_KEY", "value": os.environ["OPENAI_API_KEY"]})
 with open(os.environ["API_SETTINGS_JSON"], "w") as f:
     json.dump(settings, f)
 '
@@ -168,6 +197,36 @@ if [[ ${#DELETE_NAMES[@]} -gt 0 ]]; then
     --output none
 fi
 
+# --- 管理者の初期パスワード: 未作成のときだけ作る（既にあれば変えない。値は表示しない） ---
+# App Service には入れない。06-migrate-seed.sh --seed-p2 が seed の実行時に読む。
+ADMIN_ENV_FILE="$GUAPP_ADMIN_ENV_FILE"
+if [[ -f "$ADMIN_ENV_FILE" ]] && grep -qE '^SEED_STAFF_PASSWORD=.+' "$ADMIN_ENV_FILE"; then
+  echo "[02-settings] 管理者の初期パスワードは作成済みのため変えません: $ADMIN_ENV_FILE"
+else
+  ADMIN_PASSWORD="$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 20)"
+  if [[ ${#ADMIN_PASSWORD} -ne 20 ]]; then
+    echo "[02-settings] エラー: 管理者の初期パスワードの生成に失敗しました。" >&2
+    exit 1
+  fi
+  umask 077
+  {
+    if [[ ! -f "$ADMIN_ENV_FILE" ]]; then
+      echo "# scripts/azure-deploy/02-settings.sh が生成しました（$(date -u +%Y-%m-%dT%H:%M:%SZ)）"
+      echo "# 管理者の初期パスワード。06-migrate-seed.sh --seed-p2 が読む。App Service には入れない。"
+      echo "# このファイルは git 管理対象外（.gitignore の .env.* パターン）。"
+    fi
+    echo "SEED_STAFF_PASSWORD=${ADMIN_PASSWORD}"
+  } >> "$ADMIN_ENV_FILE"
+  chmod 600 "$ADMIN_ENV_FILE"
+  unset ADMIN_PASSWORD
+  echo "[02-settings] 管理者の初期パスワードを作成しました（値は表示しません）: $ADMIN_ENV_FILE"
+fi
+if git -C "$GUAPP_REPO_ROOT" check-ignore -q "$ADMIN_ENV_FILE"; then
+  echo "[02-settings] 確認: $ADMIN_ENV_FILE は git 管理対象外です（.gitignore の .env.* パターンに一致）。"
+else
+  echo "[02-settings] 警告: $ADMIN_ENV_FILE が .gitignore に無視されていません。誤ってコミットしないよう注意してください。" >&2
+fi
+
 if [[ "$GUAPP_ENABLE_BASIC_AUTH" == "1" ]]; then
   # --- Basic 認証の ID・パスワードだけ、統括が確認できるようファイルに残す ---
   umask 077
@@ -189,6 +248,6 @@ else
   echo "[02-settings] 完了。Basic 認証は設定していません（GUAPP_ENABLE_BASIC_AUTH=0）。"
 fi
 
-unset INTERNAL_TOKEN BASIC_AUTH_USER BASIC_AUTH_PASSWORD DATABASE_URL
+unset INTERNAL_TOKEN BASIC_AUTH_USER BASIC_AUTH_PASSWORD DATABASE_URL OPENAI_API_KEY
 
 echo "[02-settings] 次は 03-db-firewall.sh で講義 MySQL のファイアウォールに api の送信 IP を追加してください。"

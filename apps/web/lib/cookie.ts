@@ -100,3 +100,25 @@ export function readSessionToken(cookieHeader: string | null): string | null {
   const v = readCookie(cookieHeader, SESSION_COOKIE);
   return v !== null && SESSION_TOKEN_SHAPE.test(v) ? v : null;
 }
+
+// ---- P2-d: AI アシスタントの会話トークン Cookie（設計仕様書 P2 追補d 4.4・DS-DEC-97） ----
+
+export const CHAT_TOKEN_COOKIE = "chat_token";
+export const CHAT_TOKEN_MAX_AGE_SEC = 60 * 60; // 1 時間
+
+/** FastAPI が発行する会話トークンの形（`secrets.token_urlsafe(32)` ＝ base64url 43 文字） */
+const CHAT_TOKEN_SHAPE = /^[A-Za-z0-9_-]{43}$/;
+
+export function isChatTokenShape(value: string | null | undefined): value is string {
+  return typeof value === "string" && CHAT_TOKEN_SHAPE.test(value);
+}
+
+/** 会話トークン Cookie（HttpOnly・SameSite=Lax・Path=/・1 時間。Domain は付けない＝この host だけ） */
+export function buildChatTokenCookie(token: string, appEnv: string): string {
+  return buildSetCookie(CHAT_TOKEN_COOKIE, token, { appEnv, maxAgeSec: CHAT_TOKEN_MAX_AGE_SEC });
+}
+
+/** 会話トークン Cookie を消す（`Max-Age=0`。「新しい相談」で使う） */
+export function buildChatTokenClearCookie(appEnv: string): string {
+  return buildSetCookie(CHAT_TOKEN_COOKIE, "", { appEnv, maxAgeSec: 0 });
+}

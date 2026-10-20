@@ -10,8 +10,9 @@ schema は `alembic upgrade head` で作る（`create_all` 禁止。テスト設
 from __future__ import annotations
 
 import argparse
+import logging
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -21,8 +22,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
+from app.core import testing_hooks
 from app.seed import seed, truncate_all_tables
 from tests.integration import concurrency_helpers
+from tests.integration.chat_helpers import ChatCtx
 from tests.integration.live_server import live_server  # noqa: F401  # フィクスチャ登録
 
 ENV_KEY = "DATABASE_URL_TEST"
@@ -123,7 +126,7 @@ async def it_engine(migrated_schema: str) -> AsyncIterator[AsyncEngine]:
 
 @pytest.fixture
 async def seed_db(it_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
-    """各テストの前に全 21 表を空にして seed を投入し、後で TRUNCATE する（IT 用）。"""
+    """各テストの前に全 23 表を空にして seed を投入し、後で TRUNCATE する（IT 用）。"""
     result = await seed(it_engine, reset=True)
     assert not result.skipped, "reset=True なのに seed が skip された"
     try:
@@ -131,3 +134,22 @@ async def seed_db(it_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
     finally:
         async with it_engine.begin() as conn:
             await truncate_all_tables(conn)
+
+
+@pytest.fixture
+def chat_ctx(
+    make_app: Callable[..., FastAPI],
+    client_factory,
+    seed_db: AsyncEngine,
+    test_database_url: str,
+    migrated_schema: str,
+    caplog: pytest.LogCaptureFixture,
+) -> Iterator[ChatCtx]:
+    """F-029 の IT 用。MySQL（guapp_test）＋ seed ＋ 台本つきのアダプタを差し込める app の束。
+
+    実際の OpenAI は呼ばない。後片付けで同時性フック（`testing_hooks`）を戻す。
+    """
+    caplog.set_level(logging.INFO, logger="app.chat")
+    testing_hooks.reset_all()
+    yield ChatCtx(seed_db, make_app, client_factory, test_database_url)
+    testing_hooks.reset_all()

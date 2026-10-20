@@ -43,10 +43,10 @@ async def _tables(engine: AsyncEngine) -> set[str]:
 # ── IT-SCHEMA-09 ───────────────────────────────────────────────────────────────
 
 
-async def test_it_schema_09_upgrade_head_creates_21_tables(it_engine: AsyncEngine) -> None:
+async def test_it_schema_09_upgrade_head_creates_23_tables(it_engine: AsyncEngine) -> None:
     tables = await _tables(it_engine)
     assert tables - {"alembic_version"} == ALL_TABLES
-    assert len(ALL_TABLES) == 21
+    assert len(ALL_TABLES) == 23
     assert len(P1_TABLES) == 12 and len(P2A_TABLES) == 1 and len(P2B_TABLES) == 8
     assert P2B_TABLES == {
         "members",
