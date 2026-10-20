@@ -17,12 +17,13 @@ export type RequestKind = "api" | "page" | "static";
 
 /**
  * リクエストの種類。
- * - `/api/*`（BFF の窓口）は "api"
+ * - `/api/*`（BFF の窓口）と、管理画面の BFF `/admin/api/*`（P2 追補c DS-DEC-107・126）は "api"（同じ 120 回/分の枠で数える）
  * - `/_next/*`（ビルド成果物・dev の HMR など）と、拡張子付きの静的ファイル（`/products/031/1.jpg` など public 配下）は数えない
  * - それ以外（ページ・RSC・prefetch）は "page"
  */
 export function classifyPath(pathname: string): RequestKind {
   if (pathname === "/api" || pathname.startsWith("/api/")) return "api";
+  if (pathname === "/admin/api" || pathname.startsWith("/admin/api/")) return "api";
   if (pathname.startsWith("/_next/") || pathname.startsWith("/__nextjs")) return "static";
   const last = pathname.slice(pathname.lastIndexOf("/") + 1);
   if (/\.[A-Za-z0-9]{1,10}$/.test(last)) return "static";

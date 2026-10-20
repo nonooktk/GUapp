@@ -7,10 +7,10 @@ describe("S5 next.config のセキュリティヘッダ", () => {
     expect(nextConfig.poweredByHeader).toBe(false);
   });
 
-  it("headers() は全パス（/:path*）に 6 つのヘッダを付ける", async () => {
+  it("headers() は全パス（/:path*）に 6 つのヘッダを付ける（P2-c: 管理画面用の規則が 2 つ目に加わる。ST-SEC-91 は st-sec-p2c-01）", async () => {
     expect(nextConfig.headers).toBeTypeOf("function");
     const rules = await nextConfig.headers!();
-    expect(rules).toHaveLength(1);
+    expect(rules).toHaveLength(2);
     expect(rules[0].source).toBe("/:path*");
     const map = Object.fromEntries(rules[0].headers.map((h) => [h.key, h.value]));
     expect(map).toEqual({

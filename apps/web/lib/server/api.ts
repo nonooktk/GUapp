@@ -22,6 +22,7 @@ const ALLOWED_ERROR_DETAIL_KEYS = new Set([
   "to",
   "field", // 409 duplicate / 422 limit_exceeded
   "limit", // 422
+  "current", // 409 stale_data（管理画面。更新前の値の照合に失敗したときの現在の値。P2 追補c DS-DEC-124）
   "message", // 500 internal_error（固定文言）
 ]);
 

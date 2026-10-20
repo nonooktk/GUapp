@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Noto_Sans_JP } from "next/font/google";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { CartProvider } from "@/components/CartProvider";
 import DemoPeriodBanner from "@/components/DemoPeriodBanner";
 import Footer from "@/components/Footer";
 import HeaderWithCart from "@/components/HeaderWithCart";
 import { ToastProvider } from "@/components/Toast";
+import { ADMIN_AREA_HEADER } from "@/lib/admin-types";
 import { CART_TOKEN_COOKIE, SESSION_COOKIE } from "@/lib/cookie";
 import { parseDemoPublicUntil } from "@/lib/demo-banner";
 import { getCategories, loadOrNull } from "@/lib/server/catalog";
@@ -19,6 +20,11 @@ import "./globals.css";
  * 会員アイコンは Cookie `sid` の有無だけで「ログイン」「マイページ」を切り替える（DS-DEC-86。FastAPI は呼ばない。失効した `sid` が
  * 残っていても、マイページを開いた時点で 401 → /login?next=/mypage へ移る）。Server Component は Cookie を発行・削除できないので読み取りだけ。
  * Next.js 16 では `cookies()` が Promise なので await する。
+ *
+ * 管理画面（P2 追補c DS-DEC-122・UT-WEB-52）: `proxy.ts` が `/admin` 配下のリクエストにだけ付けるリクエストヘッダー `x-admin-area: 1` を読み、
+ * 値が `1` のときだけ顧客向けのヘッダー・フッター・カート・カテゴリの取得（GET /categories）・期間限定公開の帯を省く
+ * （`html`／`body`／フォント／トーストだけ残す）。それ以外（ヘッダー無し・`0`・`1` 以外）は従来どおり顧客向けの枠を出す。
+ * `/admin` 配下の見出し・メニューは `app/admin/layout.tsx` が出す。
  *
  * 書体はデザイン基準 v1 2.2 の Noto Sans JP（300/400/700）。`variable` で <html> に CSS 変数を付け、
  * globals.css の `--font-body` / `--font-heading` から参照する。日本語のサブセットは Google Fonts が unicode-range で自動分割する。
@@ -42,6 +48,17 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const requestHeaders = await headers();
+  if (requestHeaders.get(ADMIN_AREA_HEADER) === "1") {
+    return (
+      <html lang="ja" className={`h-full antialiased ${notoSansJP.variable}`}>
+        <body className="flex min-h-full flex-col bg-bg font-body text-fg">
+          <ToastProvider>{children}</ToastProvider>
+        </body>
+      </html>
+    );
+  }
+
   const store = await cookies();
   const hasCartCookie = store.has(CART_TOKEN_COOKIE);
   const signedIn = store.has(SESSION_COOKIE);
