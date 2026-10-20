@@ -71,6 +71,16 @@ export interface ProductDetail {
   sizes: string[];
   variants: Variant[];
   related: RelatedProduct[];
+  /** P2-b（DS-API-003・DS-PRC-003a）。レビューが 0 件でもキーは出る。件数のみで割合は返さない */
+  fit_summary: FitSummary;
+}
+
+/** サイズ感の集計（承認済みで `fit` が回答されたレビューの件数）。`total = small + just + large` */
+export interface FitSummary {
+  total: number;
+  small: number;
+  just: number;
+  large: number;
 }
 
 // ---- P2-a: 商品検索・検索サジェスト（DS-API-004・004a） ----
@@ -182,6 +192,8 @@ export const MAX_QUANTITY_PER_ITEM = 10;
 
 /** DS-API-021 `POST /checkout/prepare` の応答。items はカート明細と同じ形 */
 export interface PrepareResponse {
+  /** P2-b: 受け取り方法（`store` のとき送料 0）。古い応答には無い */
+  receive_method?: ReceiveMethod;
   /** 注文確定に 1 回だけ使う 43 文字の base64url */
   idempotency_key: string;
   items: CartItem[];
@@ -195,18 +207,24 @@ export interface PrepareResponse {
   free_shipping_threshold: number;
 }
 
-/** DS-API-022 `POST /orders` の本文 */
+/** 受け取り方法（DS-API-021・022） */
+export type ReceiveMethod = "delivery" | "store";
+
+/** DS-API-022 `POST /orders` の本文。`receive_method=store` では `ship_postal_code`・`ship_address` を送らず `store_code` を送る */
 export interface OrderCreateBody {
   idempotency_key: string;
   ship_name: string;
-  /** ハイフン除去後の 7 桁 */
-  ship_postal_code: string;
-  /** 都道府県・市区町村・番地・建物を全角スペースで結合 */
-  ship_address: string;
+  /** ハイフン除去後の 7 桁（配送のみ） */
+  ship_postal_code?: string;
+  /** 都道府県・市区町村・番地・建物を全角スペースで結合（配送のみ） */
+  ship_address?: string;
   /** ハイフン除去後の 10〜11 桁 */
   ship_phone: string;
+  /** 店舗受け取りでは受け取る方の連絡先メール（会員の注文でも項目名は変わらない） */
   guest_email: string;
-  receive_method: "delivery";
+  receive_method: ReceiveMethod;
+  /** 店舗受け取りのみ（`^[a-z0-9-]{1,32}$`） */
+  store_code?: string;
   payment_method: "card";
   /** 確認画面に表示した金額（FastAPI が再計算と照合する） */
   display: { subtotal: number; shipping_fee: number; total: number };
@@ -231,7 +249,14 @@ export interface OrderItem {
   line_total: number;
 }
 
-/** DS-API-022／023 共通の注文応答。内部 ID は含まれない */
+/** 注文の受け取り店舗（内部 ID・郵便番号は含まれない） */
+export interface OrderStore {
+  name: string;
+  prefecture: string;
+  address: string;
+}
+
+/** DS-API-022／023／024a 共通の注文応答。内部 ID は含まれない */
 export interface OrderResponse {
   order_number: string;
   status: OrderStatus;
@@ -250,4 +275,58 @@ export interface OrderResponse {
   payment_method: string;
   /** ISO 8601（UTC）。表示は JST に変換する */
   ordered_at: string;
+  /** P2-b（4.4）: `store` のときだけ。それ以外は null。古い応答（sessionStorage の保存分）には無い */
+  store?: OrderStore | null;
+  /** 8 文字（区切りなし）。`store` かつ状態が accepted・preparing・shipped のときだけ値が入る */
+  pickup_code?: string | null;
+  /** `delivery` で shipped・delivered かつ登録済みのときだけ */
+  tracking_number?: string | null;
+  /** 受付から受け取り可能までの区分の表示名（DS-PRC-024a） */
+  status_label?: string;
+  /** 注文に会員が紐づいているか。完了画面の案内の出し分けに使う */
+  is_member_order?: boolean;
+}
+
+// ---- P2-b: 会員・注文履歴・店舗（DS-API-036・024・024a・026） ----
+
+/** DS-API-036 `GET /me`。内部 ID・生年月日・性別は返らない */
+export interface MemberInfo {
+  name: string;
+  email: string;
+  email_verified: boolean;
+  personalize_opt_in: boolean;
+}
+
+/** DS-API-024 一覧の 1 件 */
+export interface OrderHistoryItem {
+  order_number: string;
+  status: OrderStatus;
+  status_label: string;
+  /** ISO 8601（UTC） */
+  ordered_at: string;
+  total: number;
+  receive_method: string;
+  /** 数量の合計 */
+  item_count: number;
+  first_item_name: string;
+}
+
+export interface OrderHistoryResponse {
+  items: OrderHistoryItem[];
+  page: number;
+  per_page: number;
+  total: number;
+  has_more: boolean;
+}
+
+/** DS-API-026 受け取り店舗の 1 件。郵便番号・内部 ID は返らない */
+export interface StoreSummary {
+  code: string;
+  name: string;
+  prefecture: string;
+  address: string;
+}
+
+export interface StoresResponse {
+  items: StoreSummary[];
 }

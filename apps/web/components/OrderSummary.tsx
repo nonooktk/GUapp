@@ -1,12 +1,13 @@
 import Price from "@/components/Price";
-import { formatNumber } from "@/lib/format";
-import type { OrderItem } from "@/lib/types";
+import { formatNumber, formatPickupCode } from "@/lib/format";
+import type { OrderItem, OrderStore } from "@/lib/types";
 
 /**
  * 注文確認・完了（DS-SCR-006）で共用する表示部品（デザイン基準 v1 4 章 SCR-006）。
  * - OrderItemsList: 明細（名称・色/サイズ・単価・数量・小計）。カートと同じ行構成。画像は任意（完了画面の応答には無い）
  * - AmountSummary: 小計・送料・合計・うち消費税を縦積みの dl（カートの金額サマリと同じスタイル）
- * - ShippingSummary: お届け先・メール・受け取り方法・支払い方法
+ * - ShippingSummary: お届け先・メール・受け取り方法・支払い方法。店舗受け取り（P2-b）は「受け取る方」と店舗名・住所を出す
+ * - PickupCodeBlock: 受け取りコード（8 文字を `ABCD-EFGH` に区切って大きく表示。完了画面・注文詳細で共用）
  */
 
 export interface OrderItemLike extends OrderItem {
@@ -52,9 +53,20 @@ export interface AmountSummaryProps {
   free_shipping_threshold?: number;
   /** aside の見出し */
   label?: string;
+  /** `store` のとき送料を `¥0` で出し、「店舗受け取りのため送料はかかりません」を添える（設計仕様書 6.8） */
+  receiveMethod?: string;
 }
 
-export function AmountSummary({ subtotal, shipping_fee, total, tax_included, free_shipping_threshold, label = "金額" }: AmountSummaryProps) {
+export function AmountSummary({
+  subtotal,
+  shipping_fee,
+  total,
+  tax_included,
+  free_shipping_threshold,
+  label = "金額",
+  receiveMethod,
+}: AmountSummaryProps) {
+  const isStore = receiveMethod === "store";
   return (
     <aside className="h-fit rounded-sm border border-line bg-line/40 p-4 text-sm" aria-label={label} data-testid="amount-summary">
       <dl className="space-y-2">
@@ -67,11 +79,11 @@ export function AmountSummary({ subtotal, shipping_fee, total, tax_included, fre
         <div className="flex justify-between">
           <dt>
             送料
-            {free_shipping_threshold !== undefined && (
+            {!isStore && free_shipping_threshold !== undefined && (
               <span className="ml-1 text-xs text-fg-muted">（{formatNumber(free_shipping_threshold)} 円以上で無料）</span>
             )}
           </dt>
-          <dd>{shipping_fee === 0 ? "無料" : <Price amount={shipping_fee} />}</dd>
+          <dd>{shipping_fee === 0 && !isStore ? "無料" : <Price amount={shipping_fee} />}</dd>
         </div>
         <div className="flex items-baseline justify-between border-t border-line pt-3 text-base font-bold">
           <dt>合計</dt>
@@ -86,18 +98,26 @@ export function AmountSummary({ subtotal, shipping_fee, total, tax_included, fre
           </dd>
         </div>
       </dl>
+      {isStore && (
+        <p className="mt-3 text-xs text-fg-muted" data-testid="store-no-shipping-note">
+          店舗受け取りのため送料はかかりません
+        </p>
+      )}
     </aside>
   );
 }
 
 export interface ShippingSummaryProps {
   ship_name: string;
-  ship_postal_code: string;
-  ship_address: string;
+  /** 配送のときだけ使う（店舗受け取りでは省略できる） */
+  ship_postal_code?: string;
+  ship_address?: string;
   ship_phone: string;
   guest_email: string;
   receive_method: string;
   payment_method: string;
+  /** 店舗受け取りの店舗（名前・住所） */
+  store?: OrderStore | null;
 }
 
 /** 郵便番号 7 桁を `100-0001` の形に、電話を読みやすく区切る（表示だけ。送信値は数字のみ） */
@@ -116,29 +136,63 @@ export function paymentMethodLabel(v: string): string {
 export function ShippingSummary(p: ShippingSummaryProps) {
   const row = "grid gap-1 sm:grid-cols-[8rem_1fr]";
   const dt = "text-fg-muted";
+  const isStore = p.receive_method === "store";
   return (
     <dl className="space-y-3 text-sm" data-testid="shipping-summary">
-      <div className={row}>
-        <dt className={dt}>お届け先</dt>
-        <dd>
-          <p>{p.ship_name} 様</p>
-          <p>〒{formatPostal(p.ship_postal_code)}</p>
-          <p className="break-words">{p.ship_address}</p>
-          <p>電話 {p.ship_phone}</p>
-        </dd>
-      </div>
+      {isStore ? (
+        <div className={row}>
+          <dt className={dt}>受け取る方</dt>
+          <dd>
+            <p>{p.ship_name} 様</p>
+            <p>電話 {p.ship_phone}</p>
+          </dd>
+        </div>
+      ) : (
+        <div className={row}>
+          <dt className={dt}>お届け先</dt>
+          <dd>
+            <p>{p.ship_name} 様</p>
+            <p>〒{formatPostal(p.ship_postal_code ?? "")}</p>
+            <p className="break-words">{p.ship_address}</p>
+            <p>電話 {p.ship_phone}</p>
+          </dd>
+        </div>
+      )}
       <div className={row}>
         <dt className={dt}>メールアドレス</dt>
         <dd className="break-all">{p.guest_email}</dd>
       </div>
       <div className={row}>
         <dt className={dt}>受け取り方法</dt>
-        <dd>{receiveMethodLabel(p.receive_method)}</dd>
+        <dd>
+          <p>{receiveMethodLabel(p.receive_method)}</p>
+          {isStore && p.store && (
+            <p className="mt-0.5 break-words text-fg-muted" data-testid="store-info">
+              {p.store.name}（{p.store.prefecture} {p.store.address}）
+            </p>
+          )}
+        </dd>
       </div>
       <div className={row}>
         <dt className={dt}>支払い方法</dt>
         <dd>{paymentMethodLabel(p.payment_method)}</dd>
       </div>
     </dl>
+  );
+}
+
+/**
+ * 受け取りコードの表示（設計仕様書 6.5・6.8）。API の値は区切りなし 8 文字で、4 文字ずつハイフンで区切る。
+ * API が値を返したときだけ呼ぶ（返さないときは枠ごと出さない）。
+ */
+export function PickupCodeBlock({ code, note }: { code: string; note?: string }) {
+  return (
+    <div className="rounded-sm border border-fg p-4 text-center" data-testid="pickup-code-block">
+      <p className="text-sm text-fg-muted">受け取りコード</p>
+      <p className="mt-1 text-3xl font-bold tabular-nums tracking-widest" data-testid="pickup-code">
+        {formatPickupCode(code)}
+      </p>
+      {note && <p className="mt-2 text-xs text-fg-muted">{note}</p>}
+    </div>
   );
 }

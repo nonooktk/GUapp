@@ -1,6 +1,6 @@
 import { CSRF_HEADER } from "@/lib/csrf-validation";
 import { CartApiError, ensureCsrfToken } from "@/lib/client/cart-api";
-import type { ApiErrorBody, OrderCreateBody, OrderResponse, PrepareResponse } from "@/lib/types";
+import type { ApiErrorBody, OrderCreateBody, OrderResponse, PrepareResponse, ReceiveMethod } from "@/lib/types";
 
 /**
  * ブラウザから注文系 BFF（`/api/checkout/prepare`・`/api/orders`・`/api/orders/[n]/lookup`）を呼ぶ薄いクライアント。
@@ -30,7 +30,7 @@ async function parseJson<T>(res: Response): Promise<T | null> {
   }
 }
 
-async function post<T>(input: string, json?: unknown): Promise<{ status: number; data: T }> {
+export async function post<T>(input: string, json?: unknown): Promise<{ status: number; data: T }> {
   const csrf = await ensureCsrfToken();
   const headers: Record<string, string> = { [CSRF_HEADER]: csrf, Accept: "application/json" };
   if (json !== undefined) headers["Content-Type"] = "application/json";
@@ -51,9 +51,12 @@ async function post<T>(input: string, json?: unknown): Promise<{ status: number;
   return { status: res.status, data };
 }
 
-/** POST /api/checkout/prepare → 冪等キー・明細・金額（DS-API-021） */
-export async function prepareCheckout(): Promise<PrepareResponse> {
-  return (await post<PrepareResponse>("/api/checkout/prepare")).data;
+/**
+ * POST /api/checkout/prepare → 冪等キー・明細・金額（DS-API-021）。
+ * `receiveMethod` を渡すと本文 `{receive_method}` を送る（`store` は送料 0）。省略は従来どおり本文なし（配送）
+ */
+export async function prepareCheckout(receiveMethod?: ReceiveMethod): Promise<PrepareResponse> {
+  return (await post<PrepareResponse>("/api/checkout/prepare", receiveMethod ? { receive_method: receiveMethod } : undefined)).data;
 }
 
 /** POST /api/orders → 201（新規）／200（同じキーの再送）。どちらも注文応答（DS-API-022） */

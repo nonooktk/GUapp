@@ -12,6 +12,7 @@ import type { ApiErrorBody } from "@/lib/types";
  * | 409 payment_failed {order_number} | SCR-005 の支払い方法へ。prepare を呼び直して新しいキーで再注文 |
  * | 409 already_ordered {order_number} | 完了画面に既存の番号を表示（2 タブ） |
  * | 409 empty_cart | カート画面へ |
+ * | 409 invalid_reference | SCR-005 へ戻す（店舗受け取りの店舗が無い・受け取り停止。P2-b） |
  * | 422 unsupported_value | 通常発生しない。汎用トースト |
  * | 403 forbidden（BFF の CSRF） | トースト「ページを再読み込みしてください」 |
  * | 503 upstream_unavailable ／ 5xx | その場に留まりトースト |
@@ -37,6 +38,7 @@ export const ORDER_MESSAGES = {
   paymentFailed: "決済に失敗しました。支払い方法をご確認ください",
   alreadyOrdered: "このカートはすでに注文済みです",
   emptyCart: "カートに商品が入っていません",
+  invalidStore: "選択した受け取り店舗はご利用いただけません。別の店舗をお選びください",
   forbidden: "ページを再読み込みしてからもう一度お試しください",
   unavailable: "サーバーに接続できません。時間をおいてお試しください",
   generic: "処理に失敗しました。時間をおいてお試しください",
@@ -77,6 +79,8 @@ export function routeOrderError(status: number, body: ApiErrorBody | null): Orde
         return { kind: "cart", message: ORDER_MESSAGES.alreadyOrdered, variantIds: [] };
       case "empty_cart":
         return { kind: "cart", message: ORDER_MESSAGES.emptyCart, variantIds: [] };
+      case "invalid_reference":
+        return { kind: "checkout", message: ORDER_MESSAGES.invalidStore, focus: "form", refetchPrepare: true };
       default:
         return { kind: "stay", message: ORDER_MESSAGES.generic };
     }

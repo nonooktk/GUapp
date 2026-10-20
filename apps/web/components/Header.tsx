@@ -16,7 +16,9 @@ import type { Category } from "@/lib/types";
  * 「≡ メニュー」はオールメニューのドロワー（AllMenu・U-06・AT-07）を開閉する。閉じたらフォーカスを「≡」へ戻す。
  * 検索: sm 以上は幅 240px 程度の入力欄を常設（`SearchBox`）。375px は検索アイコンをタップすると
  * オーバーレイの検索パネル（`SearchPanel`）が開く。閉じたら検索アイコンへフォーカスを戻す（AllMenu と同じ規則）。
- * お気に入り・会員の遷移先は P2 以降。
+ * お気に入りの遷移先は P2 以降。
+ * 会員アイコン（P2-b・設計仕様書 6.2・DS-DEC-86）: 未ログインは `/login`（aria-label「ログイン」）、ログイン済み（Cookie `sid` あり）は
+ * `/mypage`（aria-label「マイページ」）。判定は layout（Server Component）が `cookies().has("sid")` で行い、`signedIn` で渡す。
  */
 
 export interface HeaderProps {
@@ -24,6 +26,8 @@ export interface HeaderProps {
   cartCount: number;
   /** オールメニューに出すカテゴリ階層（GET /categories）。取得失敗時は null */
   categories?: Category[] | null;
+  /** ログイン済みか（Cookie `sid` の有無。FastAPI は呼ばない）。既定 false */
+  signedIn?: boolean;
 }
 
 const iconClass = "size-6";
@@ -69,7 +73,7 @@ function UserIcon() {
 
 const iconLinkClass = "inline-flex size-11 items-center justify-center rounded-pill text-fg hover:bg-line";
 
-export default function Header({ cartCount, categories = null }: HeaderProps) {
+export default function Header({ cartCount, categories = null, signedIn = false }: HeaderProps) {
   const badgeLabel = cartCount > 99 ? "99+" : String(cartCount);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -154,7 +158,7 @@ export default function Header({ cartCount, categories = null }: HeaderProps) {
               </span>
             )}
           </Link>
-          <Link href="#" className={iconLinkClass} aria-label="会員">
+          <Link href={signedIn ? "/mypage" : "/login"} className={iconLinkClass} aria-label={signedIn ? "マイページ" : "ログイン"}>
             <UserIcon />
           </Link>
         </nav>

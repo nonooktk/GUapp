@@ -5,6 +5,7 @@ import Button from "@/components/Button";
 import { useCart } from "@/components/CartProvider";
 import { controlClass } from "@/components/Form";
 import Price from "@/components/Price";
+import RestockForm from "@/components/RestockForm";
 import { useToast } from "@/components/Toast";
 import { cartErrorMessage } from "@/lib/cart-messages";
 import { addCartItem, CartApiError } from "@/lib/client/cart-api";
@@ -17,6 +18,8 @@ import { MAX_QUANTITY_PER_ITEM, type Variant } from "@/lib/types";
  * - 追加ボタンは primary・52px 高（デザイン基準 v1 3 章）
  * - 375px では下部固定バー（選択内容・価格・追加ボタン。GU 実サイトに無い意図的な差 = 基準 7 章）。sm 以上ではパネル内のボタンだけ表示
  * - 追加成功: トースト＋バッジ更新＋「カートを見る」導線。409／422 は文言を出し分け
+ * - P2-b（設計仕様書 6.6）: 色とサイズが選ばれ、その組み合わせ（variant）が在庫切れのときだけ、在庫表示の下に再入荷のお知らせ申込（RestockForm）を出す。
+ *   固定バー（pb-28）に隠れないよう購入パネルの内側に置く。組み合わせ自体が無い（variant が null）ときは申込む対象の ID が無いので出さない
  */
 
 export interface PurchasePanelProps {
@@ -156,6 +159,9 @@ export default function PurchasePanel({ productId, price, colors, sizes, variant
           </select>
         </label>
       </div>
+
+      {/* 再入荷のお知らせ（在庫切れの組み合わせを選んだときだけ） */}
+      {outOfStock && variant && <RestockForm key={variant.variant_id} variantId={variant.variant_id} />}
 
       {/* パネル内ボタン（sm 以上） */}
       <div className="hidden sm:block">{addButton("w-full sm:min-w-80 sm:w-auto")}</div>

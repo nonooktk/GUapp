@@ -4,7 +4,11 @@
  * - 郵便番号・電話はハイフン・空白を除いた ASCII 数字だけで桁を数える（全角数字は入力時に半角へ寄せる）
  * - `ship_address` は 都道府県・市区町村・番地・建物 を全角スペースで結合し、結合後 200 文字以内
  * - サーバーの 400 `validation_error {fields:[{name, reason}]}` も同じ項目名に対応付ける
+ * - P2-b（設計仕様書 6.7）: 店舗受け取りでは郵便番号・都道府県・市区町村・番地・建物の欄が無いので検査も送信もしない
+ *   （`validateCheckoutForm(v, "store")`・`toContactBody`）
  */
+
+import type { ReceiveMethod } from "@/lib/types";
 
 export const PREFECTURES = [
   "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
@@ -40,6 +44,9 @@ export const EMPTY_CHECKOUT_FORM: CheckoutFormValues = {
   phone: "",
   email: "",
 };
+
+/** 配送のときだけある入力欄（店舗受け取りでは隠し、検査も送信もしない） */
+export const ADDRESS_FIELDS = ["postal", "prefecture", "city", "street", "building"] as const satisfies readonly CheckoutField[];
 
 /** 全角スペース（住所の結合に使う） */
 export const ADDRESS_SEPARATOR = "　";
@@ -91,25 +98,27 @@ export const MESSAGES = {
 } as const;
 
 /** クライアント側の必須・形式検査。エラーの無い項目はキーごと持たない */
-export function validateCheckoutForm(v: CheckoutFormValues): CheckoutErrors {
+export function validateCheckoutForm(v: CheckoutFormValues, receiveMethod: ReceiveMethod = "delivery"): CheckoutErrors {
   const errors: CheckoutErrors = {};
 
   const name = v.name.trim();
   if (name.length === 0) errors.name = MESSAGES.required;
   else if (charLength(name) > MAX_NAME_LENGTH) errors.name = MESSAGES.name_too_long;
 
-  const postal = digitsOnly(v.postal);
-  if (v.postal.trim().length === 0) errors.postal = MESSAGES.required;
-  else if (!/^[0-9]{7}$/.test(postal)) errors.postal = MESSAGES.postal;
+  if (receiveMethod === "delivery") {
+    const postal = digitsOnly(v.postal);
+    if (v.postal.trim().length === 0) errors.postal = MESSAGES.required;
+    else if (!/^[0-9]{7}$/.test(postal)) errors.postal = MESSAGES.postal;
 
-  if (!v.prefecture) errors.prefecture = MESSAGES.select;
-  else if (!(PREFECTURES as readonly string[]).includes(v.prefecture)) errors.prefecture = MESSAGES.select;
+    if (!v.prefecture) errors.prefecture = MESSAGES.select;
+    else if (!(PREFECTURES as readonly string[]).includes(v.prefecture)) errors.prefecture = MESSAGES.select;
 
-  if (v.city.trim().length === 0) errors.city = MESSAGES.required;
-  if (v.street.trim().length === 0) errors.street = MESSAGES.required;
+    if (v.city.trim().length === 0) errors.city = MESSAGES.required;
+    if (v.street.trim().length === 0) errors.street = MESSAGES.required;
 
-  if (!errors.prefecture && !errors.city && !errors.street) {
-    if (charLength(joinShipAddress(v)) > MAX_ADDRESS_LENGTH) errors.street = MESSAGES.address_too_long;
+    if (!errors.prefecture && !errors.city && !errors.street) {
+      if (charLength(joinShipAddress(v)) > MAX_ADDRESS_LENGTH) errors.street = MESSAGES.address_too_long;
+    }
   }
 
   const phone = digitsOnly(v.phone);
@@ -138,6 +147,14 @@ export function toShippingBody(v: CheckoutFormValues): {
     ship_phone: digitsOnly(v.phone),
     guest_email: v.email.trim(),
   };
+}
+
+/**
+ * 店舗受け取りの送信項目（受け取る方の氏名・電話・メール）。郵便番号・住所は含めない（FastAPI が店舗の値で埋める。設計仕様書 4.4）。
+ * 検査を通った値に対して呼ぶ。
+ */
+export function toContactBody(v: CheckoutFormValues): { ship_name: string; ship_phone: string; guest_email: string } {
+  return { ship_name: v.name.trim(), ship_phone: digitsOnly(v.phone), guest_email: v.email.trim() };
 }
 
 /** サーバーの項目名 → フォームの項目。`ship_address` は結合先なので番地の欄に出す */

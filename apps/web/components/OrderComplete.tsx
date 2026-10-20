@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import Button, { buttonClass } from "@/components/Button";
 import { TextField } from "@/components/Form";
-import { AmountSummary, OrderItemsList, ShippingSummary } from "@/components/OrderSummary";
+import { AmountSummary, OrderItemsList, PickupCodeBlock, ShippingSummary } from "@/components/OrderSummary";
 import { isValidEmail } from "@/lib/checkout-validation";
 import { clearCheckoutSession, LAST_ORDER_KEY, saveLastOrder } from "@/lib/checkout-session";
 import { parseJsonOrNull, useHydrated, useSessionItem } from "@/lib/client/use-session-item";
@@ -20,6 +20,9 @@ import type { OrderResponse } from "@/lib/types";
  *   注文内容・金額・お届け先・「買い物を続ける」（/ へ。次の追加は新しいカートに入る＝AT-06）
  * - 無ければ照会フォーム（注文番号＝URL の `n`、メール入力 → `POST /api/orders/[n]/lookup`）。404 は「注文番号かメールアドレスが違います」の
  *   一括表示、429 は「しばらくしてからお試しください」
+ * - P2-b（設計仕様書 6.8）: 店舗受け取り（`receive_method=store`）は注文番号の下に受け取りコードを大きく表示し（API が返したときだけ）、
+ *   店舗名・住所を出す。`is_member_order` が真なら「マイページの注文履歴で確認できます」、偽なら「ゲストでのご注文です…」を添える。
+ *   照会フォームの結果も同じ形
  * - `ordered_at`（UTC）は JST で表示
  */
 
@@ -71,6 +74,7 @@ export default function OrderComplete({ orderNumber }: OrderCompleteProps) {
 
 function CompletedOrder({ order }: { order: OrderResponse }) {
   const failed = order.status === "payment_failed";
+  const isStore = order.receive_method === "store";
   return (
     <div className="space-y-8">
       <section className="space-y-3 text-center" aria-labelledby="complete-heading">
@@ -82,9 +86,27 @@ function CompletedOrder({ order }: { order: OrderResponse }) {
           <span className="select-all">{order.order_number}</span>
         </p>
         <p className="text-sm text-fg-muted">注文日時 {formatJst(order.ordered_at)}（日本時間）</p>
+        {!failed && isStore && order.pickup_code && (
+          <div className="mx-auto max-w-xl">
+            <PickupCodeBlock
+              code={order.pickup_code}
+              note="ご来店時にこのコードと注文番号をお伝えください。マイページ（会員のとき）でも確認できます"
+            />
+          </div>
+        )}
         {!failed && (
           <div className="mx-auto max-w-xl rounded-sm border border-line bg-line/40 p-4 text-left text-sm">
             <p>{order.guest_email} に確認メールを送りました。</p>
+            {order.is_member_order === true && (
+              <p className="mt-1" data-testid="member-order-note">
+                ご注文はマイページの注文履歴で確認できます。
+              </p>
+            )}
+            {order.is_member_order === false && (
+              <p className="mt-1" data-testid="guest-order-note">
+                ゲストでのご注文です。注文番号とメールアドレスで照会できます。
+              </p>
+            )}
             <p className="mt-1 text-xs text-fg-muted">
               テスト環境ではメールは送信されず、サーバー側に保存されます。ゲストの方はこの画面を保存してください（注文番号とメールアドレスで後から照会できます）。
             </p>
@@ -102,13 +124,19 @@ function CompletedOrder({ order }: { order: OrderResponse }) {
           </section>
           <section aria-labelledby="ship-heading" className="space-y-3">
             <h2 id="ship-heading" className="text-lg font-light tracking-heading">
-              お届け先・お支払い
+              {isStore ? "受け取り・お支払い" : "お届け先・お支払い"}
             </h2>
             <ShippingSummary {...order} />
           </section>
         </div>
         <div className="space-y-4 lg:h-fit">
-          <AmountSummary subtotal={order.subtotal} shipping_fee={order.shipping_fee} total={order.total} tax_included={order.tax_included} />
+          <AmountSummary
+            subtotal={order.subtotal}
+            shipping_fee={order.shipping_fee}
+            total={order.total}
+            tax_included={order.tax_included}
+            receiveMethod={order.receive_method}
+          />
           <Link href="/" className={buttonClass({ variant: "primary", size: "lg", full: true })} data-testid="continue-shopping">
             買い物を続ける
           </Link>
