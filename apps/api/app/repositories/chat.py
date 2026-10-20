@@ -190,6 +190,7 @@ async def list_catalog_entries(
             sizes=tuple(sizes.get(p.id, ())),
             in_stock=stock.get(p.id, 0) > 0,
             material=p.material,
+            description=p.description,
         )
         for p in products
     ]

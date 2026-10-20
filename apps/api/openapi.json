@@ -4073,6 +4073,7 @@
               "recommend",
               "faq",
               "clarify",
+              "product_info",
               "out_of_scope"
             ],
             "title": "Intent"

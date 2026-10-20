@@ -252,6 +252,15 @@ async def post_message(
             canary=chat_prompt.PROMPT_CANARY,
             pool_ids=pool.ids,
             cards=cards,
+            context=(
+                chat_guard.ProductContext(
+                    id=pool.context.id,
+                    price_incl_tax=pool.context.price_incl_tax,
+                    facts=chat_prompt.format_product_facts(pool.context),
+                )
+                if pool.context is not None
+                else None
+            ),
         )
         reply = final.reply
         if final.canary_leak:

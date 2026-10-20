@@ -98,6 +98,7 @@ async def _seed_products(session: AsyncSession) -> dict[str, int]:
             price_incl_tax=1000 + n,
             published=not unpublished and n != 33,
             material="綿100%",
+            description=f"説明{n:02d}",
         )
         session.add(product)
         await session.flush()
@@ -139,6 +140,7 @@ async def test_ut_ai_18_pool_excludes_unpublished_and_marks_no_stock(
     assert first.colors == ("ホワイト", "ブラック")
     assert first.sizes == ("S", "M")
     assert first.price_incl_tax == 1001 and first.material == "綿100%"
+    assert first.description == "説明01"  # 文脈の商品の資料に使う（プールの 1 行には入れない）
     assert pool.context is None
 
 

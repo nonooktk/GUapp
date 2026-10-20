@@ -64,6 +64,8 @@ class CatalogEntry:
     sizes: tuple[str, ...]
     in_stock: bool
     material: str
+    # 商品の説明文（文脈の商品の資料にだけ使う。候補プールの 1 行には入れない）
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,22 @@ _STUB_RECOMMEND_WORDS = (
 STUB_FAQ_MESSAGE = "（デモ応答）ご案内はよくある質問のページに掲載しています。"
 STUB_RECOMMEND_MESSAGE = "（デモ応答）条件に近い商品を選びました。"
 STUB_REASON = "デモ応答の例です。"
+STUB_PRODUCT_INFO_MESSAGE = (
+    "（デモ応答）この商品の素材・サイズ・在庫などは、商品ページの記載をご確認ください。"
+)
+# 文脈の商品があるときに product_info とみなす語
+_STUB_PRODUCT_INFO_WORDS = (
+    "素材",
+    "生地",
+    "洗濯",
+    "お手入れ",
+    "サイズ",
+    "色",
+    "在庫",
+    "価格",
+    "値段",
+    "いくら",
+)
 STUB_OOS_MESSAGE = "（デモ応答）お答えできません。"
 # 実在しない商品 ID（unknown_id シナリオ）
 STUB_UNKNOWN_PRODUCT_ID = 999999999
@@ -194,6 +212,10 @@ class StubAdapter:
         question = request.question
         if any(word in question for word in _STUB_FAQ_WORDS):
             return ChatLLMOutput(intent="faq", message=STUB_FAQ_MESSAGE, items=[])
+        if request.context_product_id is not None and any(
+            word in question for word in _STUB_PRODUCT_INFO_WORDS
+        ):
+            return ChatLLMOutput(intent="product_info", message=STUB_PRODUCT_INFO_MESSAGE, items=[])
         if request.context_product_id is not None or any(
             word in question for word in _STUB_RECOMMEND_WORDS
         ):

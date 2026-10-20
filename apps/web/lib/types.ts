@@ -345,7 +345,7 @@ export interface ChatStatus {
   message_max_chars: number;
 }
 
-export type ChatIntent = "recommend" | "faq" | "clarify" | "out_of_scope";
+export type ChatIntent = "recommend" | "faq" | "clarify" | "product_info" | "out_of_scope";
 
 /** 商品カード 1 件。名称・価格・画像・在庫切れは api が DB から出した値。`reason` だけ LLM の文章（検査済み） */
 export interface ChatProduct {
@@ -367,7 +367,7 @@ export interface ChatReply {
   intent: ChatIntent;
   message: string;
   products: ChatProduct[];
-  /** FAQ の出典リンク（intent=faq のとき） */
+  /** 出典リンク（intent=faq は「よくある質問」、intent=product_info は「商品ページ」） */
   sources: ChatLink[];
   /** 範囲外の案内リンク（intent=out_of_scope のとき） */
   guide: ChatLink[];

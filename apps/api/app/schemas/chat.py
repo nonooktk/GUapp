@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 CHAT_MESSAGE_MAX_CHARS = 300
 PRODUCT_ID_MAX = 9223372036854775807
 
-Intent = Literal["recommend", "faq", "clarify", "out_of_scope"]
+Intent = Literal["recommend", "faq", "clarify", "product_info", "out_of_scope"]
 
 
 # ── LLM の出力（付録 B）──

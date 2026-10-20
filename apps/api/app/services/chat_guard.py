@@ -54,6 +54,10 @@ AMOUNT_CHECK_FAILED_MESSAGE = (
     "ご希望に近い商品をご紹介します。価格と在庫は、各商品の表示をご確認ください。"
 )
 
+PRODUCT_INFO_FALLBACK_MESSAGE = (
+    "申し訳ありません。その点は、こちらでは確認できませんでした。商品ページの記載をご確認ください。"
+)
+
 FAQ_SOURCE = ChatSourceOut(title="よくある質問", href="/contents/faq")
 GUIDE_LINKS = (
     ChatGuideLinkOut(label="よくある質問", href="/contents/faq"),
@@ -274,6 +278,34 @@ def validate_items(
     return kept
 
 
+# 在庫の数・残りの数（「残り3点」「在庫は5点」など）。資料には在庫の有無しか無い
+_STOCK_COUNT_RE = re.compile(
+    r"(?:残り|在庫)[^。\d]{0,6}\d+\s*[点個枚着]|\d+\s*[点個枚着]\s*(?:のみ|だけ|残)", re.ASCII
+)
+
+
+@dataclass(frozen=True)
+class ProductContext:
+    """文脈の商品（`product_info` の照合先）。`facts` は LLM に渡した資料と同じ文字列。"""
+
+    id: int
+    price_incl_tax: int
+    facts: str
+
+
+def product_info_is_grounded(message: str, ctx: ProductContext, question: str) -> bool:
+    """`product_info` の本文が資料の範囲に収まっているか。
+
+    金額は DB の税込価格だけ許す（利用者の質問にある金額は許さない）。2 桁以上の数値は資料か質問に
+    あるものだけ。在庫の数・残りは書かせない。
+    """
+    if find_foreign_amounts(message, {ctx.price_incl_tax}):
+        return False
+    if numbers_not_in_sources(message, [ctx.facts, question]):
+        return False
+    return _STOCK_COUNT_RE.search(unicodedata.normalize("NFKC", message)) is None
+
+
 @dataclass(frozen=True)
 class Finalized:
     reply: ChatReplyOut
@@ -294,11 +326,13 @@ def finalize_reply(
     canary: str,
     pool_ids: Collection[int],
     cards: Mapping[int, ProductSummary],
+    context: ProductContext | None = None,
 ) -> Finalized:
     """手順 1〜9 を通して、画面に出す応答を組み立てる。
 
     `cards` は、DB から再取得した公開商品（名称・税込価格・画像・在庫切れの出どころ）。
     ここに無い ID は捨てる。価格・在庫は LLM の文章を使わず、カードの DB 値だけで示す。
+    `context` は文脈の商品。`product_info` は、これがあるときだけ通す（無ければ範囲外）。
     """
     intent: Intent = output.intent
     message = _clean(output.message, MESSAGE_MAX_CHARS)
@@ -324,6 +358,13 @@ def finalize_reply(
         ):
             message = AMOUNT_CHECK_FAILED_MESSAGE
             reasons = {pid: "" for pid in reasons}
+
+    # 手順 3b: product_info は文脈の商品があるときだけ。本文は資料の範囲に収まるものだけ
+    if intent == "product_info":
+        if context is None or not message:
+            intent = "out_of_scope"
+        elif not product_info_is_grounded(message, context, question):
+            message = PRODUCT_INFO_FALLBACK_MESSAGE
 
     # 手順 4: FAQ の回答の数値は、資料か質問にあるものだけ
     if intent == "faq" and numbers_not_in_sources(message, [*sources, question]):
@@ -363,6 +404,8 @@ def finalize_reply(
         guide = ChatGuideOut(links=list(GUIDE_LINKS))
     elif intent == "faq":
         reply_sources = [FAQ_SOURCE]
+    elif intent == "product_info" and context is not None:
+        reply_sources = [ChatSourceOut(title="商品ページ", href=f"/products/{context.id}")]
 
     dropped = 0
     if output.intent == "recommend" and not canary_leak:
@@ -404,8 +447,10 @@ __all__ = [
     "GUIDE_LINKS",
     "NO_PRODUCTS_MESSAGE",
     "OUT_OF_SCOPE_MESSAGE",
+    "PRODUCT_INFO_FALLBACK_MESSAGE",
     "Finalized",
     "MaskResult",
+    "ProductContext",
     "contains_canary",
     "digit_strings",
     "finalize_reply",
@@ -415,6 +460,7 @@ __all__ = [
     "mask_pii",
     "normalize_text",
     "numbers_not_in_sources",
+    "product_info_is_grounded",
     "sanitize_text",
     "validate_items",
 ]

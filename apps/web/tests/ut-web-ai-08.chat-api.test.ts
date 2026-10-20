@@ -142,6 +142,28 @@ describe("UT-WEB-AI-08 chat-api", () => {
     expect(res.notice).toBe("masked");
   });
 
+  it("product_info（文脈の商品への回答）は intent を保ち、出典の商品ページのリンクを残す", async () => {
+    setCsrfCookie();
+    fetchMock.mockResolvedValue(
+      json(200, {
+        reply: {
+          intent: "product_info",
+          message: "素材は綿100%です。",
+          products: [],
+          sources: [{ title: "商品ページ", href: "/products/12" }],
+          guide: null,
+        },
+        turns_used: 1,
+        turns_limit: 10,
+        notice: null,
+      }),
+    );
+    const res = await sendChatMessage({ message: "この商品の素材を教えて", productId: 12 });
+    expect(res.reply.intent).toBe("product_info");
+    expect(res.reply.sources).toEqual([{ label: "商品ページ", href: "/products/12" }]);
+    expect(res.reply.products).toEqual([]);
+  });
+
   it("parseRetryAfter・isSafeInternalHref の境界", () => {
     expect(parseRetryAfter("1")).toBe(1);
     expect(parseRetryAfter("0")).toBeNull();

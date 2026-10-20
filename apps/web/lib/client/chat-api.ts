@@ -70,7 +70,7 @@ async function requestJson(input: string, init: RequestInit): Promise<unknown> {
 
 // ---- 応答の整形 ----
 
-const INTENTS: readonly ChatIntent[] = ["recommend", "faq", "clarify", "out_of_scope"];
+const INTENTS: readonly ChatIntent[] = ["recommend", "faq", "clarify", "product_info", "out_of_scope"];
 const PROVIDERS: readonly ChatProvider[] = ["openai", "stub", "none"];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
