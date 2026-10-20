@@ -924,7 +924,7 @@ reviews の承認済みの内訳（`fit` ごとの件数）：
 | 名前 | 置き場 | 用途 | 既定・備考 |
 | --- | --- | --- | --- |
 | `PUBLIC_WEB_BASE_URL` | api | メールのリンクのホスト部（確認・再設定・再入荷のリンク）。リクエストの `Host` ヘッダは使わない（DS-DEC-75） | ローカルは `http://localhost:3000`。公開環境は web の URL。末尾の `/` は付けない。未設定のときは、リンクを含むメールを送る処理が 500 になる（設定漏れを黙って許さない） |
-| `DEMO_EMAIL_DOMAINS` | api | 登録・再設定の要求・再入荷の申込で許すメールのドメイン（カンマ区切り、小文字化して完全一致）。DS-DEC-88 | 未設定は制限なし。公開環境では `example.com` を設定することを推奨する（設定するかは統括の判断） |
+| `DEMO_EMAIL_DOMAINS` | api | 登録・再設定の要求・再入荷の申込で許すメールのドメイン（カンマ区切り、小文字化して完全一致）。DS-DEC-88 | 未設定は制限なし。公開環境では `example.com` を設定する（2026-10-20 統括決定。`scripts/azure-deploy/02-settings.sh` で投入） |
 | `SEED_MEMBER_PASSWORD` | api（seed 実行時のみ） | seed の会員のパスワード。DS-DEC-87 | 開発・テストでは未設定でよい（seed_data の定数を使う）。`APP_ENV=production` では必須 |
 
 web 側に新しい環境変数はない（`SESSION_COOKIE_DOMAIN`・`TRUSTED_PROXY_HOPS`・`APP_ENV` は既存）。`.env.example` の api 節に上の 3 つを足す（値は空）。
