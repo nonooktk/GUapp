@@ -20,7 +20,7 @@ describe("ホームのトップ画像", () => {
 
     const img = hero.querySelector("img");
     expect(img).not.toBeNull();
-    expect(img?.getAttribute("src")).toMatch(/^\/hero\/autumn-[abc]\.jpg$/);
+    expect(img?.getAttribute("src")).toBe("/hero/autumn-b.jpg");
     expect(img?.getAttribute("alt")).toBe("");
     expect(img?.getAttribute("fetchpriority")).toBe("high");
 

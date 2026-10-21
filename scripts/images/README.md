@@ -109,4 +109,4 @@ uv run --with openai --with pillow python scripts/images/generate_hero.py sheet
 
 - API に `size 1920x800` を拒否されたら、`gen --size 1536x1024` で作る。`process` が中央基準で 2.4:1 に切り抜く。
 - 生の PNG・確認画像・ログは `out/hero/` に置く（`out/` は `.gitignore` で除外済み）。コミットするのは `apps/web/public/hero/` の JPEG だけだ。
-- 使う案は `apps/web/app/page.tsx` の定数 `HERO_IMAGE` の 1 行で切り替える（`/hero/autumn-a.jpg`・`-b`・`-c`）。
+- 3 案を作って B（ニット・コート・マフラーの平置き）を採用した。トップで使うのは `apps/web/public/hero/autumn-b.jpg` だけで、`apps/web/app/page.tsx` の `HERO_IMAGE` が指す。A・C の生画像は `scripts/images/out/hero/raw/`（git 管理外）に残っている。
