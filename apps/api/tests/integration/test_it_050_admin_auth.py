@@ -26,8 +26,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app import seed_data
+from app.core import passwords
 from app.core.session import hash_token
 from app.repositories import staff as staff_repo
+from app.services import admin_auth as admin_auth_service
 from app.services.admin_auth import admin_login_identifier
 from tests.integration import admin_helpers as ah
 from tests.integration import p2b_helpers as ph
@@ -381,13 +383,17 @@ async def test_it_050_09_old_parameter_hash_is_rehashed_on_login(
     assert (await ah.login_admin(client, "staff-old")).status_code == 200
 
 
-async def test_it_050_10_same_staff_10_parallel_logins_with_3_wrong(
+async def test_it_050_10_same_staff_4_parallel_logins_with_1_wrong(
     client: httpx.AsyncClient,
     engine: AsyncEngine,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """5.6・本編 1.4: 同じ管理者で 10 並列の正しいログイン ＋ 誤パスワード 3 本（10 回試行）。"""
+    """5.6・本編 1.4: 同じ管理者で 4 並列の正しいログイン ＋ 誤パスワード 1 本（10 回試行）。
+
+    G-16 以降、同じ ID で同時に検証まで進めるのは上限（5 本）までなので、1 回は 5 本にする
+    （以前は 13 本を一度に送っていた）。セッションの上限は 3 件なので、4 本でも超過を確かめられる。
+    """
     caplog.set_level(logging.WARNING, logger="app.services.admin_auth")
     staff_id = await ah.create_staff(engine, "staff-conc")
     # 行ロックの取得から COMMIT までの窓を 30ms 広げる（待っている件数も数える）
@@ -397,21 +403,130 @@ async def test_it_050_10_same_staff_10_parallel_logins_with_3_wrong(
         await sql(engine, "DELETE FROM login_attempts")
         inflight.max = 0
         jobs = [
-            ah.login_admin(client, "staff-conc", ip=f"203.0.113.{100 + i}") for i in range(10)
-        ] + [
-            ah.login_admin(client, "staff-conc", ah.WRONG_ADMIN_PASSWORD, ip=f"203.0.114.{i}")
-            for i in range(3)
-        ]
+            ah.login_admin(client, "staff-conc", ip=f"203.0.113.{100 + i}") for i in range(4)
+        ] + [ah.login_admin(client, "staff-conc", ah.WRONG_ADMIN_PASSWORD, ip="203.0.114.1")]
         results = await asyncio.gather(*jobs)
         assert inflight.max >= 2, f"同時性が成立していない（無効試行）: {inflight.max}"
-        good, bad = results[:10], results[10:]
+        good, bad = results[:4], results[4:]
         assert all(r.status_code == 200 for r in good), [(r.status_code, r.text) for r in good]
         assert all(r.status_code == 401 for r in bad), [(r.status_code, r.text) for r in bad]
-        assert len({r.json()["session_token"] for r in good}) == 10
+        assert len({r.json()["session_token"] for r in good}) == 4
         active = await staff_sessions(engine, staff_id)
         assert active <= 3, f"round {round_no}: 有効なセッションが {active} 件"
     retries = [r for r in caplog.records if "ロック競合" in r.getMessage()]
-    print(f"\nIT-050-10: 10 回の有効試行 inflight_max={inflight.max} 再試行={len(retries)} 回")
+    print(f"\nIT-050-10: 4+1 本 inflight_max={inflight.max} 再試行={len(retries)} 回")
+
+
+def count_verifications(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """argon2 の照合（`verify_password_async`）が呼ばれた回数を数える。"""
+    calls = [0]
+    original = passwords.verify_password_async
+
+    async def counting(*args: Any, **kwargs: Any) -> Any:
+        calls[0] += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(passwords, "verify_password_async", counting)
+    return calls
+
+
+async def test_it_050_13_parallel_wrong_passwords_never_verify_more_than_the_id_threshold(
+    client: httpx.AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-16: 同じ ID へ誤ったパスワードを 12 本同時に送っても、照合まで進むのは 5 本以下。"""
+    await ah.create_staff(engine, "staff-burst")
+    claims = track_inflight(monkeypatch, admin_auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    results = await asyncio.gather(
+        *(
+            ah.login_admin(
+                client, "staff-burst", f"{ah.WRONG_ADMIN_PASSWORD}-{i}", ip=f"203.0.113.{i}"
+            )
+            for i in range(12)
+        )
+    )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    codes = [r.status_code for r in results]
+    assert set(codes) <= {401, 403}, codes
+    assert calls[0] <= admin_auth_service.ID_LOCK_THRESHOLD, f"照合まで進んだ試行: {calls[0]}"
+    assert codes.count(401) == calls[0]
+    assert codes.count(403) == 12 - calls[0]
+    print(f"\nIT-050-13: 12 本同時 → 照合まで進んだ={calls[0]} 本、403={codes.count(403)} 本")
+    assert all(r.json() == {"code": "account_locked"} for r in results if r.status_code == 403)
+    failed = await scalar(
+        engine, "SELECT COUNT(*) FROM login_attempts WHERE subject_type='staff' AND succeeded = 0"
+    )
+    assert failed == calls[0], "拒否した試行は先に記録した行を取り消す"
+
+
+async def test_it_050_13_parallel_attempts_from_one_ip_never_verify_more_than_the_ip_limit(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-16: 同じ IP から別々の ID へ 20 本同時に送っても、照合まで進むのは 10 本以下。"""
+    claims = track_inflight(monkeypatch, admin_auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    results = await asyncio.gather(
+        *(
+            ah.login_admin(client, f"staff-spray-{i}", ah.WRONG_ADMIN_PASSWORD, ip="198.51.100.41")
+            for i in range(20)
+        )
+    )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    codes = [r.status_code for r in results]
+    assert set(codes) <= {401, 429}, codes
+    assert calls[0] <= admin_auth_service.IP_LIMIT_THRESHOLD, f"照合まで進んだ試行: {calls[0]}"
+    assert codes.count(401) == calls[0]
+    assert all(r.headers["retry-after"] == "900" for r in results if r.status_code == 429)
+
+
+async def test_it_050_13_exactly_the_threshold_in_parallel_all_verify_then_the_next_is_locked(
+    client: httpx.AsyncClient, engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-16: 上限ちょうど（ID 5 本・IP 10 本）の同時送信は全部照合まで進み、次が拒否される。"""
+    await ah.create_staff(engine, "staff-edge")
+    claims = track_inflight(monkeypatch, admin_auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    results = await asyncio.gather(
+        *(
+            ah.login_admin(client, "staff-edge", ah.WRONG_ADMIN_PASSWORD, ip=f"203.0.113.{i}")
+            for i in range(5)
+        )
+    )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    assert [r.status_code for r in results] == [401] * 5 and calls[0] == 5
+    res = await ah.login_admin(client, "staff-edge", ah.ADMIN_PASSWORD, ip="203.0.113.99")
+    assert res.status_code == 403 and res.json() == {"code": "account_locked"}
+    assert calls[0] == 5, "ロック後は照合しない"
+
+    ip = "198.51.100.51"
+    results = await asyncio.gather(
+        *(
+            ah.login_admin(client, f"staff-edge-{i}", ah.WRONG_ADMIN_PASSWORD, ip=ip)
+            for i in range(10)
+        )
+    )
+    assert [r.status_code for r in results] == [401] * 10
+    res = await ah.login_admin(client, "staff-edge-10", ah.WRONG_ADMIN_PASSWORD, ip=ip)
+    assert res.status_code == 429 and res.headers["retry-after"] == "900"
+
+
+async def test_it_050_13_rejected_attempts_do_not_extend_the_lock_and_success_clears_the_row(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    """G-16: ロック中の試行は自分の行を取り消す。成功した試行の行は失敗として残らない。"""
+    await ah.create_staff(engine, "staff-lock")
+    await ah.create_staff(engine, "staff-fine", ah.OTHER_ADMIN_PASSWORD)
+    assert await fail(client, "staff-lock", "203.0.113.70", 5) == [401] * 5
+    assert await fail(client, "staff-lock", "203.0.113.70", 3) == [403] * 3
+    assert await scalar(engine, "SELECT COUNT(*) FROM login_attempts") == 5, "拒否分は残らない"
+    res = await ah.login_admin(client, "staff-fine", ah.OTHER_ADMIN_PASSWORD, ip="203.0.113.71")
+    assert res.status_code == 200
+    rows = await sql(
+        engine,
+        "SELECT succeeded FROM login_attempts WHERE identifier = :i",
+        i=admin_login_identifier("staff-fine"),
+    )
+    assert [bool(r.succeeded) for r in rows] == [True]
 
 
 async def test_it_050_11_staff_and_member_locks_do_not_affect_each_other(

@@ -5,6 +5,10 @@
 - ユーザー列挙の防止（DS-DEC-71）: ログインは会員の有無によらず同じ 401 と同じ処理
   （会員がいなければダミーのハッシュを検証）。登録は新規・既登録とも 202。再設定の要求は常に 200。
   メールは応答のあとの後処理（`BackgroundTasks` ＋ `safe_send`）で送る
+- ログインは、パスワードの検証（argon2 で遅い）より前に自分の試行を「失敗」として先に記録して
+  COMMIT し、そのあとで数える（G-16）。同時に来た試行が全部「失敗 0 件」を読んで検証まで進む
+  すり抜けを防ぐ。上限を超えていれば検証せずに拒否して自分の行を取り消し、成功したら失敗行を
+  消して成功を記録する
 - ログインと再設定の確定は READ COMMITTED（MySQL のときだけ指定）で実行し、文の順序を
   `members` → `sessions` → `login_attempts` → `audit_logs` に揃える。ロック競合
   （MySQL の 1213・1205）は ROLLBACK して 1 回だけやり直す（5.6）
@@ -16,6 +20,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from fastapi import BackgroundTasks, Request
@@ -137,6 +142,76 @@ def _reject(
     return AppError(status, code, headers=headers)
 
 
+@dataclass(frozen=True, slots=True)
+class ClaimedAttempt:
+    """先に記録した試行（G-16）。件数は**自分の行を含む**直近 15 分の失敗の数。"""
+
+    attempt_id: int
+    ip_failures: int
+    identifier_failures: int
+
+    @property
+    def prior_ip_failures(self) -> int:
+        """自分の行を除いた IP 単位の失敗数（従来の「検証の前に数える」件数と同じ意味）。"""
+        return self.ip_failures - 1
+
+    @property
+    def prior_identifier_failures(self) -> int:
+        """自分の行を除いた識別子単位の失敗数。"""
+        return self.identifier_failures - 1
+
+
+async def claim_login_attempt(
+    session: AsyncSession, subject_type: SubjectType, identifier: str, ip: str
+) -> ClaimedAttempt:
+    """検証の前に、この試行を「失敗」として先に記録して COMMIT し、そのあとで数える（G-16）。
+
+    会員・管理の両方のログインが使う。COMMIT のあとに数えるため、同時に来た試行のうち上限を
+    超えない件数（COMMIT の順に数えて上限以下）だけが「超過ではない」と判定され、検証へ進める。
+    ロック競合（1213・1205）は ROLLBACK して 1 回だけやり直す。
+    """
+    attempt_id = 0
+    for attempt in range(2):
+        try:
+            await _begin_read_committed(session)
+            attempt_id = await attempts_repo.record(
+                session, subject_type, identifier, succeeded=False, ip=ip, at=utcnow()
+            )
+            await session.commit()
+            break
+        except OperationalError as exc:
+            await session.rollback()
+            if attempt == 0 and _is_retryable_lock_error(exc):
+                logger.warning(
+                    "ログイン試行の記録でロック競合（%s）。ROLLBACK して 1 回やり直します",
+                    exc.orig.args[0],
+                )
+                continue
+            raise
+    await _begin_read_committed(session)
+    since = utcnow() - LOGIN_WINDOW
+    ip_failures = await attempts_repo.count_failures_by_ip(session, subject_type, ip, since)
+    identifier_failures = await attempts_repo.count_failures_by_identifier(
+        session, subject_type, identifier, since
+    )
+    await session.rollback()
+    return ClaimedAttempt(attempt_id, ip_failures, identifier_failures)
+
+
+async def withdraw_login_attempt(session: AsyncSession, attempt_id: int) -> None:
+    """上限超過で拒否した試行の、先に記録した行を取り消す（ロック期間を延ばさないため）。
+
+    取り消せなくても拒否の応答は変えない（行が残るだけで、より厳しい側に倒れる）。
+    """
+    try:
+        await _begin_read_committed(session)
+        await attempts_repo.delete_by_id(session, attempt_id)
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001  取り消しの失敗で拒否の応答を変えない
+        await session.rollback()
+        logger.warning("login_attempts の取り消しに失敗しました error=%s", type(exc).__name__)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # DS-PRC-030 会員登録
 # ══════════════════════════════════════════════════════════════════════════
@@ -245,12 +320,11 @@ async def login(
     ip = normalize_ip(client_ip(request))
     identifier = login_identifier(body.email)
 
-    # 3. 回数の判定。パスワードの検証より前（IP が先、メールが後）
-    await _begin_read_committed(session)
-    since = utcnow() - LOGIN_WINDOW
-    ip_failures = await attempts_repo.count_failures_by_ip(session, SubjectType.member, ip, since)
-    if is_ip_limited(ip_failures):
-        await session.rollback()
+    # 3. 先に「失敗」として記録して COMMIT し、数え直す（G-16）。パスワードの検証より前。
+    #    判定は従来と同じ（自分の行を除いて、IP が先・メールが後）
+    claimed = await claim_login_attempt(session, SubjectType.member, identifier, ip)
+    if is_ip_limited(claimed.prior_ip_failures):
+        await withdraw_login_attempt(session, claimed.attempt_id)
         raise _reject(
             request,
             status=429,
@@ -258,14 +332,12 @@ async def login(
             ip=ip,
             headers={"Retry-After": str(LOGIN_RETRY_AFTER_SECONDS)},
         )
-    email_failures = await attempts_repo.count_failures_by_identifier(
-        session, SubjectType.member, identifier, since
-    )
-    if is_email_locked(email_failures):
-        await session.rollback()
+    if is_email_locked(claimed.prior_identifier_failures):
+        await withdraw_login_attempt(session, claimed.attempt_id)
         raise _reject(request, status=403, code="account_locked", ip=ip)
 
     # 4. 会員を検索する（匿名化済みは「いない」扱い）。読み取りを終えてから argon2 を計算する
+    await _begin_read_committed(session)
     member = await members_repo.find_by_email(session, body.email)
     await session.rollback()
 
@@ -273,16 +345,19 @@ async def login(
     stored_hash = member.password_hash if member is not None else passwords.dummy_hash()
     verified = await passwords.verify_password_async(stored_hash, body.password)
 
-    # 5. 失敗: 記録して 401（会員の有無・パスワード違いを区別しない）
+    # 5. 失敗: 試行は 3 で記録済み。401（会員の有無・パスワード違いを区別しない）。
+    #    メール単位の失敗がちょうど 5 件目で、会員がいるときはロック通知を 1 回送る。
+    #    5 件目の失敗の応答自体は 401 で、ロックは次の試行から有効になる（DS-PRC-032 手順 5）
     if member is None or not verified:
-        await _record_failure(
-            session,
-            identifier=identifier,
-            ip=ip,
-            member=member,
-            background=background,
-            mail=mail,
-        )
+        if member is not None and claimed.identifier_failures == EMAIL_LOCK_THRESHOLD:
+            background.add_task(
+                safe_send,
+                KIND_ACCOUNT_LOCKED,
+                member.email,
+                mail.send_account_locked,
+                member.email,
+                member.name,
+            )
         raise _reject(request, status=401, code="invalid_credentials", ip=ip)
 
     # 6. 成功: パラメータが古ければ再ハッシュ（更新は 7 の最初の文）
@@ -347,40 +422,6 @@ async def login(
             name=member.name, email_verified=member.email_verified_at is not None
         ),
     )
-
-
-async def _record_failure(
-    session: AsyncSession,
-    *,
-    identifier: str,
-    ip: str,
-    member: members_repo.MemberAuthRow | None,
-    background: BackgroundTasks,
-    mail: MailAdapter,
-) -> None:
-    """失敗を記録して COMMIT。
-
-    メール単位の失敗がちょうど 5 件目で、会員がいるときはロック通知を 1 回送る。
-    5 件目の失敗の応答自体は 401 で、ロックは次の試行から有効になる（DS-PRC-032 手順 5）。
-    """
-    await _begin_read_committed(session)
-    now = utcnow()
-    await attempts_repo.record(
-        session, SubjectType.member, identifier, succeeded=False, ip=ip, at=now
-    )
-    failures = await attempts_repo.count_failures_by_identifier(
-        session, SubjectType.member, identifier, now - LOGIN_WINDOW
-    )
-    await session.commit()
-    if member is not None and failures == EMAIL_LOCK_THRESHOLD:
-        background.add_task(
-            safe_send,
-            KIND_ACCOUNT_LOCKED,
-            member.email,
-            mail.send_account_locked,
-            member.email,
-            member.name,
-        )
 
 
 async def _cleanup_old_attempts(session: AsyncSession) -> None:

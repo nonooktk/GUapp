@@ -897,31 +897,142 @@ async def test_it_032_12_validation_and_anonymized_member(
     assert anonymized.content == unknown.content
 
 
-async def test_it_032_13_same_member_10_parallel_logins_with_3_wrong(
+async def test_it_032_13_same_member_parallel_logins_with_wrong_ones_in_waves(
     client: httpx.AsyncClient,
     engine: AsyncEngine,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """同じ会員への同時ログイン（正しい 3 本 ＋ 誤り 2 本）を 3 波。ロック競合なしで全部通る。
+
+    G-16 以降、同じメールで同時に検証まで進めるのは上限（5 本）までなので、1 波は 5 本にする
+    （以前は 13 本を一度に送っていた）。波ごとに login_attempts を空にして、波の間でロックしない。
+    """
     caplog.set_level(logging.WARNING, logger="app.services.auth")
     # sessions の整理から INSERT までの窓を 30ms 広げる
     inflight = track_inflight(monkeypatch, sessions_repo, "evict_oldest_for_new_session", hold=0.03)
-    jobs = [login(client, MEMBER1, ip=f"203.0.113.{i}") for i in range(10)] + [
-        login(client, MEMBER1, WRONG_PW, ip=f"203.0.114.{i}") for i in range(3)
-    ]
-    results = await asyncio.gather(*jobs)
-    assert inflight.max >= 2, f"同時性が成立していない（無効試行）: {inflight.max}"
-    good, bad = results[:10], results[10:]
-    assert all(r.status_code == 200 for r in good), [(r.status_code, r.text) for r in good]
-    assert all(r.status_code == 401 for r in bad), [(r.status_code, r.text) for r in bad]
-    assert len({r.json()["session_token"] for r in good}) == 10
-    sessions = await scalar(engine, "SELECT COUNT(*) FROM sessions")
-    assert sessions <= 10, sessions
+    logins = 0
+    for wave in range(3):
+        await sql(engine, "DELETE FROM login_attempts")
+        inflight.max = 0
+        jobs = [login(client, MEMBER1, ip=f"203.0.113.{wave * 10 + i}") for i in range(3)] + [
+            login(client, MEMBER1, WRONG_PW, ip=f"203.0.114.{wave * 10 + i}") for i in range(2)
+        ]
+        results = await asyncio.gather(*jobs)
+        assert inflight.max >= 2, f"同時性が成立していない（無効試行）: {inflight.max}"
+        good, bad = results[:3], results[3:]
+        assert all(r.status_code == 200 for r in good), [(r.status_code, r.text) for r in good]
+        assert all(r.status_code == 401 for r in bad), [(r.status_code, r.text) for r in bad]
+        assert len({r.json()["session_token"] for r in good}) == 3
+        logins += len(good)
+        sessions = await scalar(engine, "SELECT COUNT(*) FROM sessions")
+        assert sessions <= 10, f"wave {wave}: セッションが {sessions} 件"
+    assert logins == 9 and sessions == 9
     retries = [r for r in caplog.records if "ロック競合" in r.getMessage()]
-    print(
-        f"\nIT-032-13: inflight_max={inflight.max} 再試行（1213/1205）={len(retries)} 回"
-        f" セッション={sessions}"
+    print(f"\nIT-032-13: 3 波 再試行（1213/1205）={len(retries)} 回 セッション={sessions}")
+
+
+def count_verifications(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """argon2 の照合（`verify_password_async`）が呼ばれた回数を数える。"""
+    calls = [0]
+    original = passwords.verify_password_async
+
+    async def counting(*args: Any, **kwargs: Any) -> Any:
+        calls[0] += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(passwords, "verify_password_async", counting)
+    return calls
+
+
+async def test_it_032_17_parallel_wrong_passwords_never_verify_more_than_the_email_threshold(
+    client: httpx.AsyncClient,
+    engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+    recording_mail: RecordingMailAdapter,
+) -> None:
+    """G-16: 同じメールへ誤ったパスワードを 12 本同時に送っても、照合まで進むのは 5 本以下。
+
+    以前は 12 本とも「失敗 0 件」を読んで照合まで進み、全部 401 になっていた。
+    """
+    claims = track_inflight(monkeypatch, auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    results = await asyncio.gather(
+        *(login(client, MEMBER4, f"{WRONG_PW}-{i}", ip=f"203.0.113.{i}") for i in range(12))
     )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    codes = [r.status_code for r in results]
+    assert set(codes) <= {401, 403}, codes
+    assert calls[0] <= auth_service.EMAIL_LOCK_THRESHOLD, f"照合まで進んだ試行: {calls[0]}"
+    assert codes.count(401) == calls[0], "401 は照合まで進んだ試行だけ"
+    assert codes.count(403) == 12 - calls[0]
+    print(f"\nIT-032-17: 12 本同時 → 照合まで進んだ={calls[0]} 本、403={codes.count(403)} 本")
+    assert all(r.json() == {"code": "account_locked"} for r in results if r.status_code == 403)
+    # 拒否した試行は先に記録した行を取り消す。失敗として残るのは照合まで進んだ分だけ
+    failed = await scalar(engine, "SELECT COUNT(*) FROM login_attempts WHERE succeeded = 0")
+    assert failed == calls[0]
+    assert len(mails(recording_mail, KIND_ACCOUNT_LOCKED)) <= 1
+
+
+async def test_it_032_17_parallel_attempts_from_one_ip_never_verify_more_than_the_ip_limit(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-16: 同じ IP から別々のメールへ 40 本同時に送っても、照合まで進むのは 30 本以下。"""
+    claims = track_inflight(monkeypatch, auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    ip = "198.51.100.40"
+    results = await asyncio.gather(
+        *(login(client, f"burst{i}@example.com", WRONG_PW, ip=ip) for i in range(40))
+    )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    codes = [r.status_code for r in results]
+    assert set(codes) <= {401, 429}, codes
+    assert calls[0] <= auth_service.IP_LIMIT_THRESHOLD, f"照合まで進んだ試行: {calls[0]}"
+    assert codes.count(401) == calls[0]
+    assert all(r.headers["retry-after"] == "900" for r in results if r.status_code == 429)
+
+
+async def test_it_032_17_exactly_the_threshold_in_parallel_all_verify_then_the_next_is_locked(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-16: 上限ちょうど（5 本）の同時送信は全部照合まで進み、次の 1 本がロックされる。"""
+    claims = track_inflight(monkeypatch, auth_service, "claim_login_attempt")
+    calls = count_verifications(monkeypatch)
+    results = await asyncio.gather(
+        *(login(client, MEMBER4, WRONG_PW, ip=f"203.0.113.{i}") for i in range(5))
+    )
+    assert claims.max >= 2, f"同時性が成立していない（無効試行）: {claims.max}"
+    assert [r.status_code for r in results] == [401] * 5 and calls[0] == 5
+    res = await login(client, MEMBER4, SEED_PW)
+    assert res.status_code == 403 and res.json() == {"code": "account_locked"}
+    assert calls[0] == 5, "ロック後は照合しない"
+
+    ip = "198.51.100.50"
+    results = await asyncio.gather(
+        *(login(client, f"edge{i}@example.com", WRONG_PW, ip=ip) for i in range(30))
+    )
+    assert [r.status_code for r in results] == [401] * 30
+    res = await login(client, "edge30@example.com", WRONG_PW, ip=ip)
+    assert res.status_code == 429 and res.headers["retry-after"] == "900"
+
+
+async def test_it_032_17_rejected_attempts_do_not_extend_the_lock_and_success_clears_the_row(
+    client: httpx.AsyncClient, engine: AsyncEngine
+) -> None:
+    """G-16: ロック中の試行は自分の行を取り消す。成功した試行の行は失敗として残らない。"""
+    for _ in range(5):
+        assert (await login(client, MEMBER1, WRONG_PW)).status_code == 401
+    for _ in range(3):
+        assert (await login(client, MEMBER1, WRONG_PW)).status_code == 403
+    assert await scalar(engine, "SELECT COUNT(*) FROM login_attempts") == 5, "拒否分は残らない"
+    assert (await login_ok(client, MEMBER2)) and await scalar(
+        engine, "SELECT COUNT(*) FROM login_attempts WHERE succeeded = 0"
+    ) == 5
+    # 成功した会員には成功の行が 1 件だけ（先に記録した失敗の行は消えている）
+    rows = await sql(
+        engine, "SELECT succeeded FROM login_attempts WHERE identifier = :i", i=hash_token(MEMBER2)
+    )
+    assert [bool(r.succeeded) for r in rows] == [True]
 
 
 async def test_it_032_16_login_and_confirm_run_in_read_committed(
