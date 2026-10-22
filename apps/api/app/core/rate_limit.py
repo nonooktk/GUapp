@@ -124,7 +124,8 @@ def enforce_rate_limit(request: Request, name: str, key: str | None = None) -> N
     ip = client_ip(request)
     retry_after = limiter.hit(key if key is not None else ip)
     if retry_after is not None:
-        log_rejection(request, status=429, code="rate_limited", ip=ip)
+        # key が識別子の SHA-256 なら、狙われたアカウントを追えるよう先頭 12 桁を出す（G-19）
+        log_rejection(request, status=429, code="rate_limited", ip=ip, subject=key)
         raise AppError(429, "rate_limited", headers={"Retry-After": str(retry_after)})
 
 

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
 from typing import Any
@@ -1130,6 +1131,49 @@ async def test_it_032_15_logs_do_not_contain_email_password_or_token(
     for secret in (MEMBER1, MEMBER2, WRONG_PW, SEED_PW, token):
         assert secret not in text_logged
     assert "198.51.100.77" not in text_logged, "拒否ログの IP は丸める"
+
+
+def security_lines(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
+    return [json.loads(r.getMessage()) for r in caplog.records if r.name == "app.security"]
+
+
+async def test_it_032_18_rejection_logs_carry_the_subject_of_the_targeted_account(
+    client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """G-19: 401・403・429 の拒否ログにメールの SHA-256 の先頭 12 桁（subject）が付く。"""
+    caplog.set_level(logging.WARNING, logger="app.security")
+    for _ in range(5):
+        assert (await login(client, MEMBER1, WRONG_PW)).status_code == 401
+    assert (await login(client, MEMBER1, WRONG_PW)).status_code == 403
+    for i in range(30):
+        await login(client, f"s{i}@example.com", WRONG_PW, ip="198.51.100.60")
+    assert (
+        await login(client, "late@example.com", WRONG_PW, ip="198.51.100.60")
+    ).status_code == 429
+    lines = security_lines(caplog)
+    subject = hash_token(MEMBER1)[:12]
+    by_member1 = [line for line in lines if line.get("subject") == subject]
+    assert [(line["status"], line["code"]) for line in by_member1] == [
+        *[(401, "invalid_credentials")] * 5,
+        (403, "account_locked"),
+    ]
+    limited = [line for line in lines if line["status"] == 429]
+    assert [line["subject"] for line in limited] == [hash_token("late@example.com")[:12]]
+    assert all(len(line["subject"]) == 12 for line in lines)
+    assert MEMBER1 not in caplog.text and hash_token(MEMBER1) not in caplog.text
+
+
+async def test_it_034_06_reset_request_per_email_limit_logs_the_subject(
+    client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """G-19: 再設定の要求のメール単位の制限（429）に subject が付く。IP 単位の 429 には付かない。"""
+    caplog.set_level(logging.WARNING, logger="app.security")
+    for _ in range(3):
+        assert (await reset_request(client, MEMBER2, ip="198.51.100.61")).status_code == 200
+    assert (await reset_request(client, MEMBER2, ip="198.51.100.62")).status_code == 429
+    (line,) = [x for x in security_lines(caplog) if x["status"] == 429]
+    assert line["subject"] == hash_token(MEMBER2)[:12] and line["code"] == "rate_limited"
+    assert MEMBER2 not in caplog.text
 
 
 # ══════════════════════════════════════════════════════════════════════════

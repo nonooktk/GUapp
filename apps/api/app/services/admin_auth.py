@@ -144,10 +144,19 @@ async def _begin_read_committed(session: AsyncSession) -> None:
 
 
 def _reject(
-    request: Request, *, status: int, code: str, ip: str, headers: dict[str, str] | None = None
+    request: Request,
+    *,
+    status: int,
+    code: str,
+    ip: str,
+    identifier: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> AppError:
-    """拒否ログ（S9。IP は丸められる）を 1 行出して、返すエラーを作る。"""
-    log_rejection(request, status=status, code=code, ip=ip)
+    """拒否ログ（S9。IP は丸められる）を 1 行出して、返すエラーを作る。
+
+    `identifier`（login_id の SHA-256）の先頭 12 桁が `subject` として出る（G-19）。
+    """
+    log_rejection(request, status=status, code=code, ip=ip, subject=identifier)
     return AppError(status, code, headers=headers)
 
 
@@ -192,11 +201,12 @@ async def login(
             status=429,
             code="rate_limited",
             ip=ip,
+            identifier=identifier,
             headers={"Retry-After": str(LOGIN_RETRY_AFTER_SECONDS)},
         )
     if is_id_locked(claimed.prior_identifier_failures):
         await withdraw_login_attempt(session, claimed.attempt_id)
-        raise _reject(request, status=403, code="account_locked", ip=ip)
+        raise _reject(request, status=403, code="account_locked", ip=ip, identifier=identifier)
 
     # 4. 管理者を検索する。読み取りを終えてから argon2 を計算する
     await _begin_read_committed(session)
@@ -210,7 +220,7 @@ async def login(
     # 5. 失敗: 試行は 3 で記録済み。401（管理者の有無・パスワード違いを区別しない）。
     #    ロック通知メールは送らない
     if staff is None or not verified:
-        raise _reject(request, status=401, code="invalid_credentials", ip=ip)
+        raise _reject(request, status=401, code="invalid_credentials", ip=ip, identifier=identifier)
 
     # 6. 成功: パラメータが古ければ再ハッシュ（更新は 7 の最初の文）
     new_hash: str | None = None

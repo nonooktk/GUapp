@@ -529,6 +529,29 @@ async def test_it_050_13_rejected_attempts_do_not_extend_the_lock_and_success_cl
     assert [bool(r.succeeded) for r in rows] == [True]
 
 
+async def test_it_050_14_rejection_logs_carry_the_subject_of_the_targeted_login_id(
+    client: httpx.AsyncClient, engine: AsyncEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """G-19: 401・403・429 の拒否ログに、login_id の SHA-256 の先頭 12 桁（subject）が付く。"""
+    caplog.set_level(logging.WARNING, logger="app.security")
+    await ah.create_staff(engine, "staff-target")
+    assert await fail(client, "staff-target", "203.0.113.80", 5) == [401] * 5
+    assert await fail(client, "staff-target", "203.0.113.80", 1) == [403]
+    for i in range(10):
+        await ah.login_admin(client, f"spray-{i}", ah.WRONG_ADMIN_PASSWORD, ip="198.51.100.81")
+    res = await ah.login_admin(client, "late-id", ah.WRONG_ADMIN_PASSWORD, ip="198.51.100.81")
+    assert res.status_code == 429
+    lines = [json.loads(r.getMessage()) for r in caplog.records if r.name == "app.security"]
+    subject = hash_token("staff-target")[:12]
+    assert [(x["status"], x["code"]) for x in lines if x.get("subject") == subject] == [
+        *[(401, "invalid_credentials")] * 5,
+        (403, "account_locked"),
+    ]
+    assert [x["subject"] for x in lines if x["status"] == 429] == [hash_token("late-id")[:12]]
+    for raw in ("staff-target", "late-id", hash_token("staff-target")):
+        assert raw not in caplog.text
+
+
 async def test_it_050_11_staff_and_member_locks_do_not_affect_each_other(
     client: httpx.AsyncClient, engine: AsyncEngine
 ) -> None:
