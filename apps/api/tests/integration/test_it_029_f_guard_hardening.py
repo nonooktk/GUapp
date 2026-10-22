@@ -1,4 +1,4 @@
-"""IT-029-30〜33: 出力ガードの強化とガード発動のログ（G-20・G-21・G-22）。
+"""IT-029-35〜38: 出力ガードの強化とガード発動のログ（G-20・G-21・G-22）。
 
 悪い出力を返す台本つきのアダプタで確かめる（DS-DEC-105）。MySQL（guapp_test）＋ seed 必須。
 seed の FAQ には「4,990円（税込）以上のご注文で送料無料です」とある。
@@ -21,7 +21,7 @@ def chat_lines(caplog: pytest.LogCaptureFixture, event: str) -> list[dict]:
     return [line for line in lines if line["event"] == event]
 
 
-async def test_it_029_30_crumbled_canary_is_out_of_scope_and_logged(
+async def test_it_029_35_crumbled_canary_is_out_of_scope_and_logged(
     chat_ctx: ChatCtx, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO)
@@ -46,7 +46,7 @@ async def test_it_029_30_crumbled_canary_is_out_of_scope_and_logged(
     assert not any("5d2e8b71" in text or "17b8e2d5" in text for text in stored)
 
 
-async def test_it_029_31_promise_not_in_the_sources_is_replaced_but_faq_wording_is_kept(
+async def test_it_029_36_promise_not_in_the_sources_is_replaced_but_faq_wording_is_kept(
     chat_ctx: ChatCtx, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO)
@@ -77,7 +77,7 @@ async def test_it_029_31_promise_not_in_the_sources_is_replaced_but_faq_wording_
         assert body not in logs, "ログに応答の本文を出さない"
 
 
-async def test_it_029_32_product_names_in_the_pool_count_as_sources_for_promise_words(
+async def test_it_029_37_product_names_in_the_pool_count_as_sources_for_promise_words(
     chat_ctx: ChatCtx,
 ) -> None:
     pid = (await chat_ctx.published_ids())[0]
@@ -88,7 +88,7 @@ async def test_it_029_32_product_names_in_the_pool_count_as_sources_for_promise_
     assert reply["message"] == "セール限定の一着です。"  # 商品情報にある語は止めない
 
 
-async def test_it_029_33_pii_masks_and_html_removals_are_logged_by_kind_and_count_only(
+async def test_it_029_38_pii_masks_and_html_removals_are_logged_by_kind_and_count_only(
     chat_ctx: ChatCtx, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO)
