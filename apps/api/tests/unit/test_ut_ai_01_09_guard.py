@@ -78,10 +78,12 @@ def test_ut_ai_01_masks_every_kind_in_one_message() -> None:
 
 
 def test_ut_ai_01_card_length_boundaries_and_luhn() -> None:
-    # 13 桁・19 桁で Luhn が正しいものは置換、12 桁・20 桁は置換しない
+    # 13 桁・19 桁で Luhn が正しいものはカード番号として置換、20 桁は置換しない。
+    # 12 桁はカードではなく「番号」（マイナンバー風。G-21）として置換する
     assert g.mask_pii(_luhn_complete("4", 13)).text == "[カード番号]"
     assert g.mask_pii(_luhn_complete("4", 19)).text == "[カード番号]"
-    assert g.mask_pii(_luhn_complete("4", 12)).masked is False
+    twelve = g.mask_pii(_luhn_complete("4", 12))
+    assert twelve.text == "[番号]" and dict(twelve.counts) == {"number": 1}
     assert g.mask_pii(_luhn_complete("4", 20)).masked is False
     # Luhn が正しくない 16 桁（注文番号などの誤検出を避ける）
     not_luhn = "4111111111111112"

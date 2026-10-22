@@ -20,6 +20,7 @@ import logging
 import re
 import secrets
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -77,6 +78,30 @@ def is_valid_token_format(token: str | None) -> bool:
 
 def _log(event: str, level: int = logging.INFO, **fields: Any) -> None:
     logger.log(level, "%s", json.dumps({"event": event, **fields}, ensure_ascii=False))
+
+
+def _log_guards(
+    provider: str,
+    model: str,
+    intent: str,
+    output_guards: Mapping[str, int],
+    input_pii: Mapping[str, int],
+) -> None:
+    """ガードが動いたとき、種類と件数だけを 1 行ログに出す（G-22。本文・個人情報は出さない）。
+
+    `pii_input` は利用者の質問のマスク（件数の合計）、ほかは LLM の出力に対するガード
+    （`chat_guard.Finalized.guards`）。出力側のガードが動いたときは WARNING（LLM が資料の範囲を
+    出た・インジェクションに従った可能性）、質問のマスクだけなら INFO。
+    """
+    guards = dict(output_guards)
+    pii_in = sum(input_pii.values())
+    if pii_in:
+        guards["pii_input"] = pii_in
+    if not guards:
+        return
+    # 出力側で動くのは html_url・pii_output も含む（LLM が自分で書いた URL・個人情報らしき文字列）
+    level = logging.WARNING if output_guards else logging.INFO
+    _log("chat_guard", level, provider=provider, model=model, intent=intent, guards=guards)
 
 
 # ── DS-API-040 チャットの状態 ──
@@ -252,6 +277,9 @@ async def post_message(
             canary=chat_prompt.PROMPT_CANARY,
             pool_ids=pool.ids,
             cards=cards,
+            # 約束の言葉（送料無料・クーポン・割引など）の照合先。FAQ・特商法（上の sources）に
+            # 加えて、LLM に渡した商品の一覧。文脈の商品の資料は finalize_reply が足す
+            promise_sources=[chat_prompt.format_catalog_line(e) for e in pool.entries],
             context=(
                 chat_guard.ProductContext(
                     id=pool.context.id,
@@ -265,6 +293,7 @@ async def post_message(
         reply = final.reply
         if final.canary_leak:
             _log("chat_canary_leak", logging.WARNING, provider=adapter.name, model=result.model)
+        _log_guards(adapter.name, result.model, reply.intent, final.guards, masked.counts)
 
         # 手順 10: トランザクション②。ロックの順序は chat_sessions → chat_messages
         async with session.begin():
