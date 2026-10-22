@@ -1,0 +1,495 @@
+[
+ {
+  "term": "BFF",
+  "aliases": [],
+  "short": "ブラウザ専用の窓口になるサーバー層。ブラウザからの要求を受け、FastAPI の URL と内部トークンを隠したまま取り次ぐ。このアプリでは Next.js の Route Handler（/api/*）がこの役を担う。ただし商品一覧などの初回表示だけは、Server Component が FastAPI を直接呼ぶので、BFF を通らない。",
+  "analogy": "レストランのホール係。客は厨房に入らず、注文はホール係が厨房へ取り次ぐ。",
+  "ref": "apps/web/lib/server/api.ts::apiFetch"
+ },
+ {
+  "term": "Route Handler",
+  "aliases": [],
+  "short": "Next.js で app/api/**/route.ts に書く、GET・POST などの HTTP メソッド名の関数。ブラウザから /api/... に届いた要求を受ける。このアプリでは BFF の実体にあたり、CSRF の検証と FastAPI への取り次ぎを行う。",
+  "ref": "apps/web/app/api/orders/route.ts::POST"
+ },
+ {
+  "term": "Server Component",
+  "aliases": [],
+  "short": "サーバーだけで実行される React の部品。ブラウザには、描画した結果の HTML が届く。このアプリでは、商品一覧・商品詳細・検索結果・お知らせの初回表示がこれにあたり、FastAPI を直接呼んで画面を作る。",
+  "ref": "apps/web/app/products/page.tsx::ProductsPage"
+ },
+ {
+  "term": "クライアントコンポーネント",
+  "aliases": [],
+  "short": "ファイルの先頭に \"use client\" と書いて、ブラウザで動かす React の部品。クリックや入力、画面の状態の更新を扱える。このアプリでは、「もっと見る」の ProductsGrid や、入力フォームの CheckoutForm がこれにあたる。",
+  "ref": "apps/web/components/ProductsGrid.tsx::ProductsGrid"
+ },
+ {
+  "term": "Next.js",
+  "aliases": [],
+  "short": "React を土台にした Web アプリのフレームワーク。画面（page.tsx）、BFF（route.ts）、全ページにかかる処理（proxy.ts）を 1 つのアプリに書ける。このアプリの web（apps/web）は Next.js 16 で作っている。",
+  "ref": "apps/web/next.config.ts"
+ },
+ {
+  "term": "props",
+  "aliases": [],
+  "short": "React で、親の部品が子の部品に渡す値。子は受け取った値を読むだけで、書き換えない。このアプリでは、Header がカートの点数を props で受け取って表示するだけの部品になっている。",
+  "ref": "apps/web/components/Header.tsx::Header"
+ },
+ {
+  "term": "ハイドレーション",
+  "aliases": [],
+  "short": "サーバーで作った HTML に、ブラウザ側で動きを取り付ける処理。この間は、サーバーで描いた内容とブラウザの値が食い違いやすい。このアプリでは useHydrated を使い、描画が済むまでは「保存済みの入力は無い」と決めつけないようにしている。",
+  "ref": "apps/web/lib/client/use-session-item.ts::useHydrated"
+ },
+ {
+  "term": "fetch",
+  "aliases": [],
+  "short": "ブラウザにも Node.js にも標準で入っている、HTTP で通信する JavaScript の関数。このアプリでは、サーバー側の apiFetch が FastAPI を、ブラウザ側の cart-api.ts が BFF を呼ぶのに使う。",
+  "ref": "apps/web/lib/server/api.ts::apiFetch"
+ },
+ {
+  "term": "HTTP",
+  "aliases": [],
+  "short": "Web の通信の決まり。要求にはメソッド・URL・ヘッダ・本文を載せ、応答にはステータスコード・ヘッダ・本文を載せて返す。このアプリでは、ブラウザから BFF、BFF から FastAPI の 2 区間とも HTTP で通信する。",
+  "ref": "apps/web/lib/server/api.ts::apiFetch"
+ },
+ {
+  "term": "API",
+  "aliases": [],
+  "short": "プログラム同士が呼び合うための窓口。ここでは、HTTP と JSON で呼ぶ URL の集まりを指す。このアプリには、ブラウザが呼ぶ BFF の /api/* と、BFF が呼ぶ FastAPI の /api/v1/* の 2 種類がある。",
+  "ref": "apps/api/app/main.py::build_protected_router"
+ },
+ {
+  "term": "エンドポイント",
+  "aliases": [],
+  "short": "API の個々の呼び先で、メソッドと URL の組。例は GET /api/v1/products。このアプリでは、設計仕様書の ID（DS-API-002 など）が 1 つずつ付いている。",
+  "ref": "apps/api/app/routers/catalog.py::list_products"
+ },
+ {
+  "term": "JSON",
+  "aliases": [],
+  "short": "{\"code\": \"not_found\"} のように、項目名と値の組でデータを表すテキスト形式。このアプリでは、BFF と FastAPI の要求本文と応答本文はすべて JSON で、エラーも {\"code\": ...} の形で返す。",
+  "ref": "apps/web/lib/server/api.ts::apiFetch"
+ },
+ {
+  "term": "GET",
+  "aliases": [],
+  "short": "HTTP メソッドの 1 つで、データを読むだけの要求。サーバーの状態を変えない。このアプリでは、商品一覧・カート取得・検索が GET にあたる。読むだけなので、CSRF の検証は掛けていない。",
+  "ref": "apps/web/app/api/products/route.ts::GET"
+ },
+ {
+  "term": "POST",
+  "aliases": [],
+  "short": "HTTP メソッドの 1 つで、本文に JSON を載せて、新しく作る、または処理を頼む要求。このアプリでは、カートへの追加・注文確定・注文照会で使う。注文照会は読むだけだが、メールを URL に載せないため POST にしている。",
+  "ref": "apps/web/app/api/orders/route.ts::POST"
+ },
+ {
+  "term": "PATCH",
+  "aliases": [],
+  "short": "HTTP メソッドの 1 つで、既存データの一部だけを書き換える要求。このアプリでは、カートの数量変更（/cart/items/{id}）で使う。",
+  "ref": "apps/web/app/api/cart/items/[id]/route.ts::PATCH"
+ },
+ {
+  "term": "DELETE",
+  "aliases": [],
+  "short": "HTTP メソッドの 1 つで、既存データを消す要求。このアプリでは、カートの明細削除（/cart/items/{id}）で使う。",
+  "ref": "apps/web/app/api/cart/items/[id]/route.ts::DELETE"
+ },
+ {
+  "term": "ステータスコード",
+  "aliases": [],
+  "short": "HTTP の応答に付く 3 桁の数字で、結果を表す。2xx は成功、4xx は呼び出し側の誤り、5xx はサーバー側の失敗。このアプリでは、FastAPI が AppError を使い、ステータスコードと code 文字列の組を返す。",
+  "ref": "apps/api/app/core/errors.py::AppError"
+ },
+ {
+  "term": "200",
+  "aliases": [],
+  "short": "成功を表すステータスコード。このアプリでは、注文確定で同じ冪等キーが再送されたとき、新しく作らず前の注文を 200 で返す。",
+  "ref": "apps/api/app/services/orders.py::_existing_order_result"
+ },
+ {
+  "term": "201",
+  "aliases": [],
+  "short": "成功して、新しく作られたことを表すステータスコード。このアプリでは、注文確定が新規に成立したときに 201 で注文番号を返す。",
+  "ref": "apps/api/app/routers/orders.py::create_order"
+ },
+ {
+  "term": "400",
+  "aliases": [],
+  "short": "要求の形が正しくないときに返すステータスコード。このアプリでは、入力の形が外れると FastAPI が 400 validation_error を返す。FastAPI 既定の 422 は、ハンドラで 400 に変えている。",
+  "ref": "apps/api/app/core/errors.py::_validation_error_handler"
+ },
+ {
+  "term": "401",
+  "aliases": [],
+  "short": "認証されていないことを表すステータスコード。このアプリでは、内部トークンが無いか違うときに、FastAPI が 401 unauthorized を返す。公開環境では、Basic 認証に失敗したときも 401 になる。",
+  "ref": "apps/api/app/core/security.py::verify_internal_token"
+ },
+ {
+  "term": "403",
+  "aliases": [],
+  "short": "許可されていないことを表すステータスコード。このアプリでは、CSRF の検証に失敗すると BFF が 403 forbidden を返し、FastAPI へは届かせない。",
+  "ref": "apps/web/lib/server/csrf.ts::verifyCsrf"
+ },
+ {
+  "term": "404",
+  "aliases": [],
+  "short": "対象が見つからないことを表すステータスコード。このアプリでは、他人の注文やカートも、存在しないのと同じ 404 で返す。注文照会では、番号違いとメール違いも区別しない。",
+  "ref": "apps/api/app/services/orders.py::lookup_order"
+ },
+ {
+  "term": "409",
+  "aliases": [],
+  "short": "今の状態と衝突して、処理できないことを表すステータスコード。このアプリでは、在庫切れ（out_of_stock）、金額の変更（price_changed）、注文済みのカート（already_ordered）、決済失敗（payment_failed）のときに返す。",
+  "ref": "apps/api/app/services/orders.py::_reserve_all"
+ },
+ {
+  "term": "422",
+  "aliases": [],
+  "short": "形は正しいが、業務のルールに合わないときのステータスコード。このアプリでは、カートの上限（1 明細 10 点・全体 50 点）を超えたときと、未対応の支払い・受け取り方法のときに返す。",
+  "ref": "apps/api/app/services/cart_rules.py::check_limits"
+ },
+ {
+  "term": "429",
+  "aliases": [],
+  "short": "呼び出しが多すぎることを表すステータスコード。このアプリでは、ゲスト注文照会が 1 時間に 100 回を超えると、429 rate_limited と、待つ秒数を示す Retry-After ヘッダを返す。",
+  "ref": "apps/api/app/core/rate_limit.py::lookup_rate_limit"
+ },
+ {
+  "term": "500",
+  "aliases": [],
+  "short": "サーバー側の想定外の失敗を表すステータスコード。このアプリでは、本文を固定文言の internal_error にして、SQL やスタックトレースは返さず、ログにだけ残す。",
+  "ref": "apps/api/app/core/errors.py::_unhandled_error_handler"
+ },
+ {
+  "term": "503",
+  "aliases": [],
+  "short": "サーバーが一時的に応答できないことを表すステータスコード。このアプリでは、BFF が FastAPI に接続できないときや、タイムアウトしたときに、503 upstream_unavailable を返す。",
+  "ref": "apps/web/lib/server/api.ts::UpstreamUnavailableError"
+ },
+ {
+  "term": "Cookie",
+  "aliases": [],
+  "short": "ブラウザが保存し、同じサイトへの要求のたびに自動で送る小さなデータ。このアプリでは、匿名カートを見分ける cart_token と、CSRF 対策の csrf_token の 2 つを使い、どちらも有効期限は 90 日にしている。",
+  "analogy": "来店のたびに見せる会員カード。店は見せられたカードで、誰のカートかを見分ける。",
+  "ref": "apps/web/lib/cookie.ts::buildSetCookie"
+ },
+ {
+  "term": "HttpOnly",
+  "aliases": [],
+  "short": "Cookie の属性の 1 つで、付けると JavaScript から読めなくなり、盗まれにくくなる。このアプリでは cart_token に付け、JavaScript が読む csrf_token には付けない。どちらにも SameSite=Lax（別サイトからの送信を制限する属性）を付け、Secure（HTTPS でだけ送る属性）は production のときだけ付ける。",
+  "ref": "apps/web/lib/cookie.ts::buildSetCookie"
+ },
+ {
+  "term": "CSRF",
+  "aliases": [],
+  "short": "利用者のブラウザに、別サイトから状態を変える要求を勝手に送らせる攻撃。このアプリでは、状態を変える BFF（POST・PATCH・DELETE）で Double Submit Cookie 方式の検証を行い、読むだけの GET には掛けない。",
+  "ref": "apps/web/lib/server/csrf.ts::verifyCsrf"
+ },
+ {
+  "term": "CSRF トークン",
+  "aliases": [],
+  "short": "CSRF 対策の合言葉にあたる乱数で、32 バイトを base64url にした 43 文字。このアプリでは、Cookie（csrf_token）とヘッダ（X-CSRF-Token）の両方で送らせ、一致を確かめる。",
+  "ref": "apps/web/lib/server/csrf.ts::generateCsrfToken"
+ },
+ {
+  "term": "Double Submit Cookie",
+  "aliases": [],
+  "short": "同じトークンを Cookie と要求ヘッダの両方で送らせ、一致したときだけ通す CSRF 対策。別サイトの攻撃者は Cookie の値を読めないので、ヘッダに載せられない。このアプリでは isCsrfValid が、形と一致を、長さ固定の比較で判定する。",
+  "ref": "apps/web/lib/csrf-validation.ts::isCsrfValid"
+ },
+ {
+  "term": "内部トークン",
+  "aliases": [],
+  "short": "BFF から FastAPI への呼び出しに付ける共有の秘密で、ヘッダ X-Internal-Token で送る。FastAPI は照合し、合わない場合と、期待値が未設定の場合は 401 にする。ブラウザには出さない。",
+  "analogy": "社内の通用口で見せる社員証。社員証がない人は通れない。",
+  "ref": "apps/api/app/core/security.py::verify_internal_token"
+ },
+ {
+  "term": "X-Forwarded-For",
+  "aliases": [
+   "XFF"
+  ],
+  "short": "プロキシが付ける、元の送信元 IP を並べるヘッダ。利用者が自分で付けて偽装できる。このアプリでは、環境変数 TRUSTED_PROXY_HOPS で決めた信頼できる位置の値だけを使い、注文照会のレート制限で数える IP を決める。",
+  "ref": "apps/web/lib/client-ip.ts::resolveClientIp"
+ },
+ {
+  "term": "レート制限",
+  "aliases": [],
+  "short": "一定時間内の呼び出し回数に上限を設けて、総当たりを止める仕組み。このアプリでは、ゲスト注文照会に 100 回/時/IP の上限を設け、超えると 429 を返す。回数はプロセスのメモリで数えるので、ワーカーごとに別の集計になる。",
+  "ref": "apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter"
+ },
+ {
+  "term": "CORS",
+  "aliases": [],
+  "short": "ブラウザが別のオリジン（ホストとポートの組）の API を呼んでよいかを、サーバー側が許可する仕組み。このアプリの FastAPI は BFF の 1 オリジンだけを許可し、未設定や * のときは CORS を付けない。",
+  "ref": "apps/api/app/core/security.py::install_cors"
+ },
+ {
+  "term": "XSS",
+  "aliases": [],
+  "short": "ページに悪意のあるスクリプトを紛れ込ませ、利用者のブラウザで実行させる攻撃。実行されると、同じオリジンの sessionStorage も読まれうる。このアプリでは、氏名にスクリプトタグを入れても実行されないことを、手動の ST-SEC-05 で確認している。"
+ },
+ {
+  "term": "Basic 認証",
+  "aliases": [],
+  "short": "ユーザー名とパスワードを Authorization ヘッダで送る、HTTP の認証方式。このアプリでは、レビュー用の公開環境にサイト全体の Basic 認証を掛け、proxy.ts が判定する。2 つの環境変数がどちらも未設定なら認証なしで、ローカル開発の邪魔にならない。",
+  "ref": "apps/web/proxy.ts::proxy"
+ },
+ {
+  "term": "冪等キー",
+  "aliases": [
+   "idempotency_key"
+  ],
+  "short": "同じ操作を 2 回送っても、結果が 1 回分で済むように、操作に付ける固有の値。このアプリでは、確認画面の準備（prepare）で FastAPI が発行し、注文の INSERT では orders.idempotency_key の UNIQUE 制約で二重注文を止める。",
+  "analogy": "宅配の受付番号。同じ番号で 2 回頼んでも、荷物は 1 つだけ発送される。",
+  "ref": "apps/api/app/services/checkout.py::new_idempotency_key"
+ },
+ {
+  "term": "トランザクション",
+  "aliases": [],
+  "short": "複数の DB 更新を、全部成功させるか全部取り消すかにまとめる単位。COMMIT で確定し、ROLLBACK で取り消す。このアプリの注文確定は、1 つのトランザクションの中で、注文の登録・金額の再計算・在庫の引当・決済スタブの呼び出しまで進める。",
+  "analogy": "銀行の振込。引き落としと入金は、両方成功するか、両方なかったことにする。",
+  "ref": "apps/api/app/services/orders.py::_confirm"
+ },
+ {
+  "term": "COMMIT",
+  "aliases": [
+   "commit",
+   "コミット"
+  ],
+  "short": "トランザクションの更新を確定する操作で、確定後は取り消せない。このアプリでは、決済が OK のとき、注文・明細・決済記録・監査ログをまとめて COMMIT する。決済が NG のときは、先に注文を「決済失敗」で COMMIT し、別のトランザクションで在庫とカートを戻す。",
+  "ref": "apps/api/app/services/orders.py::_confirm"
+ },
+ {
+  "term": "ROLLBACK",
+  "aliases": [
+   "rollback"
+  ],
+  "short": "トランザクションの更新をすべて取り消し、始める前の状態に戻す操作。このアプリでは、在庫の引当が 0 行の明細があったときや、デッドロックになったときに ROLLBACK する。",
+  "ref": "apps/api/app/services/orders.py::_confirm"
+ },
+ {
+  "term": "条件付き UPDATE",
+  "aliases": [
+   "条件付き更新"
+  ],
+  "short": "更新の条件を UPDATE 文の WHERE に入れ、影響した行数で成否を判断する書き方。このアプリの在庫の引当は、stock が数量以上のときだけ減らし、0 行なら在庫不足とする。同時に最後の 1 点を買いに来ても、減らせるのは片方だけだ。",
+  "analogy": "棚の最後の 1 個に 2 人が同時に手を伸ばしても、取れるのは 1 人だけ。取れたかどうかは、手応え（影響した行数）で分かる。",
+  "ref": "apps/api/app/repositories/orders.py::reserve_stock"
+ },
+ {
+  "term": "デッドロック",
+  "aliases": [],
+  "short": "2 つの処理が、互いが押さえているロックを待ち合って、進まなくなる状態。MySQL（InnoDB）は一方を失敗させて解消する。このアプリでは、同じカートの同時確定で起きうるため、ROLLBACK して 1 回だけやり直し、在庫の引当は variant_id の昇順にして起きにくくしている。",
+  "analogy": "狭い道で向かい合った 2 台が、どちらも譲れずに止まってしまう。",
+  "ref": "apps/api/app/services/orders.py::_create_order_with_deadlock_retry"
+ },
+ {
+  "term": "UNIQUE",
+  "aliases": [
+   "一意制約"
+  ],
+  "short": "同じ値の行を 2 つ入れさせない DB の制約。違反した INSERT はエラーになる。このアプリでは、orders.idempotency_key や cart_items の (cart_id, variant_id) に付け、二重注文と、同じ商品の重複行を防いでいる。",
+  "ref": "apps/api/app/repositories/orders.py::insert_pending_order"
+ },
+ {
+  "term": "MySQL",
+  "aliases": [],
+  "short": "表の形でデータを保存するリレーショナル DB。このアプリの DB は MySQL で、CI は MySQL 8.4 を使い、FastAPI が SQLAlchemy 経由で読み書きする。結合テストも、本物の MySQL（DB 名が _test で終わるもの）につないで動かす。",
+  "ref": "apps/api/app/core/db.py::build_engine"
+ },
+ {
+  "term": "照合順序",
+  "aliases": [],
+  "short": "DB が文字列の等しさや並び順を判定する規則。このアプリの検索は、全角半角やかなの違いの扱いを、この規則に任せている。CI の MySQL は utf8mb4_0900_ai_ci に揃えてあり、SQLite を使う単体テストでは、この規則を再現できない。",
+  "ref": ".github/workflows/ci.yml#L91"
+ },
+ {
+  "term": "seed",
+  "aliases": [],
+  "short": "DB に最初から入れておく初期データ。このアプリでは python -m app.seed で、商品 31 点（うち 1 点は非公開）などを入れる。すでに商品があるときは何もせず、データを守る側に倒している。",
+  "ref": "apps/api/app/seed.py"
+ },
+ {
+  "term": "SQLAlchemy",
+  "aliases": [],
+  "short": "Python から DB を扱うライブラリで、ORM の一種。ORM は、DB の表を Python のクラスとして扱い、SQL をプログラムから組み立てる仕組み。このアプリでは、非同期（async）の接続で MySQL を読み書きする。",
+  "ref": "apps/api/app/core/db.py::build_engine"
+ },
+ {
+  "term": "slug",
+  "aliases": [],
+  "short": "URL に使える、短い英数字の名前。このアプリでは、カテゴリの絞り込み（例: women-tops）と、お知らせや FAQ を 1 件取るときの識別に使う。",
+  "ref": "apps/web/app/api/products/route.ts::GET"
+ },
+ {
+  "term": "ページング",
+  "aliases": [],
+  "short": "多い結果を、一定の件数ずつに区切って返すこと。このアプリの商品一覧と検索結果は 24 件ずつで、page と per_page で指定し、「もっと見る」で次のページを足す。",
+  "ref": "apps/api/app/repositories/search.py::search_published"
+ },
+ {
+  "term": "サジェスト",
+  "aliases": [],
+  "short": "入力の途中で、候補を出す機能。このアプリでは、検索ボックスが 300 ミリ秒待ってから、商品名の候補を最大 5 件取る。FastAPI は前方一致を先にし、足りなければ部分一致で補う。",
+  "ref": "apps/api/app/repositories/search.py::suggest_names"
+ },
+ {
+  "term": "FastAPI",
+  "aliases": [],
+  "short": "Python の Web API フレームワーク。型の宣言から、入力の検査と API 仕様を作れる。このアプリではバックエンド（apps/api）の本体で、DB の読み書きと業務の判断を担い、BFF からだけ内部トークン付きで呼ばれる。",
+  "ref": "apps/api/app/main.py::create_app"
+ },
+ {
+  "term": "ルーター",
+  "aliases": [],
+  "short": "URL とメソッドを、処理する関数に結びつける部品。FastAPI では @router.get(...) のようなデコレータで登録する。このアプリのルーターは薄く、入力を受けてサービスに渡し、返ってきた結果を応答にするだけである。",
+  "ref": "apps/api/app/routers/orders.py::create_order"
+ },
+ {
+  "term": "依存関数",
+  "aliases": [],
+  "short": "FastAPI で Depends(...) に渡し、本処理の前に自動で実行させる関数。検査や、DB セッションの受け取りに使う。このアプリでは、内部トークンの検証（verify_internal_token）と、注文照会のレート制限（lookup_rate_limit）がこれにあたる。",
+  "ref": "apps/api/app/core/security.py::verify_internal_token"
+ },
+ {
+  "term": "サービス",
+  "aliases": [],
+  "short": "FastAPI 側の層の 1 つで、業務の判断（在庫があるか、上限を超えないか、など）を書く場所。ルーターから呼ばれ、DB の読み書きはリポジトリに任せる。注文確定の判断は services/orders.py に集めてある。",
+  "ref": "apps/api/app/services/orders.py::create_order"
+ },
+ {
+  "term": "リポジトリ",
+  "aliases": [],
+  "short": "FastAPI 側の層の 1 つで、DB の読み書きだけを担う場所（apps/api/app/repositories/）。SQL（SQLAlchemy）をここに集める。Git のコードの置き場も同じ言葉で呼ぶが、「ルーター、サービス、リポジトリ」と並ぶときは前者を指す。",
+  "ref": "apps/api/app/repositories/orders.py::insert_pending_order"
+ },
+ {
+  "term": "Pydantic",
+  "aliases": [],
+  "short": "入力の型と形を宣言して検証する Python のライブラリ。このアプリでは FastAPI の入力検査に使い、違反は 400 validation_error に変換する。例として、郵便番号は半角数字 7 桁、メールはメール形式、と宣言してある。",
+  "ref": "apps/api/app/schemas/order.py::OrderCreateIn"
+ },
+ {
+  "term": "スキーマ",
+  "aliases": [],
+  "short": "データの形（項目と型）の定義。API では Pydantic のクラス、DB ではテーブル定義を指す。このアプリの画面側の型（types.ts）は、FastAPI のスキーマを手で書き写したものなので、API の型を変えたときは直し忘れに注意が要る。",
+  "ref": "apps/api/app/schemas/order.py::OrderOut"
+ },
+ {
+  "term": "バリデーション",
+  "aliases": [],
+  "short": "入力が決まった形になっているかを調べること。このアプリでは、画面側（validateCheckoutForm）と API 側（Pydantic）の 2 段で調べる。在庫や上限のような業務のルールは、形の検査とは別に、サービスで判定する。",
+  "ref": "apps/web/lib/checkout-validation.ts::validateCheckoutForm"
+ },
+ {
+  "term": "スタブ",
+  "aliases": [],
+  "short": "本物の代わりに、決まった値を返す偽物。このアプリでは、決済とメールがスタブになっている。決済は環境変数 PAYMENT_STUB_RESULT（ok か ng）の値をそのまま返し、メールは送らずにファイルへ書く。",
+  "analogy": "撮影用の小道具の財布。中身は偽物でも、受け渡しの流れは本物と同じ。",
+  "ref": "apps/api/app/adapters/payment.py::StubPaymentAdapter"
+ },
+ {
+  "term": "アダプタ",
+  "aliases": [],
+  "short": "呼び出し側と外部サービスの間に置く、差し替えのできる窓口。このアプリでは、決済（PaymentAdapter）とメール（MailAdapter）が、Protocol で形を決めたアダプタになっていて、本物とスタブを取り替えられる。",
+  "analogy": "海外旅行の変換プラグ。コンセントの形を変えずに、機器だけ取り替えられる。",
+  "ref": "apps/api/app/adapters/payment.py::PaymentAdapter"
+ },
+ {
+  "term": "sessionStorage",
+  "aliases": [],
+  "short": "ブラウザがタブごとに用意する保存領域で、タブを閉じると消える。このアプリでは、注文手続きの入力値と冪等キーを、入力画面から確認画面へ渡すために使う。",
+  "analogy": "タブごとに渡される、使い捨てのメモ用紙。",
+  "ref": "apps/web/lib/checkout-session.ts::saveCheckoutSession"
+ },
+ {
+  "term": "localStorage",
+  "aliases": [],
+  "short": "ブラウザに残り続ける保存領域で、タブを閉じても消えない。このアプリでは、個人情報を長く残さないために、注文手続きの入力値は localStorage に置かず、sessionStorage に置く。",
+  "ref": "apps/web/lib/checkout-session.ts::saveCheckoutSession"
+ },
+ {
+  "term": "単体テスト",
+  "aliases": [
+   "UT"
+  ],
+  "short": "関数や部品を 1 つだけ取り出して確かめるテスト。このアプリの api の単体テストは DB を使わないので、CI でも動く。テスト ID は UT-011-01 や UT-WEB-08 のように UT で始まる。",
+  "ref": "apps/api/tests/unit/test_ut_011_cart_rules.py::test_ut_011_01_line_9_to_10_ok_10_to_11_rejected"
+ },
+ {
+  "term": "結合テスト",
+  "aliases": [
+   "IT"
+  ],
+  "short": "複数の部品をつないで確かめるテスト。このアプリでは、FastAPI と MySQL をつないで HTTP で呼び、同時実行や二重注文を確かめる。DATABASE_URL_TEST が未設定のため、CI では 100 件が全件スキップされる。",
+  "ref": "apps/api/tests/integration/test_it_014_concurrency.py"
+ },
+ {
+  "term": "システムテスト",
+  "aliases": [
+   "ST"
+  ],
+  "short": "システム全体を実際に動かして確かめるテスト。このアプリでは手動で行い、P1 の 40 件が合格した（2026-09-24）。実施記録は docs/05_検収/ にある。",
+  "ref": "docs/05_検収/ST-AT実施記録_正常系_20260918.md"
+ },
+ {
+  "term": "受け入れテスト",
+  "aliases": [
+   "AT"
+  ],
+  "short": "利用者の目で、要件どおりに使えるかを確かめるテスト。このアプリでは手動で行い、AT-01〜08 の 8 件が合格している。",
+  "ref": "docs/05_検収/ST-AT実施記録_正常系_20260918.md"
+ },
+ {
+  "term": "モック",
+  "aliases": [],
+  "short": "テストの間だけ、本物の代わりに差し込む偽の部品。呼ばれたかどうかの記録や、返す値の指定ができる。このアプリの BFF のテストは、fetch をモックして、FastAPI へは実際には届かせない。",
+  "ref": "apps/web/tests/it-bff-01-02.orders-route.test.ts"
+ },
+ {
+  "term": "Vitest",
+  "aliases": [],
+  "short": "TypeScript・JavaScript のテストを動かすツール。このアプリの web は、Vitest で 228 件のテストを動かしていて、CI でも実行される。",
+  "ref": "apps/web/vitest.config.mts"
+ },
+ {
+  "term": "pytest",
+  "aliases": [],
+  "short": "Python のテストを動かすツール。このアプリの api は、pytest で 300 件（unit 200・integration 100）を動かす。",
+  "ref": "apps/api/pyproject.toml#L36-40"
+ },
+ {
+  "term": "CI",
+  "aliases": [],
+  "short": "コードを push したり PR を出したりするたびに、ビルドやテストを自動で動かす仕組み。このアプリでは GitHub Actions の ci.yml が、api は MySQL を立てて pytest、web は Vitest とビルドを動かす。",
+  "analogy": "工場の出荷前検品を、自動で回すライン。",
+  "ref": ".github/workflows/ci.yml"
+ },
+ {
+  "term": "GitHub Actions",
+  "aliases": [],
+  "short": "GitHub が提供する、CI などの自動処理を動かす仕組み。処理の内容は .github/workflows/ の YAML に書く。このアプリには、テスト用の ci.yml と、秘密の混入を調べる secrets-scan.yml がある。",
+  "ref": ".github/workflows/ci.yml"
+ },
+ {
+  "term": "環境変数",
+  "aliases": [],
+  "short": "コードには書かず、起動時に OS やプロセスへ渡す設定値。このアプリでは、接続先（DATABASE_URL）や内部トークン（INTERNAL_TOKEN）など、秘密を含む設定を環境変数で渡している。web 側では getEnv が、起動時に値を検証する。",
+  "ref": "apps/web/lib/server/env.ts::getEnv"
+ },
+ {
+  "term": "ワーカー",
+  "aliases": [],
+  "short": "1 つのアプリを並列に処理するプロセス。このアプリの api は uvicorn --workers 2 で動かしている。ワーカー同士ではメモリを共有しないので、プロセス内メモリで数えるレート制限は、ワーカーごとの集計になる。",
+  "ref": "scripts/azure-deploy/config.sh#L51"
+ },
+ {
+  "term": "App Service",
+  "aliases": [],
+  "short": "Azure 上でアプリを動かすサービス。このアプリでは、web と api を 1 つのプランに別々に載せ、Always On と HTTPS Only を設定している。",
+  "ref": "scripts/azure-deploy/01-create.sh"
+ }
+]

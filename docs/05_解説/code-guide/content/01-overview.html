@@ -1,0 +1,228 @@
+<section id="s01" data-title="全体像">
+<h2>1. 全体像</h2>
+
+<p>店に例えると、お客さんが見る売り場が画面で、売り場の脇にある受付カウンターが BFF です。注文の受付や在庫の出し入れはカウンターの奥のバックヤード（FastAPI）だけが行い、商品と注文の記録は倉庫（MySQL）に置きます。お客さんはバックヤードに入れず、必ず受付を通ります。</p>
+
+<p>正確には、ブラウザが話す相手は Next.js だけです。Next.js は画面の描画（<code>app/</code> の各ページ）と、ブラウザ向けの窓口（BFF。<code>app/api/</code> の Route Handler）の両方を持ちます。BFF は Cookie と CSRF トークンを確かめたうえで、内部トークンを付けて FastAPI を呼びます。金額計算・在庫引当・注文確定といった業務ルールは FastAPI に集め、DB へのアクセスは SQLAlchemy（非同期）が担います。</p>
+
+<div class="note fact">
+<p>事実: 画面（Server Component）が商品一覧などを読むときは、BFF を通らずに <code>lib/server/catalog.ts</code> などから FastAPI を直接呼びます。BFF を通るのは、ブラウザ側の JavaScript が呼ぶ経路（カート操作・注文・検索サジェスト・「もっと見る」）だけです。設計仕様書 4.3 の表に「Server Component から直接 FastAPI を呼ぶ場合は BFF を経由しなくてよい」と注記があります。</p>
+</div>
+
+<h3 id="s01-arch">構成図：ブラウザから MySQL まで</h3>
+
+<div class="arch">
+<div class="arch-node" data-layer="browser" data-ref="apps/web/lib/client/cart-api.ts::mutate">
+<strong>ブラウザ</strong>
+<p>画面（React）と fetch。状態変更では Cookie の csrf_token を読み、X-CSRF-Token ヘッダに載せる</p>
+</div>
+<div class="arch-link">Basic 認証（環境変数を設定した場合）／Cookie（cart_token・csrf_token）／X-CSRF-Token ヘッダ</div>
+<div class="arch-node" data-layer="web" data-ref="apps/web/proxy.ts::proxy">
+<strong>Next.js：画面と入口の Basic 認証</strong>
+<p>全ページと <code>/api/*</code> の手前で Basic 認証を確かめる。静的ファイルは対象外</p>
+</div>
+<div class="arch-link">サーバー内の関数呼び出し（Route Handler → lib/server）</div>
+<div class="arch-node" data-layer="web" data-ref="apps/web/lib/server/api.ts::apiFetch">
+<strong>Next.js：BFF（app/api と lib/server）</strong>
+<p>CSRF 検証・入力の形の確認のあと、apiFetch が FastAPI を呼ぶ。エラー本文は許可した項目だけ通す</p>
+</div>
+<div class="arch-link">HTTP：X-Internal-Token（全リクエスト）／X-Cart-Token（カート）／X-Forwarded-For（注文系）</div>
+<div class="arch-node" data-layer="api" data-ref="apps/api/app/main.py::create_app">
+<strong>FastAPI</strong>
+<p>内部トークンの検証、入力検証（Pydantic）、業務処理、金額計算、在庫引当</p>
+</div>
+<div class="arch-link">SQL（SQLAlchemy 非同期＋asyncmy。接続プールは既定 20 本＋余裕 10 本）</div>
+<div class="arch-node" data-layer="db" data-ref="apps/api/app/core/db.py">
+<strong>MySQL</strong>
+<p>商品・カート・注文・設定・コンテンツの 13 表</p>
+</div>
+</div>
+
+<p>矢印ごとに「何が流れ、誰が確かめるか」を分けると次の表になります。レビューで「この値はどこで検証していますか」と聞かれたときの答えは、この表の右端です。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>区間</th><th>流れるもの</th><th>確かめる場所</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>ブラウザ → Next.js</td>
+<td>Basic 認証の資格情報、Cookie <code>cart_token</code>（HttpOnly）、Cookie <code>csrf_token</code>（JavaScript から読める）、ヘッダ <code>X-CSRF-Token</code></td>
+<td>Basic 認証は <a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy</a>、CSRF は <a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a>（Cookie とヘッダの一致を見る）</td>
+</tr>
+<tr>
+<td>Next.js（BFF） → FastAPI</td>
+<td>ヘッダ <code>X-Internal-Token</code>、カートの識別に <code>X-Cart-Token</code>、注文系だけ利用者 IP を入れた <code>X-Forwarded-For</code></td>
+<td><a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a>（不一致・欠落は 401 unauthorized）</td>
+</tr>
+<tr>
+<td>FastAPI → MySQL</td>
+<td>SQL。在庫の減算やカートの状態変更は条件付き UPDATE の 1 文</td>
+<td><a class="ref" data-ref="apps/api/app/core/db.py::get_session">get_session</a> が 1 リクエスト 1 セッションを貸し出す</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s01-folders">フォルダ地図</h3>
+
+<p>API 側は「入口（routers）→ 業務ルール（services）→ DB 操作（repositories）→ 表の定義（models）」の 4 段です。web 側は、ページ、BFF、部品、サーバー専用の関数、ブラウザ専用の関数、どちらでも使える純粋関数に分かれます。</p>
+
+<p><strong>api（apps/api/app）</strong></p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>フォルダ・ファイル</th><th>役割</th><th>代表例</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="layer" data-layer="api">routers/</span></td>
+<td>URL と入出力だけを書く。業務判定はしない。ステータスコードの切り替え（201／200）はここ</td>
+<td><a class="ref" data-ref="apps/api/app/routers/orders.py::create_order">routers/orders.py::create_order</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="service">services/</span></td>
+<td>業務ルール。在庫・上限・金額・注文確定の手順。トランザクションの commit と rollback もここ</td>
+<td><a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">services/orders.py::_confirm</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="repo">repositories/</span></td>
+<td>SQL を書く場所。SELECT と条件付き UPDATE を関数にする。業務判断はしない</td>
+<td><a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">repositories/orders.py::reserve_stock</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="db">models/</span></td>
+<td>表の定義（SQLAlchemy の ORM クラス）。全表に id・created_at・updated_at がある</td>
+<td><a class="ref" data-ref="apps/api/app/models/order.py::Order">models/order.py::Order</a></td>
+</tr>
+<tr>
+<td>schemas/</td>
+<td>リクエストとレスポンスの型（Pydantic）。入力は「形」だけ検証し、業務規則は書かない</td>
+<td><a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn">schemas/order.py::OrderCreateIn</a></td>
+</tr>
+<tr>
+<td>core/</td>
+<td>設定・DB 接続・エラー統一・内部トークンと CORS・ログのマスク・レート制限</td>
+<td><a class="ref" data-ref="apps/api/app/core/errors.py::AppError">core/errors.py::AppError</a></td>
+</tr>
+<tr>
+<td>adapters/</td>
+<td>外部サービスの差し替え口。決済（スタブ）とメール（ファイル出力）</td>
+<td><a class="ref" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter">adapters/payment.py::StubPaymentAdapter</a></td>
+</tr>
+<tr>
+<td>seed.py・seed_data.py</td>
+<td>初期データの投入（商品 31 点・カテゴリ・設定・お知らせ・FAQ）。定義は seed_data.py、投入は seed.py</td>
+<td><a class="ref" data-ref="apps/api/app/seed.py::seed">seed.py::seed</a></td>
+</tr>
+<tr>
+<td>main.py</td>
+<td>アプリの組み立て。ルーターの登録、エラーハンドラ、CORS、本番での Swagger 無効化</td>
+<td><a class="ref" data-ref="apps/api/app/main.py::create_app">main.py::create_app</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<p>依存の向きは <code>routers → services → repositories → models</code> で、下の層から上の層は呼びません。決済とメールのアダプタはルーターが <code>Depends</code> で受け取り、引数としてサービスへ渡します。サービスがアダプタを自分で作ることはありません。</p>
+
+<div class="note fact">
+<p>事実（import を grep で確認）: <code>routers/</code> から <code>repositories/</code> を直接呼ぶ箇所はありません。ただし例外が 2 つあります。①<a class="ref" data-ref="apps/api/app/routers/catalog.py::list_products">routers/catalog.py</a> が <code>app.models</code> から列挙型 <code>Gender</code> だけを import している。②<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">repositories/orders.py</a> が <code>services/order_number.py</code> の <code>generate_order_number</code>（DB を見ない純粋関数）を import している。どちらも DB 操作や業務判断を上の層へ持ち出してはいません。</p>
+</div>
+
+<p><strong>web（apps/web）</strong></p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>フォルダ・ファイル</th><th>役割</th><th>代表例</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="layer" data-layer="screen">app/（ページ）</span></td>
+<td>URL ごとのページ。すべて Server Component で、必要なデータは <code>lib/server</code> から FastAPI を読んで描画する（注文手続きのようにデータを読まないページもある）。操作のある部分は <code>components/</code> の Client Component に任せる</td>
+<td><a class="ref" data-ref="apps/web/app/products/page.tsx::ProductsPage">app/products/page.tsx</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="bff">app/api/（BFF）</span></td>
+<td>ブラウザ向けの窓口（Route Handler）。CSRF 検証、入力の形の確認、FastAPI への取り次ぎ</td>
+<td><a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST">app/api/orders/route.ts::POST</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="screen">components/</span></td>
+<td>画面部品。操作のある部品は <code>"use client"</code>（Client Component）。<code>lib/server</code> は import しない</td>
+<td><a class="ref" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm">components/OrderConfirm.tsx</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="bff">lib/server/</span></td>
+<td>サーバー専用（<code>import "server-only"</code>）。FastAPI 呼び出し、Cookie とカートの取り次ぎ、CSRF、環境変数の読み込み</td>
+<td><a class="ref" data-ref="apps/web/lib/server/api.ts::apiFetch">lib/server/api.ts::apiFetch</a></td>
+</tr>
+<tr>
+<td><span class="layer" data-layer="screen">lib/client/</span></td>
+<td>ブラウザ専用。BFF を呼ぶ薄いクライアントと sessionStorage を読むフック</td>
+<td><a class="ref" data-ref="apps/web/lib/client/order-api.ts::createOrder">lib/client/order-api.ts::createOrder</a></td>
+</tr>
+<tr>
+<td>lib/ 直下</td>
+<td>どちらでも使える純粋関数。入力検証、金額の表示、Cookie 文字列の組み立て、CSRF・Basic 認証・IP 判定のルール、エラー文言</td>
+<td><a class="ref" data-ref="apps/web/lib/checkout-validation.ts::validateCheckoutForm">lib/checkout-validation.ts</a></td>
+</tr>
+<tr>
+<td>proxy.ts</td>
+<td>Next.js 16 のプロキシ（旧 middleware）。サイト全体の Basic 認証</td>
+<td><a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy.ts::proxy</a></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note fact">
+<p>事実: <code>lib/</code> 直下の <code>basic-auth.ts</code>・<code>csrf-validation.ts</code>・<code>client-ip.ts</code>・<code>env-validation.ts</code> は、Vitest から直接テストできるように <code>server-only</code> を付けず、秘密を読まない純粋関数にしています。<code>process.env</code> を実際に読むのは <code>proxy.ts</code>、<code>lib/server/env.ts</code>、<code>layout.tsx</code> です。</p>
+</div>
+
+<h3 id="s01-lifecycle">1 リクエストの一生：「カートに入れる」</h3>
+
+<p>商品詳細の「カートに入れる」を押すと、まず画面の関数が CSRF トークンを用意して BFF を呼びます。BFF は CSRF と入力の形を確かめ、Cookie のカートトークンをヘッダに載せ替えて FastAPI へ渡します。FastAPI はトークンを確かめたあと、サービスがカートを特定し、在庫と上限を見て、リポジトリが <code>cart_items</code> に 1 文で追加します。返ってきたカート全体が BFF を通って画面に戻り、ヘッダのバッジとトーストを更新します。</p>
+
+<div class="flow" data-title="カートに入れる：ブラウザから DB まで">
+<div class="flow-step" data-ref="apps/web/components/PurchasePanel.tsx#L60-79" data-layer="screen">
+<strong>1. 追加ボタンを押す</strong>
+<p>PurchasePanel の onAdd。選択中の色・サイズから解決した variant_id と数量で addCartItem を呼ぶ</p>
+</div>
+<div class="flow-step" data-ref="apps/web/lib/client/cart-api.ts::mutate" data-layer="screen">
+<strong>2. CSRF トークンを付けて送る</strong>
+<p>ensureCsrfToken が Cookie から csrf_token を読む（無ければ先に GET /api/cart で発行させる）。POST /api/cart/items に X-CSRF-Token ヘッダを付ける</p>
+</div>
+<div class="flow-step" data-ref="apps/web/app/api/cart/items/route.ts::POST" data-layer="bff">
+<strong>3. BFF が CSRF と入力の形を確かめる</strong>
+<p>verifyCsrf で Cookie とヘッダが一致しなければ 403。variant_id が整数、quantity が正の整数かを見て、外れれば 400 validation_error</p>
+</div>
+<div class="flow-step" data-ref="apps/web/lib/server/cart-proxy.ts::proxyCartRequest" data-layer="bff">
+<strong>4. Cookie をヘッダへ載せ替えて FastAPI を呼ぶ</strong>
+<p>Cookie cart_token を X-Cart-Token に載せ、apiFetch が X-Internal-Token を付ける。応答のトークンが Cookie と違えば Set-Cookie で更新する</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/routers/cart.py::add_item" data-layer="api">
+<strong>5. FastAPI がトークンを検証してルーターへ</strong>
+<p>verify_internal_token を通ったあと、ルーターは body（variant_id・quantity）を検証してサービスを呼ぶだけ</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/services/cart.py::add_item" data-layer="service">
+<strong>6. サービスが順に判定する</strong>
+<p>カート特定（resolve_cart）→ 商品が公開中で存在するか（無ければ 404）→ 在庫 0 なら 409 → 加算 → 上限超過なら rollback して 422 → commit</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/repositories/carts.py::upsert_item_add" data-layer="repo">
+<strong>7. cart_items に 1 文で追加</strong>
+<p>INSERT … ON DUPLICATE KEY UPDATE。同じ variant が既にあれば数量を足す。同時に 2 回押されても行は 1 つ</p>
+</div>
+<div class="flow-step" data-ref="apps/web/components/PurchasePanel.tsx#L60-79" data-layer="screen">
+<strong>8. 応答で画面を更新</strong>
+<p>カート全体（明細・金額・点数）が返る。applyCart でヘッダのバッジを更新し、トーストに「カートを見る」を出す</p>
+</div>
+</div>
+
+<div class="note opinion">
+<p>意見: この 1 本を説明できれば、カート変更・注文手続き・注文確定は同じ型（画面 → クライアント関数 → BFF → FastAPI → サービス → リポジトリ）の繰り返しとして話せると思います。違いが出るのは、BFF に載せ替えるヘッダの種類と、サービスの判定の数です。</p>
+</div>
+</section>

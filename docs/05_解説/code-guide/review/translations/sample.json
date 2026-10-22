@@ -1,0 +1,20 @@
+{
+  "apps/api/app/routers/catalog.py": [
+    {"lines": [29, 29], "ja": "GET /products の入口になる関数であることを宣言する行。レスポンスの形は ProductListResponse、説明文は「商品一覧」。"},
+    {"lines": [30, 36], "ja": "関数の引数。URL のクエリ文字列（gender・category・page・per_page）と、DB 接続（session）を受け取る。page は 1 以上、per_page は上限つきで、範囲外なら FastAPI が自動で 422 を返す。"},
+    {"lines": [37, 39], "ja": "業務の判断はサービス層に任せ、受け取った値をそのまま渡して結果を返すだけ。ルーターは入出力の窓口に徹している。"},
+    {"lines": [42, 44], "ja": "GET /products/{product_id} の入口を宣言する行。レスポンスの形は ProductDetailOut、説明文は「商品詳細」。"},
+    {"lines": [45, 47], "ja": "関数の引数。URL の一部の商品 ID（整数）と DB 接続を受け取る。"},
+    {"lines": [48, 48], "ja": "商品詳細の取得はサービス層に任せて、結果を返す。"}
+  ],
+  "apps/api/app/routers/checkout.py": [
+    {"lines": [16, 16], "ja": "POST /checkout/prepare の入口を宣言する行。確認画面用の金額計算と、二重注文を防ぐ冪等キーの発行を行う。"},
+    {"lines": [17, 19], "ja": "関数の引数。ヘッダーのカートトークン（X-Cart-Token）と DB 接続を受け取る。"},
+    {"lines": [20, 20], "ja": "金額計算と冪等キーの発行はサービス層に任せ、その結果を返す。"}
+  ],
+  "apps/api/app/routers/settings.py": [
+    {"lines": [15, 15], "ja": "GET /settings/public の入口を宣言する行。税率と送料のルールを公開するための API。"},
+    {"lines": [16, 17], "ja": "DB 接続を受け取り、サービス層から公開設定を読み出す。"},
+    {"lines": [18, 22], "ja": "読み出した設定のうち、画面に公開してよい 3 項目（税率・送料・送料無料になる金額）だけを詰めて返す。"}
+  ]
+}

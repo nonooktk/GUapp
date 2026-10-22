@@ -1,0 +1,230 @@
+<section id="s11" data-title="想定 Q&amp;A">
+<h2>11. 想定 Q&amp;A</h2>
+
+<p>レビュワーは、リポジトリを開き、全体を知り、入口のコードを読み、気になった点を突く、という順に動くと想定した。この章の 12 問は、最初の 10 分で聞かれそうな順に並べてある。Q1〜Q10 が時間順、Q11 と Q12 は途中で出やすい突っ込みである。各問は、返し方の骨子、根拠の場所、追撃、追撃への返し、準備の順に書いた。追撃の横に付けた印は、今のままでどれだけ詰まりそうかを表す。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>問</th><th>時間</th><th>質問</th><th>追撃の度合い</th><th>準備の要点</th></tr></thead>
+<tbody>
+<tr><td>Q1</td><td>0〜1 分</td><td>どんなアプリで、どこまでできているか</td><td>🟡 準備が要る</td><td>残り 10 件の見積りの根拠を数字で言えるようにする</td></tr>
+<tr><td>Q2</td><td>1〜2 分</td><td>構成は。なぜ BFF を挟むか</td><td>🟡 準備が要る</td><td>api が公開されていることと、設計書との食い違いを自分から言えるようにする</td></tr>
+<tr><td>Q3</td><td>2〜3 分</td><td>AI が書いたコードを理解しているか</td><td>🔴 今のままだと詰まる</td><td>手順 3 と 4 の順序の理由（設計書 4.4）を言えるようにする</td></tr>
+<tr><td>Q4</td><td>3〜4 分</td><td>どこから読めばよいか</td><td>🟢 事実で返せる</td><td>不要</td></tr>
+<tr><td>Q5</td><td>4〜5 分</td><td>在庫の取り合いはどう防ぐか</td><td>🟢 事実で返せる</td><td>不要</td></tr>
+<tr><td>Q6</td><td>5〜6 分</td><td>二重注文はどう防ぐか</td><td>🟢 事実で返せる</td><td>コードにある 4 層と、設計書 7.4 の 4 層の違いを一言で言えるようにする</td></tr>
+<tr><td>Q7</td><td>6〜7 分</td><td>SQL インジェクション・CORS・Swagger は</td><td>🟡 準備が要る</td><td>セキュリティヘッダーを入れるか決める</td></tr>
+<tr><td>Q8</td><td>7〜8 分</td><td>テストと CI は</td><td>🔴 今のままだと詰まる</td><td>カバレッジを 1 回計測する</td></tr>
+<tr><td>Q9</td><td>8〜9 分</td><td>ブランチ戦略は</td><td>🔴 今のままだと詰まる</td><td>main の必須チェックにテストを足す</td></tr>
+<tr><td>Q10</td><td>9〜10 分</td><td>決済やメールは</td><td>🟢 事実で返せる</td><td>不要</td></tr>
+<tr><td>Q11</td><td>突っ込み</td><td>レート制限は複数ワーカーで効くか</td><td>🟡 準備が要る</td><td>A1 を直しておく。ADR-0003・0004 を開ける</td></tr>
+<tr><td>Q12</td><td>突っ込み</td><td>自分で分かっている弱点は</td><td>🔴 今のままだと詰まる</td><td>9.6 の SQL を実データで 1 回試す</td></tr>
+</tbody></table></div>
+
+<div class="note fact"><p><strong>事実:</strong> 度合いの印は、2026-09-29 時点のコードと文書で追撃に答えられるかどうかの見立てである。準備を済ませると印は下がる。答えの中の数字と場所は、すべて実ファイルで確認した。</p></div>
+
+<details class="qa" id="s11-q01">
+<summary><span class="qa-time">0〜1分</span>Q1 どんなアプリで、どこまでできていますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> GU の EC サイトを題材にした講義演習のデモで、ゲストが商品を探し、カートに入れ、注文を確定するところまでできています。要件の Must 18 件のうち、完了が 8、一部が 5、未着手が 5 です。会員登録と管理画面はまだ作っていません。自動テストは 528 件（api 300 のうち unit 200・integration 100、web 228）です。api の結合テスト 100 件は、いまは環境変数の漏れで CI ではスキップされていて、ローカルでは全件緑です（第 9 章の D3）。詳しい状況は<a href="#s08">第 8 章</a>にあります。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/main.py::build_protected_router" data-note="API の全ルーターの一覧">build_protected_router</a>（API の一覧）、<a class="ref" data-ref="apps/web/app/page.tsx::HomePage">HomePage</a>（入口の画面）。</p>
+<div class="followup">
+<p class="followup-q">追撃: 残りの 10 件を 10/31 までに終える根拠は何ですか（🟡 準備が要る）</p>
+<p><strong>返し:</strong> P2 を 4 回に分け、各回の頭で追補設計とテスト項目を先に作ってから実装する運用にしました（<a class="ref" data-ref="docs/00_計画/ADR/ADR-0001_P2の4分割.md#L19-24">ADR-0001</a>）。P2-b が 10/10、P2-c が 10/20、P2-d が 10/31 です。実績としては、実装プランを作った 9/17 から検収完了の 9/24 まで約 1 週間で、受け入れテスト 8 件とシステムテスト 40 件に合格しました。main への実装のマージは 9/18（PR #4〜#10）で、残りは検収と修正です。P2-a は 9/24 の設計から 9/25 の実装 3 PR まで進めました。</p>
+<p><strong>準備:</strong> ADR-0001 は、P2 の残りを P1 のおよそ 3 倍の量と見ている。P1 の約 1 週間を基準にすると約 3 週間分になり、9/29 から 10/31 までの約 4.5 週間に収まる、という計算になる（これは私の推測で、見積りとして文書には無い）。P2 の量が想定を超えたときに削る順番は未決で、ADR-0001 は別の ADR で決めるとしている。この点も聞かれたら「未決」と答える。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q02">
+<summary><span class="qa-time">1〜2分</span>Q2 構成はどうなっていますか。なぜ BFF を挟むのですか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> ブラウザは Next.js の Route Handler（<code>/api/*</code>）だけを呼びます。FastAPI の URL と内部トークンをブラウザに出さないためです。FastAPI は <code>X-Internal-Token</code> が無いと 401 を返し、CORS の許可オリジンは BFF の 1 つだけです。認証 Cookie の検証や CSRF の検証も BFF に集めています。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/web/lib/server/api.ts::apiFetch" data-note="内部トークンを付けて FastAPI を呼ぶ">apiFetch</a>、<a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a>、<a class="ref" data-ref="apps/api/app/core/security.py::install_cors">install_cors</a>、<a class="ref" data-ref="apps/api/app/main.py::build_protected_router">build_protected_router</a>、設計書 <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L320-327">4.1</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: Azure の api は公開されています。直接叩かれたらどうなりますか（🟡 準備が要る）</p>
+<p><strong>返し:</strong> api の App Service にはアクセス制限を設定していません。デプロイのスクリプトにその設定が無く、README にも api の health を直接 curl する手順があります。防御は内部トークンだけです。トークンは <code>openssl rand -hex 32</code> で作った推測されない乱数で（<a class="ref" data-ref="scripts/azure-deploy/02-settings.sh#L72">02-settings.sh L72</a>）、比較は一定時間で行い、期待値が未設定なら全リクエストを拒否します。<code>/api/v1/health</code> だけは死活監視のため対象外です。Swagger は本番で無効にしてあります。Week10 の閉域化で、VNet 統合とアクセス制限を入れる予定です。設計書は api にアクセス制限を掛けて web の送信 IP だけを許可する方針ですが、いまの公開環境では未設定です（第 9 章の D4）。ただし Azure 上の実際の設定は、CLI を使わない方針のため私は確認しておらず、スクリプトから読み取った範囲の話です。</p>
+<p><strong>準備:</strong> 設計書は、本編 1 章の表と DS-DEC-27 で「App Service のアクセス制限で BFF の送信 IP のみ許可」と書いている。スクリプトにはこの設定が無いので、設計と現状が食い違っている。聞かれる前に自分から「設計では入れる前提だが、公開環境ではまだ入れていない」と言えるようにする。api の URL に内部トークン無しで API を呼び、401 が返ることを 1 回見せられるとよい（私は未実行）。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q03">
+<summary><span class="qa-time">2〜3分</span>Q3 AI が書いたコードを、理解して説明できますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> コードのコメントに設計 ID（たとえば注文確定の手順番号）が付いていて、そこから設計書へたどれます。方式の判断、たとえば在庫を条件付き UPDATE にすることや、二重注文を複数の層で防ぐことは自分で決め、理由と代替案を DS-DEC と ADR に記録しました。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/services/orders.py#L1-15" data-note="手順 0〜7 がそのままコメントの番号">orders.py の冒頭</a>、設計書の <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L806-830">DS-DEC の表</a>、<a class="ref" data-ref="docs/00_計画/ADR/README.md">ADR の一覧</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: <code>_confirm</code> の手順 3（金額照合）と手順 4（在庫確保）を入れ替えると、何が困りますか（🔴 今のままだと詰まる）</p>
+<p><strong>返し:</strong> 設計書 4.4 の手順 3 に理由が書いてあります。引当より前に照合するのは、金額が合わないときに在庫の行ロックを握らないため、です（draft-v3 までは引当が先で、結果は同じ）。<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L397-398">設計書 L397-398</a>。入れ替えても正しさは崩れません。どちらの失敗も同じトランザクションで ROLLBACK するので、在庫の戻し漏れは起きないからです。困るのはロックの時間です。</p>
+<p>ここから先は、コードを読んだ上での私の推論である。順序を逆にすると、金額が合わない注文も、先に variants の行ロックを取ってから ROLLBACK することになる。同じ商品を同時に買う別の注文は、その間待たされる。金額不一致は価格改定の直後や改ざんで起きる経路で、その注文にロックを取らせなければ、同時購入への影響を小さくできる。もう一つの違いは、金額も在庫も不一致のときに返るエラーである。今は <code>price_changed</code> で、入れ替えると <code>out_of_stock</code> になる。テスト用の遅延フック（<a class="ref" data-ref="apps/api/app/services/orders.py::_maybe_test_delay">_maybe_test_delay</a>）も、この 2 つの手順の間に置いてある。</p>
+<p><strong>準備:</strong> 設計書の 1 文を言えるようにしておく。設計書 3.2 の図（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L154-157">L154-157</a>）と 3.3.1 の図（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L193-195">L193-195</a>）、テスト設計書の ST-F014-02・03 の手順番号は、引当が先の旧順序のまま残っている。図を見せたときに食い違いを突かれたら、4.4 の文章とコードが新しい順序で、図は更新漏れだと答える。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q04">
+<summary><span class="qa-time">3〜4分</span>Q4 どこから読めばいいですか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> 第 2 章のルートに沿って、注文確定を画面から DB まで縦に 1 本読むのがよいです。入口は確認画面の <code>OrderConfirm</code>、そこから BFF、FastAPI のルーター、サービス、リポジトリの順に下ります。</p>
+<p><strong>根拠の場所:</strong>
+<a class="ref" data-ref="apps/web/components/OrderConfirm.tsx::OrderConfirm">OrderConfirm</a> →
+<a class="ref" data-ref="apps/web/lib/client/order-api.ts::createOrder">createOrder</a> →
+<a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST">POST /api/orders</a> →
+<a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">proxyOrderRequest</a> →
+<a class="ref" data-ref="apps/api/app/routers/orders.py::create_order">router.create_order</a> →
+<a class="ref" data-ref="apps/api/app/services/orders.py::create_order">service.create_order</a> →
+<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a> →
+<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: <code>_confirm</code> が 110 行あります。なぜ分割しないのですか（🟢 事実で返せる）</p>
+<p><strong>返し:</strong> トランザクションの境界を 1 つの関数で見せるためです。分割すると commit と rollback の場所が散り、どこまでが 1 つのトランザクションかが読み取りにくくなります。コメントの番号（1〜6）を設計書 DS-PRC-014-1 の手順番号に対応させてあるので、設計書と並べて上から順に追えます。ただし、この関数に決済 NG の 2 段コミット（第 9 章の B2）もあり、大きさが弱点になっていることは第 9 章の C1 に挙げてあります。</p>
+<p><strong>準備:</strong> 不要。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q05">
+<summary><span class="qa-time">4〜5分</span>Q5 在庫の取り合いは、どう防いでいますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> 在庫の引当を条件付き UPDATE の 1 文にしています。<code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock &gt;= :q</code> の形で、影響した行数が 0 なら在庫不足です。確認と減算が 1 文で原子的に行われ、同じ行を同時に狙った注文は DB の行ロックで順番に処理されるため、一方だけが成功します。最後の砦として、DB 側にも <code>stock &gt;= 0</code> の CHECK 制約を置いています。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>、<a class="ref" data-ref="apps/api/app/services/orders.py::_reserve_all">_reserve_all</a>、テスト <span class="tid">IT-014-04</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_04_stock_race.py::test_it_014_04_two_carts_race_for_last_unit">最後の 1 点を 2 つのカートが取り合う</a>）。</p>
+<div class="followup">
+<p class="followup-q">追撃: 3 点のうち 2 点目だけ在庫切れなら、1 点目の引当は戻りますか（🟢 事実で返せる）</p>
+<p><strong>返し:</strong> 戻ります。<code>_reserve_all</code> は variant_id の昇順に全行を試し、0 行だった ID を集めて 409 <code>out_of_stock</code> を上げます。呼び出し元の <a class="ref" data-ref="apps/api/app/services/orders.py#L358-363" data-note="AppError を受けて ROLLBACK">_create_order</a> がそれを受けて <code>session.rollback()</code> するので、注文の INSERT、カートの ordered 化、1 点目の引当が同じトランザクションの中で、まとめて取り消されます。昇順に引き当てるのは、複数のカートが同じ商品群を逆順に取り合うデッドロックを避けるためです（設計書 4.4 手順 4）。</p>
+<p><strong>準備:</strong> 不要。結合テスト <span class="tid">IT-014-07</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_07_reserve_failure_rolls_back_and_lists_variants">reserve_failure_rolls_back</a>）が、先に引当した分も戻ることを確かめている。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q06">
+<summary><span class="qa-time">5〜6分</span>Q6 二重注文は、どう防いでいますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> コードに実在する 4 層で防いでいます。①画面の二重送信防止（確定ボタンを押すと処理中は無効にし、連続クリックでも送信は 1 回）。②冪等キー（<code>orders.idempotency_key</code> の UNIQUE 制約で、同じキーの注文は 2 件作れず、重複時は既存の注文を返す）。③カートの状態（注文と同じトランザクションで、カートを active から ordered へ条件付きで更新する。0 行なら 409）。④注文番号の UNIQUE 制約（衝突したら 1 回だけ再生成し、2 回目も衝突したら 500）。①は使い勝手のための層で、防御の本体は②と③です（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L421-422">設計書 4.4 の DS-PRC-036</a>）。</p>
+<div class="note fact"><p><strong>設計書との違い:</strong> 設計書 7.4（DS-DEC-07）の 4 層は「冪等キー・カート状態・Stripe Session・event_id」で、後ろの 2 つは P2 の内容である（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L735-738">設計書 7.4</a>）。P1 のコードで動いているのは、そのうち冪等キーとカート状態の 2 つに、画面の二重送信防止と注文番号の一意制約を加えた 4 層である。</p></div>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L65-66">OrderConfirm の inflight</a>、<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a>（冪等キーと注文番号の衝突の処理）、<a class="ref" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered">mark_cart_ordered</a>、<a class="ref" data-ref="apps/api/app/services/orders.py::_existing_order_result">_existing_order_result</a>、テスト <span class="tid">IT-014-02</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py::test_it_014_02_same_key_20_concurrent_requests_yield_one_order">同じキーで 20 並列 → 1 件</a>）と <span class="tid">IT-014-03</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py::test_it_014_03_same_cart_two_keys_concurrent_one_201_one_already_ordered">同じカートに 2 つのキー</a>）。この 2 つは結合テストで、CI ではいまスキップされている（第 9 章の D3）。</p>
+<div class="followup">
+<p class="followup-q">追撃: 別タブで確認画面を開き直すと冪等キーが変わります。二重に注文できませんか（🟢 事実で返せる）</p>
+<p><strong>返し:</strong> できません。キーは prepare のときに FastAPI が発行し（<a class="ref" data-ref="apps/api/app/services/checkout.py::new_idempotency_key">new_idempotency_key</a>）、web は sessionStorage に置きます（<a class="ref" data-ref="apps/web/lib/checkout-session.ts::saveCheckoutSession">saveCheckoutSession</a>）。sessionStorage はタブ単位なので、別タブでは別のキーになり、②の冪等キーでは防げません。防ぐのは③のカート状態です。1 件目がカートを ordered にすると、2 件目の条件付き UPDATE は 0 行になり、ROLLBACK して 409 <code>already_ordered</code> を返します（<a class="ref" data-ref="apps/api/app/services/orders.py#L198-200">L198-200</a>。1 件目の完了後に来たときは <a class="ref" data-ref="apps/api/app/services/orders.py#L351-355">L351-355</a> で先に 409）。ほぼ同時に来たときは、注文の INSERT で InnoDB のデッドロック（1213）が起きることがあり、片方が 1 回だけやり直して、同じ 409 に着地します。</p>
+<p><strong>準備:</strong> 不要。層の呼び方は、コードの 4 層と設計書 7.4 の 4 層で違うことを一言添える。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q07">
+<summary><span class="qa-time">6〜7分</span>Q7 SQL インジェクション・CORS・Swagger は、どうなっていますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> SQL は SQLAlchemy のバインド変数で組み、入力は Pydantic で型を検証しています。LIKE のワイルドカードは <code>autoescape</code> に任せています。CORS は許可オリジンを 1 つに絞り、未設定や <code>*</code> のときは CORS 自体を付けません。Swagger は <code>APP_ENV=production</code> のとき無効で、テストで確かめています。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>、<a class="ref" data-ref="apps/api/app/repositories/search.py::build_match_condition">build_match_condition</a>、<a class="ref" data-ref="apps/api/app/core/security.py::install_cors">install_cors</a>、<a class="ref" data-ref="apps/api/app/main.py#L22-25">Swagger の無効化</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_app_production_docs_and_hooks.py::test_ut_app_production_docs_disabled">docs 無効のテスト</a>。文字列で SQL を組む箇所は seed だけで、既知の表名に限っています。</p>
+<div class="followup">
+<p class="followup-q">追撃: CSP が無いなら、XSS で CSRF トークン（HttpOnly でない Cookie）を読まれませんか（🟡 準備が要る）</p>
+<p><strong>返し:</strong> 読めます。csrf_token は JS が読んでヘッダに載せる作りなので、HttpOnly を付けていません（<a class="ref" data-ref="apps/web/lib/cookie.ts::buildCsrfTokenCookie">buildCsrfTokenCookie</a>）。ただし、同じオリジンで XSS が成立すれば、どの CSRF 対策も破られます。攻撃のコードが正規のページとして、正規のリクエストを送れるからです。本筋は XSS を入れないことです。React の既定のエスケープだけで描画し、<code>dangerouslySetInnerHTML</code> は使っていません（<a class="ref" data-ref="apps/web/app/contents/[slug]/page.tsx#L7-13">コンテンツのページ</a>にその旨のコメントがある）。コンテンツの本文はプレーンテキストだけです（DS-DEC-38）。カートのトークンの Cookie は HttpOnly です（<a class="ref" data-ref="apps/web/lib/cookie.ts::buildSetCookie">buildSetCookie</a> の既定）。CSP は Week8 で入れます。</p>
+<p><strong>準備:</strong> セキュリティヘッダーは、どの設定ファイルにも無い（第 9 章の B4）。CSP 以外の 3 種を先に入れるかどうかを決めておくと、この追撃への返しが「入れました」に変わる。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q08">
+<summary><span class="qa-time">7〜8分</span>Q8 テストと CI は、どうなっていますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> 自動テストは 528 件です（api 300 のうち unit 200・integration 100、web 228）。CI は api-test、web-test、deps-audit の 3 ジョブに、別ワークフローの gitleaks が加わります。api-test は MySQL 8.4 のサービスを立ててマイグレーションを流しますが、結合テスト 100 件は環境変数の漏れで、CI ではスキップされています（CI の結果は <code>200 passed, 100 skipped</code>）。ローカルでは全件緑です。当日までに直す予定です（第 9 章の D3）。web-test は Vitest のあと、server-only の違反でビルドが失敗することと、ビルド成果物に内部トークンが無いことを検査します。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref=".github/workflows/ci.yml#L24-100">api-test</a>、<a class="ref" data-ref="apps/api/tests/integration/conftest.py#L28-29">conftest.py の ENV_KEY</a>、<a class="ref" data-ref=".github/workflows/ci.yml#L102-211">web-test</a>、<a class="ref" data-ref=".github/workflows/secrets-scan.yml">secrets-scan.yml</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: カバレッジは何％ですか（🔴 今のままだと詰まる）</p>
+<p><strong>返し:</strong> 未計測です。pytest-cov も vitest の coverage も設定していません。テストは設計書のテスト ID（UT・IT・ST・AT）から逆算して書いていて、網羅は要件からテストへの対応表で見ています（設計書の <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L868-885">10 章トレーサビリティ表</a>）。</p>
+<p><strong>準備:</strong> 未計測の理由を問われたときの補足として、計測は依存の追加になるため承認待ちにしてある（第 9 章の D2）。1 回だけ計測して数字を持っておくと、答えが「未計測」から「〇％で、未達は〇〇」に変わる。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q09">
+<summary><span class="qa-time">8〜9分</span>Q9 ブランチ戦略は、どうなっていますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> main へは PR 経由だけで入れます。作業ブランチは <code>feat/</code>・<code>fix/</code>・<code>docs/</code> の接頭辞で切り、PR は #1 から #30 まで出しました。P1 実装プランでは squash merge を方針にしています。Dependabot が週次で、npm・uv・GitHub Actions の更新 PR を出します。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="docs/00_計画/P1実装プラン_20260917.md#L43">実装プランのブランチ方針</a>、<a class="ref" data-ref=".github/dependabot.yml">dependabot.yml</a>、<a class="ref" data-ref=".github/pull_request_template.md">PR テンプレート</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: main は保護していますか。CI が落ちてもマージできませんか（🔴 今のままだと詰まる）</p>
+<p><strong>返し:</strong> 事実として、必須のステータスチェックは gitleaks だけです。api-test と web-test が落ちても、今はマージできます。一方で、PR 必須、ブランチの削除禁止、強制 push 禁止は入っています（<code>gh api repos/nonooktk/GUapp/rulesets</code> の読み取りで確認）。承認 0 人は個人開発として妥当だと考えています。必須チェックに api-test と web-test を足す予定です。</p>
+<p><strong>準備:</strong> P1 実装プランは「main は CI 緑のみマージ」と書いているが、実際の設定は gitleaks だけで、文書と設定が食い違っている。必須チェックに足すと、この追撃は「保護している」と答えられる（第 9 章の D1）。足す名前は <code>api-test (pytest)</code> と <code>web-test (vitest + build)</code>。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q10">
+<summary><span class="qa-time">9〜10分</span>Q10 決済やメールは、どうなっていますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> どちらも P1 ではスタブです。アダプタ（Protocol）の後ろに置いてあり、注文確定のサービスは中身を知らずに呼びます。決済スタブは環境変数で ok か ng を固定して返し、未設定なら ok です。メールは送信せずに、ファイルへ書き出します。P2-c で、Stripe テストモードと Azure Communication Services のメールに替える予定です。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter">StubPaymentAdapter</a>、<a class="ref" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter">OutboxMailAdapter</a>、<a class="ref" data-ref="apps/api/app/core/config.py#L33-34">PAYMENT_STUB_RESULT</a>、テスト <span class="tid">IT-014-06</span>（<a class="ref" data-ref="apps/api/tests/integration/test_it_014_orders.py::test_it_014_06_payment_ng_keeps_failed_order_and_restores_stock_and_cart">決済 NG で在庫とカートが戻る</a>）。</p>
+<div class="followup">
+<p class="followup-q">追撃: Stripe は Webhook で後から結果が届きます。今の <code>authorize()</code> で足りますか（🟢 事実で返せる）</p>
+<p><strong>返し:</strong> 足りません。<code>authorize</code> は同期で ok か ng を返す形なので、P2-c で「Checkout Session を作る」と「Webhook で確定する」の 2 段に変えます。準備として済んでいるのは、注文の <code>stripe_session_id</code> 列（UNIQUE）と <code>expires_at</code> 列、<code>pending_payment</code> の状態、<code>PaymentProvider</code> の <code>stripe</code> です（<a class="ref" data-ref="apps/api/app/models/order.py#L87-88">models/order.py L87-88</a>）。<code>stripe_events</code> 表（<code>event_id</code> の UNIQUE）、Webhook の受け口、決済待ちの期限切れ処理は、まだありません。</p>
+<p><strong>準備:</strong> 不要。詳しい流れは<a href="#s08-stub">第 8 章 8.3</a>にある。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q11">
+<summary><span class="qa-time">突っ込み</span>Q11 レート制限は、複数ワーカーで効きますか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> 効きません。制限器がワーカーごとのメモリなので、api が 2 ワーカーの Azure では、同じ IP でも 1 時間に最大 200 回まで通ります。設計書 9.4 で既知の点で、P2 で共有ストアに置き換えます。また、公開環境では送信元 IP の判定に使う設定が漏れていて、全員が同じ枠になっています。これは自分で見つけていて、当日までに直す予定です（<a href="#s09-a">第 9 章の A1</a>）。</p>
+<p><strong>根拠の場所:</strong> <a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a>、<a class="ref" data-ref="scripts/azure-deploy/config.sh#L51">config.sh L51</a>（<code>--workers 2</code>）、<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L860">設計書 9.4</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: 今すぐ MySQL の表で数えればよいのでは（🟡 準備が要る）</p>
+<p><strong>返し:</strong> 優先度の判断です。前例として ADR-0003 があります。検索 API のレート制限を後回しにしたときの代替案 B は、既存の制限器の流用でしたが、プロセス内メモリのため共有ストアへの置き換えが別に要る、という理由で不採用にしました。今回も同じ考え方です。公開は 10/09 までのデモで（<a class="ref" data-ref="scripts/azure-deploy/config.sh#L48">config.sh L48</a>）、入口は HTTP Basic 認証で守っています（ADR-0004）。加えて、講義共用の MySQL は接続の上限が 171 で（P2 追補a の 9.2 #4）、api は 2 ワーカーで最大 20 接続（プール 5、オーバーフロー 5）を使っています。リクエストごとの書き込みをこの共用サーバーに足すことは、避けたい負担です。</p>
+<p><strong>準備:</strong> ADR-0003 の見送りの理由と、ADR-0004 の「Basic 認証がかかっている間に限る」という前提を、開いて示せるようにしておく（<a class="ref" data-ref="docs/00_計画/ADR/ADR-0003_検索APIのレート制限の見送り.md#L41-47">ADR-0003</a>）。ADR-0003 の代替案 B とここでの提案（表で数える）は完全には同じではなく、前例として使えるのは「置き場所の設計を含むため後回しにした」という判断の型までである。共用 MySQL の負担についての最後の一文は、私の意見である。</p>
+</div>
+</div>
+</details>
+
+<details class="qa" id="s11-q12">
+<summary><span class="qa-time">突っ込み</span>Q12 自分で分かっている弱点は、何ですか</summary>
+<div class="qa-body">
+<p><strong>返し方の骨子:</strong> 自分から出します。<a href="#s09">第 9 章</a>に 16 件の一覧があります。優先して直すのは 4 つで、公開環境でレート制限が全員共通の枠になっていること（A1）、結合テスト 100 件が CI でスキップされていること（D3）、main の必須チェックにテストが入っていないこと（D1）、lint を CI で回していないこと（C4）です。設計で受け入れているものとして、決済 NG の 2 段コミット（B2）、レート制限のワーカーごとの集計（B1）、決済とメールのスタブ（B5）があります。</p>
+<p><strong>根拠の場所:</strong> <a href="#s09">第 9 章の一覧</a>、<a class="ref" data-ref="apps/api/app/services/orders.py#L248-271">決済 NG の 2 段</a>。</p>
+<div class="followup">
+<p class="followup-q">追撃: 決済 NG のあとに在庫が戻らなかったら、どう気づきますか（🔴 今のままだと詰まる）</p>
+<p><strong>返し:</strong> 事実として、検知する仕組みは今はありません。決済 NG のときは、1 段目で監査ログに <code>order.payment_failed</code> が残ります（<a class="ref" data-ref="apps/api/app/services/orders.py#L51">AUDIT_PAYMENT_FAILED</a>）。ただし、この記録は 1 段目のコミットで書かれるため、2 段目が走ったかどうかは監査ログでは分かりません。2 段目が走ったかは、カートの状態で見分けます。<code>payment_failed</code> の注文なのに、カートが <code>ordered</code> のままなら戻し損ねです。これを探す SQL を<a href="#s09-sql">第 9 章の 9.6</a>に書きました。回収は P2 の決済待ちの期限切れ処理で行い、アラートは Week9 で入れる予定です。</p>
+<p><strong>準備:</strong> 9.6 の SQL は SQLite で構文と結果を確かめただけで、MySQL の実データでは試していない。ローカルの MySQL に決済 NG の注文を作って、1 回実行しておく。その実行を済ませれば、この追撃は 🟡 に下がる。監査ログ側から決済 NG の注文番号を拾うなら、<code>SELECT target_id FROM audit_logs WHERE action = 'order.payment_failed'</code> で取り、orders と carts に突き合わせる。</p>
+</div>
+</div>
+</details>
+
+
+<h3 id="s11-why">11.1 なぜこの形か（5 項目）</h3>
+
+<p>質問の奥にある「なぜそう作ったか」に答えるための整理である。設計書の DS-DEC に根拠があるものは番号を添えた。無いものは、無いと書いた。</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>判断</th><th>選んだ形と理由</th><th>別の案と、選ばなかった理由</th><th>根拠</th></tr></thead>
+<tbody>
+<tr>
+<td>BFF を挟む</td>
+<td>ブラウザに FastAPI の URL と内部トークンを渡さないため。認証 Cookie と CSRF の検証、応答の整形を 1 か所に集められる。Stripe の Webhook も BFF で受けて FastAPI に転送するので、閉域化しても届く。</td>
+<td>ブラウザから FastAPI を直接呼ぶ案。FastAPI の URL と CORS を公開側に出すことになる。DS-DEC-06 の次善策の欄は空で、比較の記録は無い（意見: 上の理由が主な違いだと思う）。</td>
+<td>DS-DEC-05・06・13。<a class="ref" data-ref="apps/web/lib/server/api.ts::apiFetch">apiFetch</a>、<a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a></td>
+</tr>
+<tr>
+<td><code>_confirm</code> を 1 関数にする</td>
+<td>commit と rollback の場所を 1 か所で読めるようにするため。コメントの番号を DS-PRC-014-1 の手順番号に対応させ、設計書と並べて追える。</td>
+<td>手順ごとの関数に分ける案。commit と rollback が複数の関数に散る。分割の是非は、弱点として第 9 章の C1 に置いた。</td>
+<td>DS-DEC 番号なし（実装上の判断）。<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a>、設計書 <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L378-402">4.4</a></td>
+</tr>
+<tr>
+<td>在庫は条件付き UPDATE</td>
+<td>確認と減算が 1 文で原子的になり、影響行数で成否が分かる。設計書の理由は「ロック不要で一方だけ成功」。</td>
+<td>悲観ロック（<code>SELECT … FOR UPDATE</code>）。先に行を読んでロックし、在庫を確認してから更新する 2 手になり、ロックの保持が長くなる。ただし複数明細で行を取り合うときの順序管理（variant_id 昇順）は、どちらの方式でも要る。悲観ロックを退けた意味ではなく、DS-DEC-08 の次善策として残してある。ロックの保持時間の違いは一般論で、設計書の記載は「ロック不要で一方だけ成功」だけである。</td>
+<td>DS-DEC-08。<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a>、<code>variants</code> の CHECK（<code>stock &gt;= 0</code>）</td>
+</tr>
+<tr>
+<td>冪等キーを prepare で発行する</td>
+<td>確認画面を出した時点でキーが決まり、同じ画面からの再送（連打・通信のやり直し）が同じキーになる。そのため、再送には既存の注文を返せる。キーはサーバー（FastAPI）が乱数で作る。</td>
+<td>確定の送信時にクライアントが作る案は、設計書に比較の記録が無い。設計書の DS-DEC-07 が明記するのは「冪等キー単体では同時到着と 2 タブを防げない」ことで、層 2 を足した理由になっている。キーを prepare で出す理由の文章は設計書に無く、上の説明は図（3.3.1）と実装からの推論である。</td>
+<td>DS-DEC-07。<a class="ref" data-ref="apps/api/app/services/checkout.py::new_idempotency_key">new_idempotency_key</a>、<a class="ref" data-ref="apps/api/app/services/checkout.py::prepare">prepare</a></td>
+</tr>
+<tr>
+<td>匿名カートを乱数のトークンで識別する</td>
+<td>ゲストでも DB にカートを持て、将来の会員カートとのマージや変動通知を実装しやすい。トークンは 32 バイト乱数の base64url で、FastAPI が発行し、Cookie には HttpOnly で 90 日置く。トークンを知らない人は他人のカートに届かない。</td>
+<td>localStorage にカートを置く案（DS-DEC-10 の次善策）。サーバーがカートの内容を知れないので、マージや通知に向かない（この説明は意見。設計書の理由は「マージ・変動通知が実装しやすい」）。</td>
+<td>DS-DEC-09・10・12。<a class="ref" data-ref="apps/api/app/services/cart_rules.py::new_cart_token">new_cart_token</a>、<a class="ref" data-ref="apps/api/app/services/cart.py::resolve_cart">resolve_cart</a>、<a class="ref" data-ref="apps/web/lib/cookie.ts::buildCartTokenCookie">buildCartTokenCookie</a></td>
+</tr>
+</tbody></table></div>
+</section>

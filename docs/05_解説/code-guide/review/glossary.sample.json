@@ -1,0 +1,7 @@
+[
+  {"term": "BFF", "aliases": ["Backend for Frontend"], "short": "ブラウザ専用の窓口になるサーバー。ブラウザからの要求を受け、FastAPI への取り次ぎを行う。", "analogy": "レストランのホール係。客は厨房に入らず、注文はホール係が厨房へ取り次ぐ。", "ref": "apps/web/lib/server/api.ts::apiFetch"},
+  {"term": "FastAPI", "aliases": [], "short": "Python 製の Web API フレームワーク。このアプリのバックエンドで、/api/v1 以下の処理を受け持つ。"},
+  {"term": "冪等キー", "aliases": ["Idempotency-Key"], "short": "同じ注文要求が 2 回届いても、1 回分しか処理しないための識別子。二重注文を防ぐ。", "analogy": "整理券。同じ番号が来たら、2 回目は同じ結果を返すだけにする。"},
+  {"term": "サービス層", "aliases": [], "short": "業務のルール（在庫・金額・注文の状態遷移など）を書く層。ルーターから呼ばれ、リポジトリを通じて DB を読み書きする。"},
+  {"term": "Server Component", "aliases": [], "short": "Next.js で、サーバー側だけで動く React コンポーネント。ブラウザには描画結果だけが届く。"}
+]

@@ -1,0 +1,222 @@
+<section id="s09" data-title="既知の弱点と対処予定">
+<h2>9. 既知の弱点と対処予定</h2>
+
+<p>レビュワーに突かれる前に、自分で分かっている弱点を出しておく。この章は、弱点ごとに、どこにあるか、何が起きるか、当日までに直すか口頭で返すか、を並べたものである。判定は 2026-09-29 時点の「予定」で、どの項目もまだ着手していない。深刻度の高中低は作成者の見立てで、根拠は各行の「何が起きるか」に書いた。</p>
+
+<h3 id="s09-criteria">9.1 直すか口頭で返すかの線引き</h3>
+
+<p>直す側に入れるのは、実害があって公開環境で試すと見つかるものと、30 分以内で直せて質問が 1 つ減るものである。口頭で返す側に入れるのは、設計書に既知の弱点として書いてあり受容しているもの、直すのに数時間以上かかるもの、直前に触ると壊すリスクが大きいものである。</p>
+
+<div class="note fact"><p><strong>事実:</strong> 表の各行は、2026-09-29 に origin/main（2b9c87d）の実ファイルを読んで確認した。行番号と関数名は参照から開ける。Azure 上の実際の設定値は、Azure CLI を使わない方針のため見ていない。スクリプトとコードから読み取れる範囲だけを書いた。</p></div>
+
+<h3 id="s09-a">9.2 A 本物の不具合</h3>
+
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>深刻度</th><th>場所</th><th>何が起きるか</th><th>判定</th><th>当日までにやること</th><th>返し方</th></tr></thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td><span class="sev high">高</span></td>
+<td><a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::clientIp">clientIp</a> → <a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">resolveClientIp</a><br><a class="ref" data-ref="apps/web/lib/env-validation.ts#L71-76">env-validation.ts L71-76</a><br><a class="ref" data-ref="scripts/azure-deploy/02-settings.sh#L110-118">02-settings.sh L110-118</a></td>
+<td>公開環境で、注文照会のレート制限が利用者全員で 1 つの枠になる。web が信頼するプロキシ数 <code>TRUSTED_PROXY_HOPS</code> の既定は 0 で、設計書 P1 draft-v3 の環境変数表は App Service 配下で 1 と規定している。ところが web のアプリ設定を投入するスクリプトにこの変数が無い。0 のとき <code>resolveClientIp</code> は利用者の送ったヘッダを一切使わず、送信元 IP は全員 <code>127.0.0.1</code> になる。1 人が 100 回（api が 2 ワーカーなので最大 200 回）照会すると、その時間は全員が 429 になる。</td>
+<td><span class="status fix">直す</span></td>
+<td><code>02-settings.sh</code> の web の設定に <code>TRUSTED_PROXY_HOPS=1</code> を 1 行足す。Azure への反映は別途承認を取ってから行う。</td>
+<td>「設定漏れで、設計書は 1 と決めていたのにスクリプトへ転記していなかった。自分で見つけて直した（または直す期日は〇日）」</td>
+</tr>
+</tbody></table></div>
+
+<div class="note fact"><p><strong>事実（設計書との対応）:</strong> 設計書は <a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L784-785">8.2 の表</a>で、BFF が利用者送信の <code>X-Forwarded-For</code> を転送しないこと、<code>TRUSTED_PROXY_HOPS</code> の App Service 配下での値が 1 であることを規定している。<code>TRUSTED_PROXY_HOPS</code> は PR #27（2026-09-25）で導入され、設計書の表は PR #30 で加わった。デプロイスクリプトは PR #26 で作られたあと変更されておらず、この変数を持たない（<code>git log</code> で確認）。</p></div>
+
+<div class="note opinion"><p><strong>意見（反映の方法）:</strong> <code>02-settings.sh</code> は再実行のたびに内部トークンと Basic 認証の ID・パスワードを作り直す（スクリプト冒頭のコメントに明記）。レビュワーに伝え済みの資格情報が変わるため、Azure への反映は <code>az webapp config appsettings set</code> で web に 1 件だけ足すほうが影響は小さいと思う。反映後は、App Service が <code>X-Client-IP</code> を付けて利用者が上書きできないことを 1 回確かめたい。この点は <code>client-ip.ts</code> のコメントの記述であり、Azure 上では私は確認していない。</p></div>
+
+<h3 id="s09-b">9.3 B 設計で受け入れている弱点</h3>
+
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>深刻度</th><th>場所</th><th>何が起きるか</th><th>判定</th><th>当日までにやること</th><th>返し方</th></tr></thead>
+<tbody>
+<tr>
+<td>B1</td>
+<td><span class="sev mid">中</span></td>
+<td><a class="ref" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter">SlidingWindowRateLimiter</a><br><a class="ref" data-ref="scripts/azure-deploy/config.sh#L51">config.sh L51</a></td>
+<td>レート制限の回数をプロセス内メモリで数えている。Azure の api は <code>uvicorn --workers 2</code> なので、ワーカーごとに別々に数え、同じ IP でも 1 時間に最大 200 回まで通る。</td>
+<td><span class="status known">設計書で既知</span> <span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L860">設計書 9.4</a> に、複数ワーカーでは共有ストア（MySQL の表か Redis）に置き換えると書いてある。P2 で対応する」</td>
+</tr>
+<tr>
+<td>B2</td>
+<td><span class="sev mid">中</span></td>
+<td><a class="ref" data-ref="apps/api/app/services/orders.py#L248-271" data-note="決済 NG の 2 段コミット">orders.py L248-271</a></td>
+<td>決済 NG の経路は、決済失敗を COMMIT（L264）してから、別のトランザクションで在庫とカートを戻す（L266-269）2 段になっている。間でプロセスが落ちると在庫が引かれたまま残る。プロセス停止だけでなく、2 段目の途中で DB エラーが出た場合も同じで、外側の <code>except Exception</code> は 2 段目だけを ROLLBACK するため 1 段目の COMMIT は残る。コードに申し送りのコメントは無い。</td>
+<td><span class="status known">設計書で既知</span> <span class="status oral">口頭</span></td>
+<td>L248 のコメントに「ここで落ちると在庫が戻らない。設計書 9.4 の既知の穴」と 1 行足す。</td>
+<td>「<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L861">設計書 9.4</a> に P1 受容として書いた。スタブは同期で結果が戻るので実害はほぼ無い。P2 の期限切れ処理で回収する。見つける SQL は本章の 9.6」</td>
+</tr>
+<tr>
+<td>B3</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/web/lib/types.ts#L1-4">types.ts L1-4</a></td>
+<td>FastAPI の応答の型を手で書き写している。API の型を変えて <code>types.ts</code> を直し忘れても、コンパイルは通り、実行時にずれる。<code>openapi.json</code> の再出力も手動で、両者を突き合わせるテストは無い。</td>
+<td><span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「型は手で同期している。契約は openapi.json が正本で、再出力の手順は api の README にある。生成は P2 以降の検討」</td>
+</tr>
+<tr>
+<td>B4</td>
+<td><span class="sev mid">中</span></td>
+<td><a class="ref" data-ref="apps/web/next.config.ts">next.config.ts</a><br><a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy.ts</a></td>
+<td>CSP・X-Frame-Options などのセキュリティヘッダーを付ける設定が、どちらのファイルにも無い。設計仕様書・ADR・README を grep しても記載が無い。Next.js が既定で付ける値は確認していない。</td>
+<td><span class="status fix">直す候補</span></td>
+<td>CSP 以外の 3 種（X-Frame-Options・X-Content-Type-Options・Referrer-Policy が案）を <code>next.config.ts</code> に足す。任意で、オーナー判断待ち。CSP は Week8 で扱う。</td>
+<td>「まだ入れていない。Week8 のセキュリティチェックで CSP と合わせて入れる」</td>
+</tr>
+<tr>
+<td>B5</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/api/app/adapters/mail.py::render_order_confirmation">render_order_confirmation</a><br><a class="ref" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter">OutboxMailAdapter</a></td>
+<td>決済とメールがスタブで、メール本文を宛先・氏名・住所・電話ごと平文のファイルに書き出す。決済は環境変数で結果を固定する。</td>
+<td><span class="status known">設計書で既知</span> <span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「DS-DEC-26 のとおりの P1 スタブ。P2-c で Stripe と ACS に替える。本物の個人情報は入れない運用で、フォームの初期値はダミー（DS-DEC-47）」</td>
+</tr>
+<tr>
+<td>B6</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/api/app/repositories/orders.py::_violates">_violates</a></td>
+<td>一意制約違反がどの列かを、DB のエラー文に列名が含まれるかで判定している。DB の文言が変わると判定を外す。</td>
+<td><span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「本来は CI の結合テストで気づける設計だが、いまは結合テストが CI でスキップされていて（<a href="#s09-d3">D3</a>）、直すまではローカル実行頼み。MySQL 8.4 のサービスは <a class="ref" data-ref=".github/workflows/ci.yml#L31-47">ci.yml</a> に用意してある」</td>
+</tr>
+</tbody></table></div>
+
+<h3 id="s09-c">9.4 C コードの構造とテスト</h3>
+
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>深刻度</th><th>場所</th><th>何が起きるか</th><th>判定</th><th>当日までにやること</th><th>返し方</th></tr></thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a>（約 110 行、ファイル全体で 411 行）<br><a class="ref" data-ref="apps/web/components/CheckoutForm.tsx">CheckoutForm.tsx</a>（355 行）<br><a class="ref" data-ref="apps/web/components/CartView.tsx">CartView.tsx</a>（262 行）</td>
+<td>大きい関数とコンポーネントがある。読むのに時間がかかり、変更の影響範囲が広い。</td>
+<td><span class="status oral">口頭</span></td>
+<td>Issue 化する。オーナー承認待ち。</td>
+<td>「<code>_confirm</code> は、トランザクションの境界を 1 関数で見せるために分けていない。フォームと画面は、分けるなら P2-b の変更に合わせる」</td>
+</tr>
+<tr>
+<td>C2</td>
+<td><span class="sev mid">中</span></td>
+<td><a class="ref" data-ref="apps/web/vitest.config.mts">vitest の設定</a>（tests 配下）</td>
+<td>web のテストに偏りがある。<code>CartView</code>・<code>OrderComplete</code>・<code>ProductsGrid</code> を対象にした部品テストが無い。<code>ConfirmDialog</code> は <code>OrderConfirm</code> のテスト、<code>Toast</code> は <code>OrderConfirm</code>・<code>PurchasePanel</code> などのテストの中で動くだけで、単独のテストが無い。BFF は 10 本のうち <code>app/api/products/route.ts</code> と <code>app/api/health/route.ts</code> のテストが無い。<code>CheckoutForm</code> はダミー初期値と入力検査のテストだけで、送信とエラーの分岐（<a class="ref" data-ref="apps/web/components/CheckoutForm.tsx#L132-160">onSubmit</a>）は未テスト。分岐の判定表 <code>routeOrderError</code> 自体は <code>order-errors.test.ts</code> で検証している。</td>
+<td><span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「手動の受け入れテスト 8 件とシステムテスト 40 件で、画面の流れは確認済み。部品テストの追加は P2 の中で行う」</td>
+</tr>
+<tr>
+<td>C3</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/web/components/ProductsGrid.tsx#L32-48">ProductsGrid の loadMore</a> と <a class="ref" data-ref="apps/web/components/SearchResults.tsx#L43-59">SearchResults の loadMore</a><br><a class="ref" data-ref="apps/web/lib/client/cart-api.ts#L33-41">cart-api.ts の parseJson</a> と <a class="ref" data-ref="apps/web/lib/client/order-api.ts#L23-31">order-api.ts の parseJson</a><br><a class="ref" data-ref="apps/web/lib/client/cart-api.ts::fetchProductsPage">fetchProductsPage</a><br><a class="ref" data-ref="apps/web/components/CartProvider.tsx#L46-52">CartProvider の refresh</a></td>
+<td>同じ処理の重複と、置き場所のずれがある。<code>loadMore</code> は 2 つの部品にほぼ同じ形で書かれている。<code>parseJson</code> は 2 つのファイルに同一の内容がある。商品一覧の取得 <code>fetchProductsPage</code> がカート用の <code>cart-api.ts</code> にある。<code>CartProvider</code> の <code>refresh</code> は、どこからも呼ばれていない。</td>
+<td><span class="status oral">口頭</span></td>
+<td>Issue 化する。</td>
+<td>「重複は把握している。挙動は同じで、まとめるなら共通化の Issue にする」</td>
+</tr>
+<tr>
+<td>C4</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref=".github/workflows/ci.yml#L98-100">ci.yml の pytest</a><br><a class="ref" data-ref=".pre-commit-config.yaml">.pre-commit-config.yaml</a></td>
+<td>CI で lint（ruff・eslint）を回していない。pre-commit にも入っていない。2026-09-29 に手元で実行した結果は、<code>ruff check</code>・<code>ruff format --check</code>・<code>eslint</code> のすべてが指摘 0 件だった（ruff と eslint はローカルの版）。</td>
+<td><span class="status fix">直す</span></td>
+<td>CI の api-test に ruff の 2 コマンド、web-test に <code>pnpm lint</code> を足す。依存の追加は要らない。</td>
+<td>「lint は手元では通っている。CI に足すところまで済ませた（または〇日に足す）」</td>
+</tr>
+<tr>
+<td>C5</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/web/app/cart/page.tsx#L14">cart/page.tsx L14</a><br><a class="ref" data-ref="apps/web/lib/server/api.ts#L13">api.ts L13</a><br><a class="ref" data-ref="apps/web/lib/server/order-proxy.ts#L43">order-proxy.ts L43</a></td>
+<td>数値の直書きがある。送料無料の閾値の予備値 4990（公開設定の取得に失敗したときだけ使う）、FastAPI 呼び出しのタイムアウト 5000 ms、注文系だけ 15000 ms。設定の値を変えても、これらは連動しない。</td>
+<td><span class="status oral">口頭</span></td>
+<td>なし。</td>
+<td>「予備値は取得失敗時の表示だけで、金額の判定は API 側が正。タイムアウトは注文確定だけ長くしてある」</td>
+</tr>
+</tbody></table></div>
+
+<h3 id="s09-d">9.5 D 開発の仕組み</h3>
+
+<div class="table-wrap"><table>
+<thead><tr><th>ID</th><th>深刻度</th><th>場所</th><th>何が起きるか</th><th>判定</th><th>当日までにやること</th><th>返し方</th></tr></thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td><span class="sev mid">中</span></td>
+<td>GitHub の Ruleset <code>main-protection</code><br><a class="ref" data-ref=".github/workflows/ci.yml#L24-26">api-test</a>・<a class="ref" data-ref=".github/workflows/ci.yml#L102-104">web-test</a></td>
+<td>main の保護で必須のステータスチェックが <code>gitleaks</code> だけになっている（<code>gh api repos/nonooktk/GUapp/rulesets</code> の読み取りで確認）。api-test と web-test は必須でないため、テストが落ちたままでもマージできる。ほかの規則は、ブランチの削除禁止、強制 push 禁止、PR 必須（承認 0 人）である。</td>
+<td><span class="status fix">直す</span></td>
+<td>必須チェックに <code>api-test (pytest)</code> と <code>web-test (vitest + build)</code> を足す（GitHub の設定変更。オーナー承認待ち）。</td>
+<td>「PR 必須と強制 push 禁止は入れてある。必須チェックにテストを足す設定は、入れる予定（または〇日に入れた）」</td>
+</tr>
+<tr>
+<td>D2</td>
+<td><span class="sev low">低</span></td>
+<td><a class="ref" data-ref="apps/api/pyproject.toml#L20-27">pyproject.toml の dev 依存</a><br><a class="ref" data-ref="apps/web/vitest.config.mts">vitest.config.mts</a></td>
+<td>カバレッジを計測していない。pytest-cov も vitest の coverage も設定に無い。</td>
+<td><span class="status oral">口頭</span></td>
+<td>任意で 1 回だけ計測する。依存の追加になるため承認待ち。</td>
+<td>「未計測。テストは設計書のテスト ID から逆算して書き、要件からテストへの対応で網羅を見ている」</td>
+</tr>
+<tr>
+<td id="s09-d3">D3</td>
+<td><span class="sev high">高</span></td>
+<td><a class="ref" data-ref=".github/workflows/ci.yml#L48-53" data-note="env に DATABASE_URL はあるが DATABASE_URL_TEST が無い">ci.yml の api-test の env</a><br><a class="ref" data-ref="apps/api/tests/integration/conftest.py#L28-29">conftest.py の ENV_KEY</a></td>
+<td>CI で結合テスト 100 件がスキップされている。CI の api-test の結果は <code>200 passed, 100 skipped</code> である。ci.yml の env には <code>DATABASE_URL</code>（L50）があるが、結合テストの conftest が要求する <code>DATABASE_URL_TEST</code> が無く、未設定のときは全件スキップする作りになっている。同時実行・在庫の取り合い・二重注文・CORS・スキーマの検証を含む結合テストは、ローカルでしか実行されておらず、これらが壊れても CI は緑になる。テスト設計書 1.2 は「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」としており、食い違っている。</td>
+<td><span class="status fix">直す</span></td>
+<td>ci.yml の api-test の env に、<code>DATABASE_URL</code> と同じ接続先を指す <code>DATABASE_URL_TEST</code> を 1 行足す（DB 名が <code>_test</code> で終わり、方言が mysql であること。CI の <code>guapp_test</code> は条件を満たす）。当日までに直す予定で、未着手。足したあとに 100 件がすべて通るかは未確認で、同時実行の一部は uvicorn を実際に起動するため、CI 上で初めて落ちる可能性がある。</td>
+<td>「結合テストが CI でスキップされていることを自分で見つけた。環境変数 1 行の漏れで、ローカルでは全件緑。直す（または〇日に直した）」</td>
+</tr>
+<tr>
+<td id="s09-d4">D4</td>
+<td><span class="sev mid">中</span></td>
+<td><a class="ref" data-ref="scripts/azure-deploy/01-create.sh">01-create.sh</a><br><a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L65">設計書 1 章</a>・<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L844">DS-DEC-27</a></td>
+<td>設計書は、api の App Service にアクセス制限を掛けて web の送信 IP だけを許可する方針（本編 1 章、DS-DEC-27）だが、デプロイのスクリプトにその設定が無い。api の URL は公開されたままで、防御は内部トークンだけになる。ただし Azure 上の実際の設定は、Azure CLI を使わない方針のため確認しておらず、スクリプトから読み取った範囲の話である。</td>
+<td><span class="status oral">口頭</span> <span class="status todo">対処予定</span></td>
+<td>Azure の設定変更になるため、オーナー承認待ち。未着手。Week10 の閉域化（VNet 統合とアクセス制限）で扱う方針。</td>
+<td>「設計では制限する方針だが、いまの公開環境では未設定。内部トークンで守っていて、閉域化で入れる」</td>
+</tr>
+</tbody></table></div>
+
+<div class="note opinion"><p><strong>意見:</strong> 当日までに時間が限られるなら、A1（公開環境の不具合）、D3（結合テストが CI でスキップ）、D1（テストが落ちても入る）、C4（lint を CI に足す）の順に手を付けるのがよいと思う。D3 と C4 は ci.yml の数行で済み、D1 は D3 を直してから入れないと、必須にしても結合テストは守られない。</p></div>
+
+<h3 id="s09-sql">9.6 付録: 決済 NG で在庫が戻らなかった注文を探す SQL</h3>
+
+<p>B2 のとおり、決済 NG の経路は 2 段で、在庫を戻す処理とカートを active に戻す処理が同じトランザクションに入っている。そのため、注文の状態が <code>payment_failed</code> なのに、そのカートがまだ <code>ordered</code> のままなら、2 段目が実行されておらず在庫を戻し損ねたと判断できる。次の 1 本で探せる。</p>
+
+<pre class="code" data-lang="sql">SELECT o.order_number, o.created_at, o.total
+FROM orders AS o
+JOIN carts AS c ON c.id = o.cart_id
+WHERE o.status = 'payment_failed'
+  AND c.status = 'ordered'
+  AND NOT EXISTS (
+    SELECT 1 FROM orders AS o2
+    WHERE o2.cart_id = o.cart_id AND o2.status &lt;&gt; 'payment_failed'
+  )
+ORDER BY o.created_at;</pre>
+
+<p>表名と列名は <a class="ref" data-ref="apps/api/app/models/order.py::Order">Order</a>・<a class="ref" data-ref="apps/api/app/models/cart.py::Cart">Cart</a> の定義に、状態値は <a class="ref" data-ref="apps/api/app/models/order.py::OrderStatus">OrderStatus</a>・<a class="ref" data-ref="apps/api/app/models/cart.py::CartStatus">CartStatus</a> に合わせた。決済 NG の 1 段目で <code>payment_failed</code> が COMMIT され、2 段目の <a class="ref" data-ref="apps/api/app/repositories/orders.py::restore_cart_active">restore_cart_active</a> が成功したときだけカートが active に戻る（<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a>）。</p>
+
+<div class="note warn"><p><strong>この SQL の限界:</strong> 次の 3 点に注意する。①実行した瞬間に 2 段の間にいる注文が 1 件出ることがある（数ミリ秒の窓）。出た注文は数分後にもう一度確かめる。②決済 NG が正常に戻ったあと、同じカートで買い直して成功すると、カートは <code>ordered</code> になる。これを戻し損ねと誤検出しないよう <code>NOT EXISTS</code> で除外している。戻し損ねたカートは次の閲覧時に新しいカートへ差し替わる（<a class="ref" data-ref="apps/api/app/services/cart.py::resolve_cart">resolve_cart</a>）ので、買い直しの成功と混ざらず、この除外で見逃すことは無いと読んでいる（コードを読んだ範囲の推論で、実機では試していない）。③在庫の実数は見ていない。手動で戻すときは <code>variants.stock</code> を数量ぶん加算する。決済 NG の注文は <code>order_items</code> を書かない仕様（設計書 4.4）なので、数量は <code>cart_items</code> から追う。</p></div>
+
+<div class="note fact"><p><strong>事実（確認方法）:</strong> この SQL の構文は、同じ名前の最小の表を作って SQLite で動かし、戻し損ねの 1 件だけが返ることを確かめた。MySQL 8.4 の実機には接続していない。</p></div>
+
+<h3 id="s09-good">9.7 褒められそうな点</h3>
+
+<p>弱点の一方で、コードを読んだ人に伝えやすい点もある。事実だけを短く並べる。</p>
+
+<ul>
+<li>内部トークンの比較は一定時間で行い、期待値が未設定なら全リクエストを拒否する（<a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a>）。</li>
+<li>本番で Swagger（<code>/docs</code> など）を出さないこと、テスト専用ルートが本番の読み込み経路で import されないことを、テストで確かめている（<a class="ref" data-ref="apps/api/tests/unit/test_ut_app_production_docs_and_hooks.py::test_ut_app_production_docs_disabled">docs の無効化</a>、<a class="ref" data-ref="apps/api/tests/unit/test_ut_app_production_docs_and_hooks.py::test_ut_hooks_not_imported_by_production_path">import されないこと</a>）。</li>
+<li>SQL は ORM のバインド変数で組み、LIKE の <code>%</code> と <code>_</code> は <code>autoescape</code> に任せている（<a class="ref" data-ref="apps/api/app/repositories/search.py::build_match_condition">build_match_condition</a>）。f 文字列で SQL を作る箇所は seed の表名だけで、既知の表名の一覧に照らして弾いている。</li>
+<li>CI で、クライアントコンポーネントから server-only のモジュールを import すると <code>next build</code> が失敗すること、ビルド成果物の <code>.next/static</code> に内部トークンの値が無いことを検査している（<a class="ref" data-ref=".github/workflows/ci.yml#L146-211">ci.yml L146-211</a>）。</li>
+<li>二重注文の防止は、設計では 4 層（<a class="ref" data-ref="docs/03_設計仕様書/GU_ECsite_設計仕様書_P1_draft-v3.md#L735-738">7.4</a>）である。P1 で動いているのは、冪等キーの UNIQUE（<a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">insert_pending_order</a>）とカートの条件付き UPDATE（<a class="ref" data-ref="apps/api/app/repositories/orders.py::mark_cart_ordered">mark_cart_ordered</a>）の 2 層で、Stripe を使う残りの 2 層は P2 である。画面側にも、確定ボタンの二重クリックを止める仕組みがある（<a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L65-66">OrderConfirm L65-66</a>）。</li>
+</ul>
+</section>

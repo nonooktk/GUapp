@@ -1,0 +1,233 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GUapp レビュー回答ガイド</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700;900&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+{{PARTIAL:tokens.css}}
+
+{{PARTIAL:guide-base.css}}
+
+{{PARTIAL:drawer.css}}
+
+{{PARTIAL:guide-diagrams.css}}
+
+{{PARTIAL:review-aid.css}}
+
+/* ---------- レビュー回答ガイド固有の部品 ---------- */
+
+/* キー表記 <kbd>⌘P</kbd> */
+kbd{font-family:var(--mono);font-size:.85em;font-weight:500;line-height:1.4;padding:1px 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--paper);color:var(--ink);white-space:nowrap}
+
+/* 行番号つきの参照 <span class="loc" data-ref="..." data-focus="..."></span>（中身は path:行 が自動で入る） */
+.loc{font-family:var(--mono);font-size:.88em;font-weight:500;background:var(--navy-soft);color:var(--navy);padding:1px 7px;border-radius:4px;border:1px solid transparent;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
+.loc:hover{border-color:var(--navy)}
+.loc.is-open{background:var(--navy);color:var(--paper);border-color:var(--navy)}
+
+/* 順路 */
+.route-box{margin:24px 0;padding:16px 16px 6px;background:var(--paper);border:1px solid var(--line);border-radius:8px;max-width:46em}
+ol.route{list-style:none;margin:0;padding:0;max-width:none}
+.stop{position:relative;margin:0 0 14px;padding:10px 14px 12px;background:var(--bg);border:1px solid var(--line);border-left:4px solid var(--lc,var(--ink-3));border-radius:6px}
+.stop.is-open{background:var(--navy-soft);border-color:var(--navy);border-left-color:var(--lc,var(--navy))}
+.stop.is-active{background:var(--paper);border-color:var(--lc,var(--navy));border-left-color:var(--lc,var(--navy));box-shadow:0 0 0 3px var(--navy-soft),0 2px 10px var(--shadow)}
+@supports (background:color-mix(in srgb,red 10%,white)){
+  .stop.is-active{box-shadow:0 0 0 3px color-mix(in srgb,var(--lc,var(--navy)) 28%,transparent),0 2px 10px var(--shadow)}
+}
+@media (prefers-reduced-motion:no-preference){
+  .stop{transition:box-shadow .2s,background-color .2s,border-color .2s}
+}
+.stop-loc{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:6px}
+.stop-no{flex:none;width:28px;height:28px;border-radius:50%;background:var(--lc,var(--ink-3));color:var(--on-accent);display:grid;place-items:center;font-family:var(--mono);font-size:13px;font-weight:500;line-height:1}
+.stop-path{flex:1 1 200px;min-width:0;font-family:var(--mono);font-size:13px;font-weight:500;color:var(--navy);overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
+.stop-btns{display:none;flex:none;gap:6px}
+.js .stop-btns{display:flex}
+.stop-btns .btn{font-size:12.5px;padding:3px 10px}
+.stop p{max-width:none;margin:6px 0 0;font-size:15px;line-height:1.75}
+.stop-see::before,.stop-say::before{display:inline-block;margin-right:8px;padding:0 8px;border-radius:999px;font-size:11.5px;font-weight:700;letter-spacing:.06em;line-height:1.7;vertical-align:baseline}
+.stop-see::before{content:"見る";background:var(--navy-soft);color:var(--navy)}
+.stop-say::before{content:"言う";background:var(--green-soft);color:var(--green)}
+.stop-next{font-size:13.5px;color:var(--ink-2)}
+@media print{.stop-btns{display:none!important}}
+
+/* テストの状態バッジ */
+.tstat{display:inline-block;font-size:12px;font-weight:700;line-height:1.7;padding:0 9px;border-radius:999px;white-space:nowrap;vertical-align:baseline;border:1px solid transparent}
+.tstat.pass{background:var(--green-soft);color:var(--green)}
+.tstat.ciskip{background:var(--amber-soft);color:var(--amber)}
+.tstat.fail{background:var(--red-soft);color:var(--red)}
+.tstat.manual{background:var(--navy-soft);color:var(--navy)}
+.tstat.none{background:var(--line);color:var(--ink-2)}
+.tstat.notimpl{background:transparent;color:var(--ink-2);border-color:var(--ink-3);border-style:dashed}
+
+/* 仕様書との突き合わせ表 */
+table.compare td.ok{background:var(--green-soft);color:var(--green);font-weight:700;white-space:nowrap}
+table.compare td.ng{background:var(--red-soft);color:var(--red);font-weight:700;white-space:nowrap}
+table.compare td.warn{background:var(--amber-soft);color:var(--amber);font-weight:700;white-space:nowrap}
+
+/* 台本ボックス */
+.script{margin:20px 0;padding:12px 20px 10px;background:var(--paper);border:1px solid var(--line);border-left:6px solid var(--green);border-radius:0 8px 8px 0;max-width:46em;font-size:17px;line-height:1.9}
+.script-title{margin:0 0 2px;font-family:'Zen Kaku Gothic New','Noto Sans JP',sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--green)}
+.script p{max-width:none;font-size:inherit}
+
+/* 章の頭の「指定のされ方」 */
+.asked{margin:12px 0 20px;padding:8px 14px;border-left:4px solid var(--navy);background:var(--navy-soft);border-radius:0 6px 6px 0;max-width:46em;font-weight:700;color:var(--ink)}
+.asked::before{content:"指定のされ方";display:block;font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--navy)}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">GUAPP ／ コードレビュー当日用</div>
+  <h1>GUapp レビュー回答ガイド</h1>
+  <p class="lead">レビュワーが指定した機能について、画面 → バックエンド → 画面 → テストの順に、IDE で順路をたどりながら説明するための手引き。</p>
+  <div class="meta">
+    <span>対象コミット <a href="https://github.com/nonooktk/GUapp/commit/{{COMMIT_FULL}}" target="_blank" rel="noopener noreferrer"><code>{{COMMIT}}</code></a></span>
+    <span>作成 {{BUILD_DATE}}</span>
+    <span>リポジトリ <a href="https://github.com/nonooktk/GUapp" target="_blank" rel="noopener noreferrer">nonooktk/GUapp</a></span>
+    <span>コードの読み方は <a href="{{GUIDE_URL}}">コード解説書</a></span>
+    <span>ファイルの場所は <a href="{{MAP_URL}}">リポジトリ地図</a></span>
+  </div>
+  <p class="howto">停留所の <code>ファイル:行</code> を IDE で開いて順にたどります。<span class="ref-demo">青い等幅の名前</span>を押すとコードも確認できます。</p>
+  <div class="bm-bar">
+    <label class="bm-switch"><input type="checkbox" id="bm-main" role="switch" checked><span>初心者モード</span></label>
+    <span class="bm-desc">オンのあいだ、コードの日本語訳・停留所の住所と注目行・つながり図・用語の説明（点線の下線の語）を出します。</span>
+  </div>
+  <details class="toc-inline">
+    <summary>目次</summary>
+    {{TOC}}
+  </details>
+</header>
+
+<div class="layout">
+  <aside class="toc-side" aria-label="目次">
+    <div class="eyebrow">目次</div>
+    {{TOC}}
+  </aside>
+  <main class="content" id="content">
+{{CONTENT}}
+    <footer>GUapp レビュー回答ガイド ／ 対象コミット {{COMMIT}} ／ 作成 {{BUILD_DATE}}。コードは対象コミットの内容で、行番号は GitHub のパーマリンクと一致します。</footer>
+  </main>
+</div>
+</div>
+
+<script type="application/json" id="snippets-data">{{SNIPPETS_JSON}}</script>
+<script type="application/json" id="translations-data">{{TRANSLATIONS_JSON}}</script>
+<script type="application/json" id="glossary-data">{{GLOSSARY_JSON}}</script>
+{{SNIPPETS_CODE}}
+<script id="hljs-script" src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" async></script>
+<script>
+(function () {
+  'use strict';
+
+{{PARTIAL:drawer.js}}
+
+{{PARTIAL:guide-widgets.js}}
+
+{{PARTIAL:review-aid.js}}
+
+  /* ---------------------------------------------------------------
+     順路（ol.route）: 停留所のコピー・コードを見る・流れの再生
+  --------------------------------------------------------------- */
+  function copyText(text, selectNode, btn) {
+    function done(msg) {
+      btn.textContent = msg;
+      clearTimeout(btn.copyTimer);
+      btn.copyTimer = setTimeout(function () { btn.textContent = 'コピー'; }, 1800);
+    }
+    function fallback() {
+      try {
+        var r = document.createRange();
+        r.selectNodeContents(selectNode);
+        var sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(r);
+        var ok = document.execCommand && document.execCommand('copy');
+        done(ok ? 'コピーしました' : '選択しました（⌘/Ctrl+C）');
+      } catch (err) { done('選択しました（⌘/Ctrl+C）'); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done('コピーしました'); }, fallback);
+    } else { fallback(); }
+  }
+
+  function initRoutes() {
+    $$('ol.route').forEach(function (ol) {
+      var stops = $$(':scope > .stop', ol);
+      if (!stops.length) { return; }
+      var title = ol.getAttribute('data-title') || '順路';
+      ol.setAttribute('role', 'list');
+
+      var box = el('div', { 'class': 'route-box', role: 'group', 'aria-label': title });
+      ol.parentNode.insertBefore(box, ol);
+      var head = el('div', { 'class': 'flow-head' });
+      head.appendChild(el('div', { 'class': 'flow-title', role: 'heading', 'aria-level': '4' }, title));
+      var btn = el('button', { type: 'button', 'class': 'flow-play', 'aria-pressed': 'false' }, '▶ 流れを再生');
+      head.appendChild(btn);
+      var live = el('div', { 'class': 'visually-hidden', 'aria-live': 'polite' });
+      box.appendChild(head); box.appendChild(ol); box.appendChild(live);
+
+      stops.forEach(function (s) {
+        var view = $('.stop-view', s), copy = $('.stop-copy', s), path = $('.stop-path', s);
+        var key = refKey(s);
+        if (view && SN[key]) {
+          view.addEventListener('click', function () {
+            showRef(key, s.getAttribute('data-note') || '', view, false, focusOf(s));
+          });
+        }
+        if (copy && path) {
+          copy.addEventListener('click', function () { copyText(path.textContent.trim(), path, copy); });
+        }
+      });
+
+      var timer = null, playing = false, idx = -1;
+      function stop() {
+        playing = false; clearTimeout(timer); timer = null; idx = -1;
+        stops.forEach(function (s) { s.classList.remove('is-active'); });
+        connActive(ol, -1);
+        btn.textContent = '▶ 流れを再生';
+        btn.setAttribute('aria-pressed', 'false');
+        if (stopCurrent === stop) { stopCurrent = null; }
+      }
+      function go(i) {
+        idx = i;
+        stops.forEach(function (s, k) { s.classList.toggle('is-active', k === i); });
+        connActive(ol, i);
+        var p = $('.stop-path', stops[i]);
+        live.textContent = '停留所 ' + (i + 1) + '/' + stops.length + (p ? '：' + p.textContent : '');
+        if (stops[i].scrollIntoView) { stops[i].scrollIntoView({ block: 'nearest', behavior: RM.matches ? 'auto' : 'smooth' }); }
+      }
+      function next() {
+        if (!playing) { return; }
+        if (idx + 1 >= stops.length) { timer = setTimeout(stop, 1400); return; }
+        go(idx + 1);
+        timer = setTimeout(next, 1400);
+      }
+      function play() {
+        if (stopCurrent) { stopCurrent(); }
+        playing = true; stopCurrent = stop;
+        btn.textContent = '■ 停止';
+        btn.setAttribute('aria-pressed', 'true');
+        go(0);
+        timer = setTimeout(next, 1400);
+      }
+      btn.addEventListener('click', function () { if (playing) { stop(); } else { play(); } });
+      stops.forEach(function (s) {
+        s.addEventListener('click', function () { if (playing) { stop(); } });
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     起動
+  --------------------------------------------------------------- */
+  function init() {
+    buildDrawer();
+    initRefs();
+    initRefEvents();
+    initTip();
+    initFlows();
+    initAid();
+    initRoutes();
+    initFilters();
+    initToc();
+    initHljs();
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+})();
+</script>

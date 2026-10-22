@@ -1,0 +1,566 @@
+{
+  "captured_at": "2026-10-03T18:37:41+09:00",
+  "base_url": "http://127.0.0.1:3000",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "scale": 2
+  },
+  "states": [
+    {
+      "id": "list",
+      "title": "商品一覧",
+      "path": "/products",
+      "image": "01-list.jpg",
+      "width": 390,
+      "height": 5031,
+      "hotspots": [
+        {
+          "action": "open-product",
+          "label": "商品カード",
+          "x": 16,
+          "y": 320,
+          "w": 175,
+          "h": 345,
+          "next": "detail"
+        }
+      ]
+    },
+    {
+      "id": "detail",
+      "title": "商品詳細（色・サイズ未選択）",
+      "path": "/products/31",
+      "image": "02-detail.jpg",
+      "width": 390,
+      "height": 2006,
+      "hotspots": [
+        {
+          "action": "select-variant",
+          "label": "色（ネイビー）",
+          "x": 16,
+          "y": 799,
+          "w": 90,
+          "h": 44,
+          "next": "detail-selected"
+        },
+        {
+          "action": "select-variant",
+          "label": "サイズ（M）",
+          "x": 72,
+          "y": 896,
+          "w": 48,
+          "h": 44,
+          "next": "detail-selected"
+        }
+      ]
+    },
+    {
+      "id": "detail-selected",
+      "title": "商品詳細（色・サイズ選択済み）",
+      "path": "/products/31",
+      "image": "03-detail-selected.jpg",
+      "width": 390,
+      "height": 2006,
+      "hotspots": [
+        {
+          "action": "add-to-cart",
+          "label": "カートに入れる",
+          "x": 228,
+          "y": 1942,
+          "w": 146,
+          "h": 52,
+          "next": "detail-added"
+        }
+      ]
+    },
+    {
+      "id": "detail-added",
+      "title": "商品詳細（カートに追加後）",
+      "path": "/products/31",
+      "image": "04-detail-added.jpg",
+      "width": 390,
+      "height": 2006,
+      "hotspots": [
+        {
+          "action": "open-cart",
+          "label": "ヘッダーのカートアイコン",
+          "x": 290,
+          "y": 10,
+          "w": 44,
+          "h": 44,
+          "next": "cart"
+        }
+      ]
+    },
+    {
+      "id": "cart",
+      "title": "カート",
+      "path": "/cart",
+      "image": "05-cart.jpg",
+      "width": 390,
+      "height": 844,
+      "hotspots": [
+        {
+          "action": "change-qty",
+          "label": "数量のセレクト",
+          "x": 160,
+          "y": 247,
+          "w": 62,
+          "h": 44,
+          "next": "cart-updated"
+        }
+      ]
+    },
+    {
+      "id": "cart-updated",
+      "title": "カート（数量変更後）",
+      "path": "/cart",
+      "image": "06-cart-updated.jpg",
+      "width": 390,
+      "height": 844,
+      "hotspots": [
+        {
+          "action": "go-checkout",
+          "label": "レジへ進む",
+          "x": 33,
+          "y": 515,
+          "w": 324,
+          "h": 52,
+          "next": "checkout"
+        }
+      ]
+    },
+    {
+      "id": "checkout",
+      "title": "注文手続き（ダミー初期値入り）",
+      "path": "/checkout",
+      "image": "07-checkout.jpg",
+      "width": 390,
+      "height": 2211,
+      "hotspots": [
+        {
+          "action": "go-confirm",
+          "label": "確認画面へ",
+          "x": 16,
+          "y": 1970,
+          "w": 358,
+          "h": 52,
+          "next": "confirm"
+        }
+      ]
+    },
+    {
+      "id": "confirm",
+      "title": "注文内容の確認",
+      "path": "/checkout/confirm",
+      "image": "08-confirm.jpg",
+      "width": 390,
+      "height": 1247,
+      "hotspots": [
+        {
+          "action": "place-order",
+          "label": "注文を確定する",
+          "x": 16,
+          "y": 942,
+          "w": 358,
+          "h": 52,
+          "next": "confirm-dialog"
+        }
+      ]
+    },
+    {
+      "id": "confirm-dialog",
+      "title": "注文確定の確認ダイアログ",
+      "path": "/checkout/confirm",
+      "image": "09-confirm-dialog.jpg",
+      "width": 390,
+      "height": 1279,
+      "hotspots": [
+        {
+          "action": "place-order-confirm",
+          "label": "確定する",
+          "x": 254,
+          "y": 1195,
+          "w": 96,
+          "h": 44,
+          "next": "complete"
+        }
+      ]
+    },
+    {
+      "id": "complete",
+      "title": "注文完了",
+      "path": "/orders/complete?n=GU-261003-7QBQ7CQK",
+      "image": "10-complete.jpg",
+      "width": 390,
+      "height": 1353,
+      "hotspots": []
+    }
+  ],
+  "actions": {
+    "open-product": {
+      "title": "商品を選ぶ",
+      "from": "list",
+      "to": "detail",
+      "network": [],
+      "note": "画面のサーバー側で FastAPI を直接呼ぶため、ブラウザからは通信が見えない"
+    },
+    "select-variant": {
+      "title": "色とサイズを選ぶ",
+      "from": "detail",
+      "to": "detail-selected",
+      "network": [],
+      "note": "色・サイズのボタンは画面の中（ブラウザ上の state）で完結する操作で、通信は起きない。選んだ色とサイズの組み合わせから variant を決める"
+    },
+    "add-to-cart": {
+      "title": "カートに入れる",
+      "from": "detail-selected",
+      "to": "detail-added",
+      "network": [
+        {
+          "method": "GET",
+          "path": "/api/cart",
+          "status": 200,
+          "request_headers": {},
+          "response_body": {
+            "cart_token": "<cart_token 43 文字>",
+            "items": [],
+            "item_count": 0,
+            "subtotal": 0,
+            "shipping_fee": 0,
+            "total": 0,
+            "free_shipping_threshold": 4990,
+            "can_checkout": false
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/cart/items",
+          "status": 201,
+          "request_headers": {
+            "content-type": "application/json",
+            "x-csrf-token": "<csrf_token 43 文字>",
+            "cookie": "<cart_token 43 文字・csrf_token 43 文字>"
+          },
+          "request_body": {
+            "variant_id": 182,
+            "quantity": 1
+          },
+          "response_body": {
+            "cart_token": "<cart_token 43 文字>",
+            "items": [
+              {
+                "item_id": 4,
+                "variant_id": 182,
+                "product_id": 31,
+                "product_name": "ライトジャケット（メンズ）",
+                "color": "ネイビー",
+                "size": "M",
+                "unit_price": 4990,
+                "quantity": 1,
+                "line_total": 4990,
+                "stock_status": "ok",
+                "image_path": "products/031/1.jpg"
+              }
+            ],
+            "item_count": 1,
+            "subtotal": 4990,
+            "shipping_fee": 0,
+            "total": 4990,
+            "free_shipping_threshold": 4990,
+            "can_checkout": true
+          }
+        }
+      ],
+      "note": "ブラウザが BFF（/api/cart/items）を呼ぶ。状態変更なので X-CSRF-Token（Cookie の csrf_token と同じ値）を付ける。成功するとトーストとヘッダーのバッジが更新される"
+    },
+    "open-cart": {
+      "title": "カートを開く",
+      "from": "detail-added",
+      "to": "cart",
+      "network": [],
+      "note": "画面のサーバー側で FastAPI を直接呼ぶため、ブラウザからは通信が見えない"
+    },
+    "change-qty": {
+      "title": "数量を変える",
+      "from": "cart",
+      "to": "cart-updated",
+      "network": [
+        {
+          "method": "PATCH",
+          "path": "/api/cart/items/4",
+          "status": 200,
+          "request_headers": {
+            "content-type": "application/json",
+            "x-csrf-token": "<csrf_token 43 文字>",
+            "cookie": "<cart_token 43 文字・csrf_token 43 文字>"
+          },
+          "request_body": {
+            "quantity": 2
+          },
+          "response_body": {
+            "cart_token": "<cart_token 43 文字>",
+            "items": [
+              {
+                "item_id": 4,
+                "variant_id": 182,
+                "product_id": 31,
+                "product_name": "ライトジャケット（メンズ）",
+                "color": "ネイビー",
+                "size": "M",
+                "unit_price": 4990,
+                "quantity": 2,
+                "line_total": 9980,
+                "stock_status": "ok",
+                "image_path": "products/031/1.jpg"
+              }
+            ],
+            "item_count": 2,
+            "subtotal": 9980,
+            "shipping_fee": 0,
+            "total": 9980,
+            "free_shipping_threshold": 4990,
+            "can_checkout": true
+          }
+        }
+      ],
+      "note": "セレクトを変えた瞬間に BFF（/api/cart/items/{item_id}）へ PATCH する。応答のカートで画面の明細・小計・合計・ヘッダーのバッジをまとめて置き換える"
+    },
+    "go-checkout": {
+      "title": "レジに進む",
+      "from": "cart-updated",
+      "to": "checkout",
+      "network": [],
+      "note": "画面のサーバー側で FastAPI を直接呼ぶため、ブラウザからは通信が見えない"
+    },
+    "go-confirm": {
+      "title": "確認画面へ",
+      "from": "checkout",
+      "to": "confirm",
+      "network": [
+        {
+          "method": "POST",
+          "path": "/api/checkout/prepare",
+          "status": 200,
+          "request_headers": {
+            "x-csrf-token": "<csrf_token 43 文字>",
+            "cookie": "<cart_token 43 文字・csrf_token 43 文字>"
+          },
+          "response_body": {
+            "idempotency_key": "<idempotency_key 43 文字>",
+            "items": [
+              {
+                "item_id": 4,
+                "variant_id": 182,
+                "product_id": 31,
+                "product_name": "ライトジャケット（メンズ）",
+                "color": "ネイビー",
+                "size": "M",
+                "unit_price": 4990,
+                "quantity": 2,
+                "line_total": 9980,
+                "stock_status": "ok",
+                "image_path": "products/031/1.jpg"
+              }
+            ],
+            "subtotal": 9980,
+            "shipping_fee": 0,
+            "total": 9980,
+            "tax_included": 907,
+            "tax_rate": "0.10",
+            "free_shipping_threshold": 4990
+          }
+        }
+      ],
+      "note": "入力検証を通ったら、ブラウザが BFF（/api/checkout/prepare）を呼んで金額と冪等キー（注文の二重送信防止用）を受け取り、確認画面へ移る"
+    },
+    "place-order": {
+      "title": "注文を確定する",
+      "from": "confirm",
+      "to": "complete",
+      "network": [
+        {
+          "method": "POST",
+          "path": "/api/orders",
+          "status": 201,
+          "request_headers": {
+            "content-type": "application/json",
+            "x-csrf-token": "<csrf_token 43 文字>",
+            "cookie": "<cart_token 43 文字・csrf_token 43 文字>"
+          },
+          "request_body": {
+            "idempotency_key": "<idempotency_key 43 文字>",
+            "ship_name": "デモ 太郎",
+            "ship_postal_code": "0000000",
+            "ship_address": "東京都　千代田区　デモ町1-2-3　サンプルビル101",
+            "ship_phone": "09000000000",
+            "guest_email": "demo@example.com",
+            "receive_method": "delivery",
+            "payment_method": "card",
+            "display": {
+              "subtotal": 9980,
+              "shipping_fee": 0,
+              "total": 9980
+            }
+          },
+          "response_body": {
+            "order_number": "GU-261003-7QBQ7CQK",
+            "status": "accepted",
+            "items": [
+              {
+                "product_name": "ライトジャケット（メンズ）",
+                "color": "ネイビー",
+                "size": "M",
+                "unit_price": 4990,
+                "quantity": 2,
+                "line_total": 9980
+              }
+            ],
+            "subtotal": 9980,
+            "shipping_fee": 0,
+            "total": 9980,
+            "tax_included": 907,
+            "tax_rate": "0.10",
+            "ship_name": "デモ 太郎",
+            "ship_postal_code": "0000000",
+            "ship_address": "東京都　千代田区　デモ町1-2-3　サンプルビル101",
+            "ship_phone": "09000000000",
+            "guest_email": "demo@example.com",
+            "receive_method": "delivery",
+            "payment_method": "card",
+            "ordered_at": "2026-10-03T09:37:39Z"
+          }
+        }
+      ],
+      "note": "「注文を確定する」ボタンでダイアログを開き、ダイアログの「確定する」で BFF（/api/orders）へ POST する。通信はこの 1 回にまとめて記録（ダイアログを開くだけでは通信しない）。冪等キーは確認画面に入った時点で受け取ったものを送る",
+      "db": {
+        "before": {
+          "variants": [
+            {
+              "id": 181,
+              "color": "ネイビー",
+              "size": "S",
+              "stock": 6
+            },
+            {
+              "id": 182,
+              "color": "ネイビー",
+              "size": "M",
+              "stock": 26
+            },
+            {
+              "id": 183,
+              "color": "ネイビー",
+              "size": "L",
+              "stock": 21
+            },
+            {
+              "id": 184,
+              "color": "ベージュ",
+              "size": "S",
+              "stock": 19
+            },
+            {
+              "id": 185,
+              "color": "ベージュ",
+              "size": "M",
+              "stock": 12
+            },
+            {
+              "id": 186,
+              "color": "ベージュ",
+              "size": "L",
+              "stock": 6
+            }
+          ],
+          "orders_count": 1,
+          "latest_order": {
+            "order_number": "GU-261003-G74MQXVW",
+            "status": "accepted",
+            "total": 9980,
+            "created_at": "2026-10-03 09:36:09"
+          },
+          "latest_order_items": [
+            {
+              "variant_id": 182,
+              "quantity": 2,
+              "unit_price": 4990
+            }
+          ],
+          "cart": {
+            "status": "active",
+            "items": [
+              {
+                "variant_id": 182,
+                "quantity": 2
+              }
+            ]
+          }
+        },
+        "after": {
+          "variants": [
+            {
+              "id": 181,
+              "color": "ネイビー",
+              "size": "S",
+              "stock": 6
+            },
+            {
+              "id": 182,
+              "color": "ネイビー",
+              "size": "M",
+              "stock": 24
+            },
+            {
+              "id": 183,
+              "color": "ネイビー",
+              "size": "L",
+              "stock": 21
+            },
+            {
+              "id": 184,
+              "color": "ベージュ",
+              "size": "S",
+              "stock": 19
+            },
+            {
+              "id": 185,
+              "color": "ベージュ",
+              "size": "M",
+              "stock": 12
+            },
+            {
+              "id": 186,
+              "color": "ベージュ",
+              "size": "L",
+              "stock": 6
+            }
+          ],
+          "orders_count": 2,
+          "latest_order": {
+            "order_number": "GU-261003-7QBQ7CQK",
+            "status": "accepted",
+            "total": 9980,
+            "created_at": "2026-10-03 09:37:39"
+          },
+          "latest_order_items": [
+            {
+              "variant_id": 182,
+              "quantity": 2,
+              "unit_price": 4990
+            }
+          ],
+          "cart": {
+            "status": "ordered",
+            "items": [
+              {
+                "variant_id": 182,
+                "quantity": 2
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

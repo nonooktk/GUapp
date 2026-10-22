@@ -1,0 +1,126 @@
+<section id="s02" data-title="レビューで読む順番">
+<h2>2. レビューで読む順番</h2>
+
+<p>最初に開くのは注文確定の縦の流れ 6 ファイルです。FastAPI の入口から DB の更新まで下り、そのあと web の BFF と確認画面へ戻る順にすると、「サーバーが何を保証し、画面がそれをどう受けるか」が 1 本で説明できます。</p>
+
+<ol>
+<li>
+<a class="ref" data-ref="apps/api/app/main.py::create_app" data-note="ここで全体の配線が見える">apps/api/app/main.py</a>：<code>create_app</code> と <code>build_protected_router</code> を見る。<code>/api/v1</code> 配下のルーターすべてに <code>verify_internal_token</code> が掛かっていて、health だけが外にあること。本番で Swagger を消す分岐もここにある。
+</li>
+<li>
+<a class="ref" data-ref="apps/api/app/routers/orders.py::create_order" data-note="ルーターは薄い">apps/api/app/routers/orders.py</a>：<code>create_order</code> は 10 行ほどで、業務判断がない。サービスが返す <code>(http_status, order)</code> を受けて、新規は 201、同じ冪等キーの再送は 200 に切り替えるだけ。
+</li>
+<li>
+<a class="ref" data-ref="apps/api/app/services/orders.py::_confirm" data-note="手順 1〜6 の本体">apps/api/app/services/orders.py</a>：<code>create_order</code> → <code>_create_order_with_deadlock_retry</code> → <code>_create_order</code> → <code>_confirm</code> の順に降りる。<code>_confirm</code> の中にコメントの番号（1〜6）が並んでいて、設計仕様書 DS-PRC-014-1 の手順と一致する。
+</li>
+<li>
+<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-note="在庫の二重引当を防ぐ 1 文">apps/api/app/repositories/orders.py</a>：<code>reserve_stock</code> は <code>UPDATE variants SET stock = stock - :q WHERE id = :id AND stock &gt;= :q</code> の 1 文で、影響行数（0 か 1）を返す。0 なら在庫不足。SELECT してから UPDATE する二段構えにしていない点が要点。
+</li>
+<li>
+<a class="ref" data-ref="apps/web/app/api/orders/route.ts::POST" data-note="BFF は形だけ確かめる">apps/web/app/api/orders/route.ts</a>：<code>POST</code> が CSRF を確かめ、設計書 4.4 の 8 項目と金額 3 つだけを拾って転送する。余計なキーは落とす。桁や形式の検査は FastAPI（Pydantic）に任せている。
+</li>
+<li>
+<a class="ref" data-ref="apps/web/components/OrderConfirm.tsx#L64-127" data-note="失敗時の戻し先を switch で分ける">apps/web/components/OrderConfirm.tsx</a>：<code>submit</code> が確定ボタンの本体。成功時の後始末と、エラーごとの戻し先（<code>routeOrderError</code> の結果による switch）を見る。
+</li>
+</ol>
+
+<div class="note opinion">
+<p>意見: 6 ファイルの順は「入口の配線 → 薄いルーター → 手順の本体 → 最も細かい SQL → 画面側の入口 → 画面の受け止め方」にしました。サービスの後にいきなり SQL へ降りるのは、「二重引当をどこで防いでいるか」というレビューで最も聞かれそうな点を先に見せるためです。聞かれる内容の予想なので、レビューの相手に合わせて入れ替えて構いません。</p>
+</div>
+
+<h3 id="s02-order-flow">注文確定の流れ：確定ボタンから完了画面まで</h3>
+
+<p>次の図は、確認画面の「注文を確定する」から完了画面までを 14 段に分けたものです。1〜4 が画面と BFF、5〜6 が FastAPI の入口、7〜13 が業務処理、14 が画面への戻りです。手順 1〜6 の番号は <code>_confirm</code> のコメントに合わせています。</p>
+
+<div class="flow" data-title="注文確定：確認画面から完了画面まで">
+<div class="flow-step" data-ref="apps/web/components/OrderConfirm.tsx#L64-78" data-layer="screen">
+<strong>1. 確定ボタン → 確認ダイアログ → submit</strong>
+<p>ダイアログの「確定する」で submit が動く。二重クリックは inflight フラグで止め、冪等キーと配送先と表示中の金額 3 つ（display）を本文にまとめる</p>
+</div>
+<div class="flow-step" data-ref="apps/web/lib/client/order-api.ts::createOrder" data-layer="screen">
+<strong>2. クライアント関数が POST /api/orders を送る</strong>
+<p>内部の post が ensureCsrfToken で CSRF トークンを用意し、X-CSRF-Token ヘッダを付けて送る。失敗は OrderApiError として投げる</p>
+</div>
+<div class="flow-step" data-ref="apps/web/app/api/orders/route.ts::POST" data-layer="bff">
+<strong>3. BFF ルートが CSRF を検証</strong>
+<p>Cookie とヘッダが一致しなければ 403 forbidden で、FastAPI へは到達させない。通れば 8 項目と display を拾って proxyOrderRequest へ</p>
+</div>
+<div class="flow-step" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-layer="bff">
+<strong>4. カートトークンと利用者 IP を載せる</strong>
+<p>Cookie cart_token を X-Cart-Token に、clientIp が決めた利用者 IP を X-Forwarded-For に載せる。利用者自身が送ってきた X-Forwarded-For は転送しない。apiFetch が X-Internal-Token を足し、待ち時間は 15 秒</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/core/security.py::verify_internal_token" data-layer="api">
+<strong>5. FastAPI が内部トークンを検証</strong>
+<p>期待値が未設定、または不一致なら 401 unauthorized。設定漏れのときは全リクエストを拒否する側に倒している</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/routers/orders.py::create_order" data-layer="api">
+<strong>6. ルーターが入力を検証してサービスへ</strong>
+<p>OrderCreateIn（冪等キーは 43 文字、郵便番号は数字 7 桁など）の検証に外れると 400 validation_error。通ればサービスの結果でステータスコードを決める</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/services/orders.py#L347-355" data-layer="service">
+<strong>7. 手順 0：カートの特定</strong>
+<p>resolve_existing_cart（無い・未知は 404）→ 未対応の受け取り・支払い方法は 422 → カートが active でなければ、同じ冪等キーの自分の注文があれば 200、無ければ 409 already_ordered</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/services/orders.py#L194-200" data-layer="service">
+<strong>8. 手順 1・2：注文の INSERT とカートの状態変更</strong>
+<p>insert_pending_order が pending_payment で orders に INSERT（冪等キーは UNIQUE）。続けて mark_cart_ordered が active → ordered の条件付き UPDATE。0 行なら rollback して 409 already_ordered</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/services/orders.py::_recalculate_and_compare" data-layer="service">
+<strong>9. 手順 3：金額の再計算と照合</strong>
+<p>その時点の単価と設定で calc_totals を計算し、画面の display と 1 円でも違えば 409 price_changed。非公開商品が混じっていれば 409 out_of_stock。引当より前に行う</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/repositories/orders.py::reserve_stock" data-layer="repo">
+<strong>10. 手順 4：在庫の引当</strong>
+<p>_reserve_all が variant_id 昇順に reserve_stock を呼ぶ（デッドロック回避）。0 行の明細が 1 つでもあれば 409 out_of_stock に variant_id の一覧を付けて全体を rollback</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/adapters/payment.py::StubPaymentAdapter.authorize" data-layer="infra">
+<strong>11. 手順 5：決済アダプタ</strong>
+<p>authorize は環境変数 PAYMENT_STUB_RESULT の値（未設定は ok）をそのまま返すスタブ。カード情報は扱わない</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/services/orders.py#L214-246" data-layer="service">
+<strong>12. 手順 6：成功時の確定</strong>
+<p>状態遷移を確認して accepted に更新し、order_items（確定時の単価と商品名）・payments・audit_logs（order.confirm）を書いて commit。決済 NG の場合は payment_failed と audit_logs を commit したあと、別トランザクションで在庫とカートを戻して 409 payment_failed</p>
+</div>
+<div class="flow-step" data-ref="apps/api/app/adapters/mail.py::OutboxMailAdapter.send_order_confirmation" data-layer="infra">
+<strong>13. 手順 7：確認メール</strong>
+<p>実際には送らず apps/api/.mail-outbox/ に注文番号名のテキストを書く。例外が出ても注文は成立させ、audit_logs に mail.failed を残して 201 を返す</p>
+</div>
+<div class="flow-step" data-ref="apps/web/components/OrderConfirm.tsx#L77-84" data-layer="screen">
+<strong>14. 応答を受けて完了画面へ</strong>
+<p>注文応答を sessionStorage（guapp.lastOrder）に保存し、確定前の入力（guapp.checkout）を消し、ヘッダのバッジを 0 にして /orders/complete?n=注文番号 へ移る。OrderComplete が保存した注文を再掲する</p>
+</div>
+</div>
+
+<p>失敗した場合の分岐は 7〜12 のどこで起きたかで決まります。ここで押さえておくとレビューで答えやすいのは次の 3 点です。</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>起きること</th><th>どこで止まるか</th><th>結果</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>同じ冪等キーで再送（ダブルクリック・通信のやり直し）</td>
+<td>手順 1 の INSERT が UNIQUE 違反。<code>DuplicateIdempotencyKey</code> を <a class="ref" data-ref="apps/api/app/services/orders.py::_create_order">_create_order</a> が受ける</td>
+<td>既存注文を 200 で返す。他人のカートの注文なら 404、決済失敗の注文なら 409 payment_failed</td>
+</tr>
+<tr>
+<td>同じカートを別々の冪等キーで同時に確定（2 タブ）</td>
+<td>手順 2 の条件付き UPDATE が 0 行、またはデッドロック。デッドロックは <a class="ref" data-ref="apps/api/app/services/orders.py::_create_order_with_deadlock_retry">_create_order_with_deadlock_retry</a> が 1 回だけやり直す</td>
+<td>片方は 409 already_ordered。注文番号があれば完了画面へ誘導する</td>
+</tr>
+<tr>
+<td>在庫 1 の商品を別カートから同時に注文</td>
+<td>手順 4 の <code>stock &gt;= :q</code> の条件で、後から来た側が 0 行</td>
+<td>片方は成功、もう片方は 409 out_of_stock。stock がマイナスにならない</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn">
+<p>注意（設計仕様書 9.4 の「既知の穴」）: 決済 NG の経路は、payment_failed の commit と、在庫・カートを戻す commit の 2 段です。その間にプロセスが落ちると、在庫が引かれたまま残ります。スタブは同期で結果を返すので、この演習では受け入れた穴として扱われています。</p>
+</div>
+
+<p>各機能ごとの詳しい流れは次の章にあります。注文確定の節（<a href="#s03-order">3 章の注文確定</a>）では、この図の要点だけを再掲します。</p>
+</section>

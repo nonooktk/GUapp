@@ -1,0 +1,172 @@
+<section id="r09" data-title="FAQ・お知らせ・静的ページ">
+<h2>9. FAQ・お知らせ・静的ページ</h2>
+
+<h3 id="r09-start">指定のされ方と 30 秒版</h3>
+<p class="asked">「FAQ を表示する機能」「お知らせを表示する機能」「トップのお知らせ欄」「利用規約などのページを表示する機能」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>お知らせ・特集の一覧と、FAQ や利用規約などのページは、Next.js のサーバー側から FastAPI のコンテンツ API を直接呼んで表示します。ブラウザ向けの BFF は作っていません。FastAPI が返すのは掲載期間内の行だけで、お知らせは新しい順です。FAQ などは slug で 1 件取ります。存在しない場合も、掲載期間外の場合も、対象外の種別の場合も、区別せず 404 にします。本文はプレーンテキストで、React 標準のエスケープだけで描画します。</p>
+</div>
+
+<h3 id="r09-s2">② 画面からバックエンドへ</h3>
+<p>この機能に BFF（<code>/api/*</code>）はありません。画面は Server Component で、<code>lib/server/contents.ts</code> から FastAPI を直接呼びます（設計仕様書 P2 追補a 1 章）。最初はお知らせ・特集の一覧です。トップのお知らせ欄（<span class="loc" data-ref="apps/web/app/page.tsx::HomePage" data-focus="getContents(&quot;news&quot;, HOME_NEWS_LIMIT)"></span>、3 件）も、同じ関数を使っています。</p>
+<ol class="route" data-title="順路：お知らせ一覧から API 呼び出しまで">
+  <li class="stop" data-ref="apps/web/app/contents/page.tsx::ContentsPage" data-focus="getContents(&quot;news&quot;, CONTENT_LIMIT_MAX)" data-layer="screen">
+    <p class="stop-see"><code>ContentsPage</code>。お知らせは常に取得し、特集は <code>?kind=news</code> でないときだけ取得する。上限は 20 件。</p>
+    <p class="stop-say">お知らせと特集を、サーバー側でまとめて取りに行きます。<code>?kind=news</code> を付けると、お知らせだけになります。</p>
+    <p class="stop-next">次へ: <code>getContents</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContents" data-focus="apiFetch&lt;ContentsResponse&gt;" data-layer="bff" data-link="関数の呼び出し（サーバー側）">
+    <p class="stop-see"><code>getContents</code>。<code>kind</code> と <code>limit</code> のクエリを付けて <code>/contents</code> を呼ぶ。</p>
+    <p class="stop-say">種類は <code>feature</code> と <code>news</code> の 2 つだけで、型もその 2 つに絞っています。</p>
+    <p class="stop-next">次へ: <code>apiFetch</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="res = await fetch(url" data-layer="bff">
+    <p class="stop-see"><code>apiFetch</code>。内部トークンを付けて FastAPI を呼ぶ共通の関数（検索と同じもの）。</p>
+    <p class="stop-say">FastAPI を呼ぶ共通の関数です。接続できなければ例外を投げます。ページ側はそれを受けて、「読み込めませんでした」と表示します。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/contents&quot;</code> を検索（<code>routers/content.py</code> を開く）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/content.py::list_contents" data-focus="content_service.list_contents" data-layer="api" data-link="HTTP GET /api/v1/contents（内部トークン付き）">
+    <p class="stop-see">ルーター <code>list_contents</code>（<code>GET /api/v1/contents</code>、DS-API-005）。<code>kind</code> は <code>Literal</code>、<code>limit</code> は 1〜20。</p>
+    <p class="stop-say">ここが呼び出し先です。種類と件数の範囲の検査も、ここで行います。</p>
+    <p class="stop-next">次へ: <code>list_contents</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+</ol>
+<p>続いて、FAQ・利用規約などの静的ページです。フッターの 5 つのリンクと、メニューの FAQ・INFO は、どれもここに来ます。</p>
+<ol class="route" data-title="順路：FAQ ページのリンクから API 呼び出しまで">
+  <li class="stop" data-ref="apps/web/components/Footer.tsx" data-focus="href: &quot;/contents/faq&quot;" data-layer="screen">
+    <p class="stop-see">フッターのリンク定義。<code>faq</code> に <code>terms</code>・<code>privacy</code>・<code>tokushoho</code>・<code>company</code> を加えた 5 つ。</p>
+    <p class="stop-say">フッターの「FAQ」は <code>/contents/faq</code> へのリンクです。規約などの 4 つも、同じ形のリンクです。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/contents/[slug]/page.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="getContent(slug)" data-layer="screen" data-link="HTTP GET /contents/{slug}（画面遷移）">
+    <p class="stop-see"><code>ContentDetailPage</code>。URL の <code>slug</code> で 1 件取る。接続できないときは <code>UpstreamUnavailableError</code> を受けて、「ページを読み込めませんでした」と表示する。</p>
+    <p class="stop-say">どの slug も同じ画面で表示します。取得は Next.js のサーバー側で行います。</p>
+    <p class="stop-next">次へ: <code>getContent</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/contents.ts::getContent" data-focus="apiFetch&lt;ContentDetail&gt;" data-layer="bff" data-link="関数の呼び出し（サーバー側）">
+    <p class="stop-see"><code>getContent</code>。<code>slug</code> を URL エンコードして <code>/contents/{slug}</code> を呼ぶ。</p>
+    <p class="stop-say">slug をパスに入れて呼びます。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧F</kbd> で <code>&quot;/contents/{slug}&quot;</code> を検索</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/content.py::get_content" data-focus="content_service.get_content_detail" data-layer="api" data-link="HTTP GET /api/v1/contents/{slug}（内部トークン付き）">
+    <p class="stop-see">ルーター <code>get_content</code>（<code>GET /api/v1/contents/{slug}</code>、DS-API-006）。<code>slug</code> は <code>Path(pattern=…)</code> で検査する。</p>
+    <p class="stop-say">ここが呼び出し先です。slug は、<code>^[a-z0-9-]{1,100}$</code> の形だけを受け付けます。</p>
+    <p class="stop-next">次へ: <code>get_content_detail</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+</ol>
+
+<h3 id="r09-s3">③ バックエンドの処理</h3>
+<ol class="route" data-title="順路：掲載期間の判定から SQL まで">
+  <li class="stop" data-ref="apps/api/app/services/content.py::list_contents" data-focus="contents_repo.list_by_kind" data-layer="service" data-link="関数の呼び出し">
+    <p class="stop-see">サービス <code>list_contents</code>。現在時刻（UTC）を作り、リポジトリに渡す。</p>
+    <p class="stop-say">時刻の比較は UTC で行います。日本時間にするのは、画面に出すときだけです（DS-DEC-40）。</p>
+    <p class="stop-next">次へ: <code>list_by_kind</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/contents.py::list_by_kind" data-focus=".where(Content.kind == kind, _published_at(now))" data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see"><code>kind</code> と掲載期間で絞る SQL。お知らせは <code>publish_from</code> の新しい順、特集は <code>sort_order</code> の昇順。</p>
+    <p class="stop-say">一覧は、掲載期間内の行だけを SQL の条件で絞り込んで取ります。</p>
+    <p class="stop-next">次へ: <code>_published_at</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/contents.py::_published_at" data-focus="Content.publish_to.is_(None)" data-layer="repo">
+    <p class="stop-see">「<code>publish_from &lt;= now</code> かつ（<code>publish_to</code> が空、または <code>publish_to &gt;= now</code>）」の条件。</p>
+    <p class="stop-say">終了日が空なら無期限です。境界ちょうどの日時も、掲載中として扱います。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>services/content.py</code> の <code>get_content_detail</code> へ（詳細の経路）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/content.py::get_content_detail" data-focus="is_within_publish_window(now, row.publish_from, row.publish_to)" data-layer="service" data-link="関数の呼び出し（get_content ルーターから）">
+    <p class="stop-see">詳細は、種別（<code>faq</code>・<code>static</code>）と slug で 1 行取ってから、サービスで掲載期間を判定する。</p>
+    <p class="stop-say">詳細は一覧と違い、先に行を取ってから、関数で期間を判定します。行がない場合も期間外の場合も、同じ 404 にします。</p>
+    <p class="stop-next">次へ: <code>is_within_publish_window</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/content.py::is_within_publish_window" data-focus="if now &lt; publish_from:" data-layer="service">
+    <p class="stop-see">DB を使わない純粋関数。<code>now &lt; publish_from</code> だけが「まだ」、<code>now &gt; publish_to</code> だけが「終了」で、等号は掲載中。</p>
+    <p class="stop-say">DB に触らない関数なので、単体テストで境界を確かめています。</p>
+  </li>
+</ol>
+<div class="table-wrap">
+<table>
+<thead><tr><th>状況</th><th>どこで判定するか</th><th>応答</th><th>画面側の扱い</th></tr></thead>
+<tbody>
+<tr><td><code>kind</code> が <code>feature</code>・<code>news</code> 以外（例: <code>faq</code>）、<code>limit</code> が 0 や 21 以上</td><td>ルーターの <code>Literal</code>・<code>Query(ge, le)</code></td><td>400 <code>validation_error</code></td><td>画面は <code>feature</code>・<code>news</code> しか指定しないので起きない</td></tr>
+<tr><td><code>slug</code> が <code>^[a-z0-9-]{1,100}$</code> に合わない（例: 大文字）</td><td>ルーターの <code>Path(pattern=…)</code></td><td>400 <code>validation_error</code></td><td>画面は slug の形を事前に確かめない。<code>notFound()</code> にはならず、「ページを読み込めませんでした」と表示される</td></tr>
+<tr><td>slug が無い、種別が <code>feature</code>・<code>news</code>、掲載期間外</td><td><code>get_by_slug</code> が空、または <code>is_within_publish_window</code> が偽</td><td>404 <code>not_found</code>（3 つを区別しない）</td><td><code>notFound()</code> でサイト共通の 404 画面</td></tr>
+<tr><td>FastAPI に接続できない</td><td><code>apiFetch</code> が <code>UpstreamUnavailableError</code> を投げる</td><td>（BFF が無いので応答は無い）</td><td>お知らせ欄・特集欄・各ページで、それぞれ「読み込めませんでした」と表示する</td></tr>
+<tr><td>一覧が 0 件</td><td>エラーではない</td><td>200、<code>items</code> は空配列</td><td>「お知らせはまだありません」「特集はまだありません」</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r09-s4">④ 応答から表示まで</h3>
+<ol class="route" data-title="順路：応答が FAQ ページとお知らせ一覧に出るまで">
+  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="if (!result.ok) {" data-layer="screen" data-link="応答の JSON（FastAPI から Next.js サーバーへ）">
+    <p class="stop-see">応答が失敗だったときの分岐。404 なら <code>notFound()</code>。それ以外はログに残して、「読み込めませんでした」と表示する。</p>
+    <p class="stop-say">404 のときは、存在しないページと同じ画面を出します。期間外かどうかは、利用者には分かりません。</p>
+    <p class="stop-next">次へ: 同じ関数の下へスクロールして本文の描画を見る</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/contents/[slug]/page.tsx::ContentDetailPage" data-focus="content.slug === &quot;tokushoho&quot;" data-layer="screen">
+    <p class="stop-see">本文の描画。特商法（<code>tokushoho</code>）だけ定義リスト、ほかは <code>whitespace-pre-line</code> の段落。</p>
+    <p class="stop-say">本文はプレーンテキストです。<code>dangerouslySetInnerHTML</code> は使わず、React 標準のエスケープだけで描画します。改行は <code>whitespace-pre-line</code> で保ちます（DS-DEC-38）。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/app/contents/page.tsx</code> を開く（お知らせ一覧）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/contents/page.tsx::ContentsPage" data-focus="formatJstDate(item.publish_from)" data-layer="screen">
+    <p class="stop-see">お知らせ一覧の日付。応答の <code>publish_from</code>（UTC）を日本時間の日付にして出す。</p>
+    <p class="stop-say">お知らせに出るのは日付とタイトルだけで、個別ページへのリンクはありません。お知らせと特集には、個別の URL を作らない設計です。</p>
+    <p class="stop-next">次へ: <code>formatJstDate</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/datetime.ts::formatJstDate" data-focus="timeZone: &quot;Asia/Tokyo&quot;" data-layer="screen">
+    <p class="stop-see"><code>formatJstDate</code>。<code>Asia/Tokyo</code> で <code>YYYY-MM-DD</code> にする。</p>
+    <p class="stop-say">掲載の判定は UTC のまま、表示だけ日本時間にします。</p>
+  </li>
+</ol>
+
+<h3 id="r09-s5">⑤ テスト 1 本の説明</h3>
+<p>推しは、掲載期間の境界を確かめる <span class="tid">UT-CONTENT-02</span> です。 <span class="tstat pass">✅ 通過（ローカル）</span> unit なので、CI でも実行されます。</p>
+<ul>
+  <li>テスト: <a class="ref" data-ref="apps/api/tests/unit/test_ut_content_rules.py::test_ut_content_02_boundary_equal_now_is_published">test_ut_content_02_boundary_equal_now_is_published</a>（テスト設計書 P2 追補a 5.1）</li>
+  <li>前提: 現在時刻を固定値（<code>NOW</code>）にする。DB は使わない。</li>
+  <li>操作: <code>publish_from</code> も <code>publish_to</code> も <code>NOW</code> と同じ値にして、<span class="loc" data-ref="apps/api/tests/unit/test_ut_content_rules.py::test_ut_content_02_boundary_equal_now_is_published" data-focus="assert is_within_publish_window(NOW, publish_from, publish_to) is True"></span> を実行する。</li>
+  <li>確認: ちょうど今は「掲載中」になる。判定が <code>&lt;</code>・<code>&gt;</code> ではなく、等号を含むことを確かめる。実装は <a class="ref" data-ref="apps/api/app/services/content.py::is_within_publish_window">is_within_publish_window</a> の 2 つの比較にあたる。</li>
+</ul>
+<p>同じファイルの <code>test_ut_content_02b_…</code> は公開開始の 1 秒前、<code>test_ut_content_02c_…</code> は公開終了の 1 秒後の時刻で判定し、どちらも「掲載外」になることを確かめます。この 3 本で、境界の両側がそろいます。</p>
+<div class="note fact"><p>期間外のものが API の応答に出ないことは、<span class="tid">IT-005-02</span>（一覧）と <span class="tid">IT-006-04</span>（詳細は 404）が MySQL で確かめています。<span class="tstat pass">✅ 通過（ローカル）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span></p></div>
+
+<h3 id="r09-s6">⑥ 仕様書との突き合わせ</h3>
+<p>基準は <code>docs/04_テスト設計書/GU_ECsite_テスト設計書_P2追補a_draft-v1.md</code> と、設計仕様書 P2 追補a です。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>確認する条件</th><th>仕様書</th><th>テスト・コードの実際</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>終了日が空（無期限） <span class="tid">UT-CONTENT-01</span></td><td><code>publish_from</code> が 1 日前、<code>publish_to</code> が空で掲載対象</td><td>同じ条件で <code>True</code> を確認</td><td class="ok">一致</td></tr>
+<tr><td>境界の等号 <span class="tid">UT-CONTENT-02</span></td><td><code>publish_from</code>・<code>publish_to</code> がちょうど今で、どちらも掲載対象</td><td>同じ条件で <code>True</code>。公開開始の 1 秒前・公開終了の 1 秒後が掲載外になるケース（02b・02c）を追加</td><td class="ok">一致</td></tr>
+<tr><td>slug の形 <span class="tid">UT-CONTENT-03</span></td><td>大文字・記号・201 文字がパターン不一致</td><td>「FAQ」「faq!」、201 文字に加え、空文字と「faq_terms」も不一致になる。有効なものは別のテスト（03b）で確認</td><td class="ok">一致</td></tr>
+<tr><td>一覧の並び <span class="tid">IT-005-01</span>・<span class="tid">IT-005-03</span></td><td>お知らせは <code>publish_from</code> の新しい順、特集は <code>sort_order</code> の昇順</td><td>お知らせは <code>news-002</code>、<code>news-001</code> の順、特集は <code>feature-001</code> を確認（MySQL）</td><td class="ok">一致</td></tr>
+<tr><td>期間外は出ない <span class="tid">IT-005-02</span>・<span class="tid">IT-006-04</span></td><td>一覧に出ない。詳細は直接開いても存在しないのと同じ 404</td><td>期限切れのお知らせは一覧に出ず、未来公開のページは 404 <code>not_found</code> を確認（MySQL）</td><td class="ok">一致</td></tr>
+<tr><td>404 の画面の文言 <span class="tid">ST-F028-03</span></td><td>「見つかりませんでした」等の 404 相当のページ</td><td>サイト共通の <code>not-found.tsx</code> で、見出しは「ページが見つかりません」。文言は仕様書の例と異なるが、「等」の範囲に収まる</td><td class="warn">文言が違う</td></tr>
+<tr><td>特商法・企業情報の内容 <span class="tid">ST-F028-02</span></td><td>実在の GU・ジーユー・ファーストリテイリングの名称等を含まず、「講義演習用のデモです」を含む</td><td><span class="tid">IT-006-02</span> が seed の本文を機械的に確認している（禁止語 4 つ、デモの文言）。画面を目で確認した記録は無い</td><td class="warn">API までは確認、画面は記録なし</td></tr>
+<tr><td>本文が文字として表示される <span class="tid">ST-SEC-13</span></td><td>DB に <code>&lt;script&gt;</code> を入れても実行されず、文字列のまま見える</td><td>自動テストは無い。コードに <code>dangerouslySetInnerHTML</code> は無い（<code>grep</code> で確認。コメントに出てくるだけ）。画面の実施記録も無い</td><td class="warn">コードで担保、テストなし</td></tr>
+<tr><td>お知らせ欄の表示 <span class="tid">AT-12</span>・<span class="tid">ST-F030-01</span></td><td>ホームに、掲載期間内のお知らせが新しい順で出る</td><td>上位 3 件を出すコード（<code>HOME_NEWS_LIMIT</code>）はある。画面の自動テストと手順書の実施記録は無い（公開環境の確認記録に、<code>/contents</code> が 200 という記載があるだけ）</td><td class="warn">実施記録なし</td></tr>
+<tr><td>特集の表示 <span class="tid">ST-F030-02</span></td><td>手順は <code>/contents?kind=feature</code> を開く（6.3 は <code>?kind=news</code> でお知らせのみ、無指定で両方）</td><td><code>kind=feature</code> は絞り込みにならず、無指定と同じく特集とお知らせの両方が出る。特集は表示されるので、手順の期待は満たす</td><td class="warn">手順の書き方が実装と合っていない</td></tr>
+</tbody>
+</table>
+</div>
+<p>状態: UT-CONTENT-01〜03 は <span class="tstat pass">✅ 通過（ローカル）</span>（unit なので CI でも実行）。IT-005・IT-006 は <span class="tstat pass">✅ 通過（ローカル）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span>。画面（<code>ContentsPage</code>・<code>ContentDetailPage</code>）は <span class="tstat none">— テストなし</span>。</p>
+
+<h3 id="r09-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>お知らせや特集に、個別のページが無いのはなぜですか</summary>
+  <div class="qa-body">
+    <p>設計で、個別の URL は用意していません（設計仕様書 P2 追補a 4.3）。理由は、特集とお知らせは一覧からの導線だけで足りること、FAQ や規約などはフッターから直接リンクする固定ページであることです。API も、詳細（<code>/contents/{slug}</code>）が返すのは <code>faq</code> と <code>static</code> だけです。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: お知らせのタイトルをクリックできないのは不便では</p>
+      <p>意見: 本文を読ませたいなら、種別の制限を外して個別ページを作ることになります。P2-a の要件にはなかったので、作っていないと答えます。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>本文にスクリプトを入れられたらどうなりますか</summary>
+  <div class="qa-body">
+    <p>本文はプレーンテキストとして扱い、描画は React 標準のエスケープだけで行います。HTML や Markdown としては解釈せず、<code>dangerouslySetInnerHTML</code> も使っていません。入れられても、画面には文字のまま出ます（DS-DEC-38、ST-SEC-13）。</p>
+    <p>弱点: これを確かめる自動テストはありません。検索結果の画面には、同じ趣旨のテスト（検索語に HTML を含めても文字として表示される）があります。コンテンツの画面にも同種のテストを足すなら、<code>ContentDetailPage</code> を対象にするのが近道だと思います。</p>
+  </div>
+</details>
+</section>

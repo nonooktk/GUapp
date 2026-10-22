@@ -1,0 +1,158 @@
+<section id="s06" data-title="開発の進め方">
+<h2>6. 開発の進め方</h2>
+
+<p>本の出版に例えると、著者は本番の原稿を直接書き換えず、コピーに書き込みます。校閲の人が読み、機械が誤字を検査し、通ったものだけが本番の原稿に綴じ込まれます。この章は、その「コピーで作業する」「検査を通す」「本番に綴じる」の流れと、検査に使うテストの読み方の説明です。</p>
+
+<p>正確には、Git のブランチで作業し、GitHub の Pull Request（PR）で <code>main</code> に取り込みます。PR ごとに GitHub Actions が自動テストと秘密のスキャンを走らせます。この章では、実際のリポジトリの設定値を確認して書いているため、設計意図と設定が食い違う箇所は「事実」の注記で示します。</p>
+
+<h3 id="s06-branch">ブランチは接頭辞で分け、PR で main に入れる</h3>
+
+<p>作業は <code>main</code> から切ったブランチで行い、<code>feat/</code>（機能）、<code>fix/</code>（修正）、<code>docs/</code>（文書）、<code>test/</code>（テスト）、<code>chore/</code>（雑務）の接頭辞で種類を示します。P1 の実装プランには「作業は <code>feat/p1-&lt;wave&gt;-&lt;topic&gt;</code>。1 Wave 1〜3 PR、squash merge」とあり、履歴にはマージコミットがなく、コミット末尾に <code>(#30)</code> のような PR 番号が付いた 1 本線になっています。squash merge で取り込んだ形です。Dependabot が作る PR は <code>dependabot/</code> で始まります。</p>
+
+<p>2026-09-29 時点で、PR は #1 から #30 の 30 本です。25 本がマージ済みで、5 本（#16〜#20）は Dependabot の更新 PR が未マージのままです。PR の説明は <a class="ref" data-ref=".github/pull_request_template.md">PR テンプレート</a>に沿って書きます。設計 ID・テスト ID、秘匿情報が差分に無いこと、<code>pre-commit run --all-files</code> が通ること、pytest と Vitest が緑であること、実際に動かして確認したことのチェックと、検証の証拠（テスト結果の抜粋）の欄があります。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>PR</th><th>ブランチ</th><th>何をした PR か</th><th>規模</th><th>マージ</th></tr></thead>
+<tbody>
+<tr><td>#4</td><td><code>feat/p1-wave0</code></td><td>P1 の基盤。ローカル MySQL、FastAPI の骨格、12 表と seed、Next.js の骨格、CI</td><td>85 ファイル +11,493</td><td>09-17</td></tr>
+<tr><td>#5</td><td><code>feat/p1-wave1</code></td><td>商品閲覧とカート。API 8 本、金額計算、画面 4 枚、BFF、CSRF</td><td>101 ファイル +5,981</td><td>09-17</td></tr>
+<tr><td>#7</td><td><code>feat/p1-wave2-api</code></td><td>注文 API（prepare・orders・lookup）と注文確定の処理</td><td>38 ファイル +3,385</td><td>09-18</td></tr>
+<tr><td>#10</td><td><code>feat/p1-wave2-web</code></td><td>注文手続き・確認・完了の画面と、注文系の BFF</td><td>27 ファイル +2,522</td><td>09-18</td></tr>
+<tr><td>#11</td><td><code>test/p1-it-014-flake</code></td><td>同時実行テスト IT-014-03・04 の同時性を Barrier で揃え、無効な試行は最大 3 回やり直す</td><td>7 ファイル +358</td><td>09-18</td></tr>
+<tr><td>#14</td><td><code>docs/p1-wave3-closeout</code></td><td>P1 の検収の完了（AT 8 件・ST 40 件が合格）と引き継ぎメモ</td><td>11 ファイル +610</td><td>09-24</td></tr>
+<tr><td>#26</td><td><code>feat/deploy-appservice</code></td><td>レビュー用の App Service 公開の準備。Basic 認証、期間限定の帯、デプロイスクリプト</td><td>25 ファイル +1,589</td><td>09-25</td></tr>
+<tr><td>#27</td><td><code>fix/p1-bff-xff-trust</code></td><td>検収の指摘への対応。BFF が利用者の <code>X-Forwarded-For</code> を転送しないようにする</td><td>5 ファイル +236</td><td>09-25</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>表の「規模」は追加行数です。P1 は Wave 0（基盤）から Wave 3（検収）まで段階に分けて進めました。Wave 2 は API 側（#7）と画面側（#10）を別の PR にし、両者は <code>apps/api/openapi.json</code> の契約で突き合わせます（第 4 章）。検収で見つかった指摘は、#12・#13（AT-08・AT-07）、#27（XFF）、#28（404/405 と required の形）のように、指摘ごとの小さな修正 PR として戻しています。</p>
+
+<h3 id="s06-protection">main の保護：削除と強制 push は禁止、必須チェックは gitleaks だけ</h3>
+
+<p>GitHub のルールセット <code>main-protection</code> が <code>main</code>（既定ブランチ）に掛かっています。<code>gh api repos/nonooktk/GUapp/rulesets</code> で読み取って確認した内容は次のとおりです。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>ルール</th><th>設定</th><th>効果</th></tr></thead>
+<tbody>
+<tr><td>削除の禁止（<code>deletion</code>）</td><td>有効</td><td><code>main</code> を消せない</td></tr>
+<tr><td>強制 push の禁止（<code>non_fast_forward</code>）</td><td>有効</td><td>履歴を書き換える push ができない</td></tr>
+<tr><td>PR 必須（<code>pull_request</code>）</td><td>承認する人数は 0</td><td>直接 push はできず PR が要るが、承認者は不要（推測：1 人で開発しているため）</td></tr>
+<tr><td>必須のステータスチェック</td><td><code>gitleaks</code> のみ</td><td>秘密のスキャンが通らない PR はマージできない</td></tr>
+<tr><td>迂回できる主体（bypass）</td><td>なし</td><td>リポジトリの所有者も迂回できない</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>これに加えて、AI エージェントが作業するときは <a class="ref" data-ref=".claude/settings.json">.claude/settings.json</a> の deny 設定で、force push、<code>reset --hard</code>、<code>checkout -f</code>、<code>clean</code>、<code>stash</code>、<code>add -A</code>、<code>add .</code>、<code>rebase</code> などのコマンドを実行できなくしています。実装プランには、ルールセットの作成後に <code>main</code> への直接 push が GH013 で拒否された、と実証の記録があります。</p>
+
+<div class="note warn">
+<p>必須のステータスチェックに <code>api-test (pytest)</code> と <code>web-test (vitest + build)</code> は入っていません（ルールセットの <code>required_status_checks</code> は <code>gitleaks</code> の 1 件だけ）。このため、テストが赤のままでも、PR は <code>main</code> にマージできます。実装プランの「<code>main</code> は CI 緑のみマージ」とテスト設計書 1.2 の「IT・UT は 1 件でも失敗すれば main へのマージを止める」は、設定ではなく運用の約束として守られている状態です。第 9 章で扱います。</p>
+</div>
+
+<h3 id="s06-ci">CI：3 つのジョブと gitleaks が PR ごとに走る</h3>
+
+<p>CI の定義は <a class="ref" data-ref=".github/workflows/ci.yml">ci.yml</a> と <a class="ref" data-ref=".github/workflows/secrets-scan.yml">secrets-scan.yml</a> の 2 ファイルです。どちらも PR と <code>main</code> への push で動き、同じブランチで新しい実行が始まると古い実行を止めます（<code>concurrency</code>）。</p>
+
+<div class="flow" data-title="PR が main に入るまでの検査">
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L24-100">
+    <strong>api-test：本物の MySQL 8.4 で pytest</strong>
+    <p>サービスコンテナの MySQL 8.4 を起動し、文字コードとタイムゾーンを揃えてから <code>alembic upgrade head</code>、続けて <code>pytest -q</code>。マイグレーションが実際に通ることも毎回確かめる。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L102-144">
+    <strong>web-test：Vitest</strong>
+    <p>依存を lock 固定でインストールし、<code>pnpm test -- --run</code> で Vitest を実行する。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L146-185">
+    <strong>web-test：server-only ガード</strong>
+    <p>わざと違反するファイルでビルドし、失敗しなければ CI を赤にする（第 4 章）。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L187-211">
+    <strong>web-test：ビルドと秘密の全文検索</strong>
+    <p><code>next build</code> を実行し、ビルド成果物 <code>.next/static</code> にダミーのトークン値が含まれないことを確認する。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml#L213-248">
+    <strong>deps-audit：依存の脆弱性を報告</strong>
+    <p><code>pip-audit</code> と <code>pnpm audit</code> を実行する。ジョブに <code>continue-on-error: true</code> が付いており、失敗しても PR はブロックされない。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/secrets-scan.yml">
+    <strong>gitleaks：履歴全体の秘密スキャン</strong>
+    <p>別ファイルのワークフロー。<code>fetch-depth: 0</code> で履歴をすべて取得して走査する。これだけが main の必須チェック。</p>
+  </div>
+</div>
+
+<p>api-test の MySQL のユーザー名とパスワードは CI の中だけで使う値で、実環境の値ではありません（ファイル冒頭のコメント）。テスト用の接続先 <code>guapp_test</code>、<code>APP_ENV=test</code>、ダミーの <code>INTERNAL_TOKEN</code> などは、ジョブの <a class="ref" data-ref=".github/workflows/ci.yml#L48-53">env</a> で与えます。<code>apps/api</code> や <code>apps/web</code> が存在するかを確かめる「存在確認」ステップが各ジョブの先頭にありますが、これはリポジトリの作り始めの並行作業のための暫定措置で、いまは両方が存在するため、スキップされることはありません。</p>
+
+<div class="note warn">
+<p>CI の api-test では、結合テスト 100 件が実行されていません。結合テストは環境変数 <code>DATABASE_URL_TEST</code> が無いと全件スキップする作りですが（<a class="ref" data-ref="apps/api/tests/integration/conftest.py::pytest_collection_modifyitems">conftest の判定</a>）、ci.yml の env にこの変数がありません。2026-09-26 の <code>main</code>（2b9c87d）の CI ログには <code>200 passed, 100 skipped</code> と出ています。MySQL を起動して <code>alembic upgrade head</code> まで通すのに、同時実行のテスト（IT-014-02〜04）を含む結合テストは走っていない状態です。手元で <code>DATABASE_URL_TEST</code> を設定して実行した結果が、検収の「IT 全件緑」の根拠になっています。第 9 章で扱います。</p>
+</div>
+
+<h3 id="s06-lint">lint は CI でも pre-commit でも回していない</h3>
+
+<p>コードの書き方を機械的に検査する lint は、ツール自体は入っています。api は <code>ruff</code>（<a class="ref" data-ref="apps/api/ruff.toml">ruff.toml</a>。行長 100、pyflakes・pycodestyle・isort・bugbear・pyupgrade の規則）、web は <code>eslint</code>（<a class="ref" data-ref="apps/web/eslint.config.mjs">eslint.config.mjs</a>。Next.js の推奨設定）です。<code>package.json</code> には <code>pnpm lint</code> と <code>pnpm typecheck</code> のスクリプトもあります。</p>
+
+<div class="note fact">
+<p>ただし <code>ci.yml</code> にも <code>.pre-commit-config.yaml</code> にも、<code>ruff</code>・<code>eslint</code>・<code>tsc</code> を呼ぶ行はありません（リポジトリ内の検索で、スクリプトから <code>ruff</code> を呼んでいるのは、防御外し確認の <code>run.ps1</code> が復元後に <code>ruff check</code> を実行する 1 か所だけ）。lint は手元で実行する運用で、実行を強制する仕組みは無い状態です。<code>pnpm build</code>（CI で実行）は Next.js の仕様で型検査を含むはずですが、これは推測で、CI ログでは確認していません。</p>
+</div>
+
+<h3 id="s06-tests">テストの読み方：ファイル名と関数名からテスト ID をたどる</h3>
+
+<p>テストは 4 つのレベルに分かれ、設計書の ID と 1 対 1 で結びつけてあります。テスト設計書 0 章の対応表を実装に置き換えると、次のとおりです。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>レベル</th><th>ID の形</th><th>何を確かめるか</th><th>実行方法</th><th>置き場所</th></tr></thead>
+<tbody>
+<tr><td>受け入れテスト（AT）</td><td><span class="tid">AT-01</span>〜<span class="tid">AT-08</span></td><td>利用者の目的が達成できるか。ブラウザで操作</td><td>手動</td><td>記録は <code>docs/05_検収/</code></td></tr>
+<tr><td>システムテスト（ST）</td><td><span class="tid">ST-F014-01</span>、<span class="tid">ST-SEC-07</span></td><td>機能要件・非機能要件。画面と curl で確認</td><td>主に手動。一部は自動化</td><td>記録は <code>docs/05_検収/</code></td></tr>
+<tr><td>結合テスト（IT）</td><td><span class="tid">IT-014-03</span>、<span class="tid">IT-BFF-02</span></td><td>BFF・FastAPI・DB の経路、同時実行、異常系</td><td>自動（api は MySQL 必須）</td><td><code>apps/api/tests/integration/</code>、<code>apps/web/tests/</code></td></tr>
+<tr><td>単体テスト（UT）</td><td><span class="tid">UT-014-04</span>、<span class="tid">UT-WEB-05</span></td><td>関数・コンポーネント</td><td>自動</td><td><code>apps/api/tests/unit/</code>、<code>apps/web/tests/</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>ファイル名の読み方は、api と web で少し違います。api はファイル名が <code>test_ut_…</code>・<code>test_it_…</code> で始まり、関数名は <code>test_&lt;ID 小文字&gt;_&lt;要点&gt;</code> の形にする取り決めです（実装プランの実装上の取り決め）。web は <code>&lt;ID&gt;.&lt;対象&gt;.test.ts(x)</code> の形です。ID の付かないテストもあり（<code>csrf-validation.test.ts</code>、<code>datetime.test.ts</code> など）、その場合は対象の名前がそのままファイル名になります。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>ファイル</th><th>ID</th><th>守っているもの</th></tr></thead>
+<tbody>
+<tr><td><a class="ref" data-ref="apps/api/tests/unit/test_ut_014_reserve_stock.py">test_ut_014_reserve_stock.py</a></td><td><span class="tid">UT-014-03</span>・<span class="tid">UT-014-04</span></td><td>在庫引き当ての影響行数（SQLite の in-memory で検証）</td></tr>
+<tr><td><a class="ref" data-ref="apps/api/tests/unit/test_ut_sec_02_error_handler.py">test_ut_sec_02_error_handler.py</a></td><td><span class="tid">UT-SEC-02</span></td><td>エラー応答の形、内部トークン</td></tr>
+<tr><td><a class="ref" data-ref="apps/api/tests/integration/test_it_014_concurrency.py">test_it_014_concurrency.py</a></td><td><span class="tid">IT-014-02</span>・<span class="tid">IT-014-03</span></td><td>同じキーの 20 本同時、同じカートに別キーの 2 本同時</td></tr>
+<tr><td><a class="ref" data-ref="apps/api/tests/integration/test_it_014_04_stock_race.py">test_it_014_04_stock_race.py</a></td><td><span class="tid">IT-014-04</span></td><td>最後の 1 点を 2 つのカートが争う</td></tr>
+<tr><td><a class="ref" data-ref="apps/web/tests/ut-web-05.env-validation.test.ts">ut-web-05.env-validation.test.ts</a></td><td><span class="tid">UT-WEB-05</span></td><td><code>NEXT_PUBLIC_</code> への秘密名の混入を拒否</td></tr>
+<tr><td><a class="ref" data-ref="apps/web/tests/it-bff-01-02.orders-route.test.ts">it-bff-01-02.orders-route.test.ts</a></td><td><span class="tid">IT-BFF-01</span>・<span class="tid">IT-BFF-02</span></td><td>注文系 BFF の取り次ぎと、CSRF 無しの 403</td></tr>
+<tr><td><a class="ref" data-ref="apps/web/tests/st-sec-xff.client-ip.test.ts">st-sec-xff.client-ip.test.ts</a></td><td>（検収指摘の対応。番号なし）</td><td>利用者 IP の決め方（第 4 章）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>同時実行のテストには偽陽性を避ける工夫があります。実際に同時に走っていなければ、防御が壊れていても緑になるためです。テスト専用の「処理中カウンタ」の最大値が 2 以上だった試行だけを有効とし、そうでない試行は無効として最大 3 回やり直し、3 回とも不成立ならそのテストを赤にします（<a class="ref" data-ref="apps/api/tests/integration/concurrency_helpers.py#L83-102">run_until_concurrent</a>）。この仕組みが本番のコードに入らない理由は第 4 章にあります。さらに <a class="ref" data-ref="scripts/mutation-check/README.md">scripts/mutation-check</a> は、冪等キーの一意制約、カートの条件付き UPDATE、在庫の <code>stock &gt;= :q</code> の 3 つを 1 つずつ外して、該当のテストが赤くなることを確かめます。結果は同じフォルダの <code>result-20260918.md</code> に残っています。</p>
+
+<h3 id="s06-numbers">テストの件数と、自動と手動の分担</h3>
+
+<p>2026-09-29 に手元で数えた件数は次のとおりです。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>区分</th><th>件数</th><th>備考</th></tr></thead>
+<tbody>
+<tr><td>api の単体テスト（<code>tests/unit</code>、16 ファイル）</td><td>200</td><td>DB 不要。SQLite の in-memory を使うものを含む</td></tr>
+<tr><td>api の結合テスト（<code>tests/integration</code>、12 ファイル）</td><td>100</td><td>MySQL と <code>DATABASE_URL_TEST</code> が必要。無ければ全件スキップ</td></tr>
+<tr><td>web の Vitest（<code>tests</code>、27 ファイル）</td><td>228</td><td>単体と BFF の取り次ぎの両方を含む</td></tr>
+<tr><td>自動テストの合計</td><td>528</td><td>api 300 と web 228</td></tr>
+<tr><td>手動の受け入れテスト・システムテスト</td><td>AT 8・ST 40</td><td>記録は <code>docs/05_検収/</code>（Mac 分・Windows 分と、公開環境の確認記録を含む）</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>自動と手動の分担は、機械で何度でも繰り返せるものを自動、見た目や操作の流れなど人が見ないと判断できないものを手動にする考え方です。AT は 375px と PC 幅の両方をブラウザで操作して確認し、ST は画面操作と curl で確認します。ST の記録では、期待結果の文言をそのまま観測できたときだけ「合格」とし、確認できなかった項目は「未実施（理由）」と書くルールです。検収の記録は、正常系（<a class="ref" data-ref="docs/05_検収/ST-AT実施記録_正常系_20260918.md">ST-AT実施記録_正常系</a>）、異常・境界（<a class="ref" data-ref="docs/05_検収/ST実施記録_異常境界_20260924.md">Mac 分</a>と <a class="ref" data-ref="docs/05_検収/ST実施記録_異常境界_20260924_windows.md">Windows 分</a>）、公開環境（<a class="ref" data-ref="docs/05_検収/公開環境_確認記録_20260925.md">公開環境_確認記録</a>）に分かれています。</p>
+
+<div class="note fact">
+<p>コードカバレッジ（テストがコードの何割を通ったか）は計測していません。<code>pyproject.toml</code> と <code>package.json</code> に <code>pytest-cov</code> や Vitest のカバレッジ設定が無く、CI にも計測のステップがありません。テストの網羅は、設計書の ID と対応表（テスト設計書 10 章）で確認する方式です。</p>
+</div>
+
+</section>

@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "description": "コードトレーサーの対応表。画面の操作（action）ごとに、レビュー回答ガイド（review/*.html）のどの順路をどの順にたどるかを書く。順路は章 id（section）と ol.route の data-title（title、完全一致）で指す。stops: [開始, 終了] は順路の一部だけを使うとき（1 始まり・両端を含む）。extras は本筋に含めない別ルート（参考）で、画面の「流れ」パネルに折りたたんで出す。aliases は、撮影素材の hotspot の action id が scenario の action と違うときの対応（stop は本筋の何番目の停留所から始めるか）。",
+  "flow": ["open-product", "select-variant", "add-to-cart", "open-cart", "change-qty", "go-checkout", "go-confirm", "place-order"],
+  "aliases": {
+    "place-order-confirm": {"action": "place-order", "stop": 3}
+  },
+  "initial": {
+    "title": "ページを開く（商品一覧の初回表示）",
+    "routes": [
+      {"section": "r01", "title": "順路 A：トップまたは /products の初回表示から FastAPI まで"},
+      {"section": "r01", "title": "順路：内部トークンの検証から products テーブルまで"},
+      {"section": "r01", "title": "順路 A：初回表示（Server Component）で、応答から商品カードまで"}
+    ],
+    "server_calls": [
+      {"method": "GET", "path": "/api/v1/products", "note": "商品一覧（公開中の商品を、ページ・並び順などのクエリで取る）"}
+    ]
+  },
+  "actions": {
+    "open-product": {
+      "title": "商品を選ぶ（一覧 → 詳細）",
+      "routes": [
+        {"section": "r02", "title": "順路：商品カードのリンクから FastAPI まで"},
+        {"section": "r02", "title": "順路：内部トークンの検証から variants テーブルまで"},
+        {"section": "r02", "title": "順路 A：応答から商品詳細のページ表示まで"}
+      ],
+      "server_calls": [
+        {"method": "GET", "path": "/api/v1/products/{id}", "note": "商品 1 件（色・サイズごとの variant と在庫、関連商品を含む）"}
+      ]
+    },
+    "select-variant": {
+      "title": "色とサイズを選ぶ",
+      "routes": [
+        {"section": "r02", "title": "順路 B：色・サイズを選ぶと在庫の表示が変わる（画面の中だけ。API は呼ばない）"}
+      ],
+      "network_note": "色・サイズの選択は、ブラウザの中（React の state）だけで完結します。通信は起きません。選んだ色とサイズの組み合わせから variant を決め、在庫の表示を切り替えます。"
+    },
+    "add-to-cart": {
+      "title": "カートに入れる",
+      "routes": [
+        {"section": "r03", "title": "順路 A：「カートに入れる」ボタンから FastAPI まで"},
+        {"section": "r03", "title": "順路：内部トークンの検証から cart_items テーブルまで（POST /api/v1/cart/items）"},
+        {"section": "r03", "title": "順路 A：成功したとき、応答からバッジ・トーストまで"}
+      ],
+      "extras": [
+        {"section": "r03", "title": "順路 B：初回だけ、匿名カートのトークンと CSRF 用 Cookie を発行する"},
+        {"section": "r03", "title": "順路 B：失敗したとき、エラーからトーストまで"}
+      ],
+      "forward_headers": [
+        "X-Internal-Token: BFF が付ける（値は非公開）",
+        "X-Cart-Token: Cookie cart_token の値を BFF が載せ替える（初回は無し）"
+      ]
+    },
+    "open-cart": {
+      "title": "カートを開く",
+      "routes": [
+        {"section": "r04", "title": "順路 A：カート画面の初回表示から FastAPI まで（Server Component が直接呼ぶ）"}
+      ],
+      "server_calls": [
+        {"method": "GET", "path": "/api/v1/cart", "note": "Cookie cart_token の値を X-Cart-Token に載せて、カートを取る"},
+        {"method": "GET", "path": "/api/v1/settings/public", "note": "送料の設定など、画面に出す公開設定"}
+      ]
+    },
+    "change-qty": {
+      "title": "数量を変える",
+      "routes": [
+        {"section": "r04", "title": "順路 B：数量セレクトから FastAPI まで（PATCH）"},
+        {"section": "r04", "title": "順路 A：内部トークンの検証から cart_items テーブルまで（数量変更の PATCH）"},
+        {"section": "r04", "title": "順路 A：応答から画面の更新まで（数量変更・削除で共通）"}
+      ],
+      "extras": [
+        {"section": "r04", "title": "順路 B：失敗したときと、空のカート"}
+      ],
+      "forward_headers": [
+        "X-Internal-Token: BFF が付ける（値は非公開）",
+        "X-Cart-Token: Cookie cart_token の値を BFF が載せ替える"
+      ]
+    },
+    "go-checkout": {
+      "title": "レジに進む（入力画面の表示）",
+      "routes": [
+        {"section": "r05", "title": "順路：注文手続きの画面から FastAPI への呼び出しまで", "stops": [1, 4]}
+      ],
+      "network_note": "注文手続きの画面は、パンくずと入力フォームを並べるだけの Server Component で、FastAPI は呼びません。入力欄の初期値（ダミー）は画面側のコードで決まります。"
+    },
+    "go-confirm": {
+      "title": "確認画面へ（prepare）",
+      "routes": [
+        {"section": "r05", "title": "順路：注文手続きの画面から FastAPI への呼び出しまで", "stops": [5, 13]},
+        {"section": "r05", "title": "順路：FastAPI の prepare から金額計算まで"},
+        {"section": "r05", "title": "順路：応答から確認画面の表示まで"}
+      ],
+      "extras": [
+        {"section": "r05", "title": "順路：prepare が失敗したときの画面の出し分け"}
+      ],
+      "forward_headers": [
+        "X-Internal-Token: BFF が付ける（値は非公開）",
+        "X-Cart-Token: Cookie cart_token の値を BFF が載せ替える",
+        "X-Forwarded-For: BFF が決めた利用者の IP（利用者が送った値は転送しない）"
+      ]
+    },
+    "place-order": {
+      "title": "注文を確定する",
+      "routes": [
+        {"section": "r06", "title": "順路：購入ボタンから FastAPI への呼び出しまで"},
+        {"section": "r06", "title": "順路：FastAPI の POST /api/v1/orders から注文の確定まで"},
+        {"section": "r06", "title": "順路：注文確定の応答から完了画面の表示まで"}
+      ],
+      "extras": [
+        {"section": "r06", "title": "順路：注文確定が失敗したときの画面の出し分け"}
+      ],
+      "forward_headers": [
+        "X-Internal-Token: BFF が付ける（値は非公開）",
+        "X-Cart-Token: Cookie cart_token の値を BFF が載せ替える",
+        "X-Forwarded-For: BFF が決めた利用者の IP（利用者が送った値は転送しない）"
+      ]
+    }
+  }
+}

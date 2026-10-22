@@ -1,0 +1,125 @@
+<section id="s00" data-title="サンプル（動作確認用）">
+<h2>0. サンプル本文（動作確認用）</h2>
+<p>この章は組み立て基盤の動作確認用です。本番ビルド（<code>--include-sample</code> なし）には入りません。</p>
+
+<h3 id="s00-inline">インライン参照</h3>
+<p>注文確定の中心は <a class="ref" data-ref="apps/api/app/services/orders.py::_confirm" data-note="在庫の引き当て → 金額再計算 → 決済 → 確定の順。失敗時は全部取り消す">_confirm</a> です。在庫の引き当ては
+<a class="ref" data-ref="apps/api/app/repositories/orders.py::reserve_stock">reserve_stock</a> が「在庫が数量以上あるときだけ減らす」条件付き更新で行います。
+メソッドは <code>Class.method</code> 形式です（<a class="ref" data-ref="apps/api/app/core/errors.py::AppError.to_body">AppError.to_body</a>、デコレータ付きの <a class="ref" data-ref="apps/api/app/schemas/order.py::OrderCreateIn._strip">OrderCreateIn._strip</a>）。
+クラス単位でも引けます（<a class="ref" data-ref="apps/api/app/repositories/orders.py::PendingOrderInput">PendingOrderInput</a>）。</p>
+<p>画面側では <a class="ref" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutForm">CheckoutForm</a>（default export 関数）、
+クライアント IP の解決は <a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp" data-note="x-forwarded-for を信用してよい段数を options で受ける">resolveClientIp</a>、
+Basic 認証は <a class="ref" data-ref="apps/web/proxy.ts::proxy">proxy</a>、
+Cookie 名の定数は <a class="ref" data-ref="apps/web/lib/cookie.ts::CART_TOKEN_COOKIE">CART_TOKEN_COOKIE</a>（const 1 文）です。</p>
+<p>行範囲で引く例: <a class="ref" data-ref="apps/api/app/main.py#L1-30">main.py の冒頭 30 行</a>。
+ファイル全体で引く例: <a class="ref" data-ref=".github/workflows/ci.yml">ci.yml</a>（YAML）。
+同じ参照は 1 回だけ持たれます: <a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm（再掲）</a>。</p>
+
+<div class="note fact"><p>ラベル（事実・意見・注意）は CSS が自動で付けます。本文側で「事実:」と書く必要はありません。</p></div>
+<div class="note opinion"><p>意見の注記の見た目です。断定できない内容にはこちらを使います。</p></div>
+<div class="note warn"><p>注意の注記の見た目です。<span class="sev high">高</span> <span class="sev mid">中</span> <span class="sev low">低</span></p></div>
+
+<p>バッジ:
+<span class="status fix">当日までに直す</span>
+<span class="status oral">口頭で返す</span>
+<span class="status known">設計書で既知</span>
+<span class="status todo">未着手</span>
+<span class="status done">実装済み</span>
+／ <span class="req">F-012</span> <span class="tid">IT-014-03</span>
+／ <span class="layer" data-layer="screen">画面</span>
+<span class="layer" data-layer="bff">BFF</span>
+<span class="layer" data-layer="api">API</span>
+<span class="layer" data-layer="service">サービス</span>
+<span class="layer" data-layer="repo">リポジトリ</span>
+<span class="layer" data-layer="db">DB</span>
+<span class="layer" data-layer="ci">CI</span>
+<span class="layer" data-layer="infra">インフラ</span></p>
+
+<h3 id="s00-flow">フロー図</h3>
+<div class="flow" data-title="注文確定の流れ（サンプル）">
+  <div class="flow-step" data-layer="screen" data-ref="apps/web/components/CheckoutForm.tsx::CheckoutForm">
+    <strong>注文手続き画面で入力する</strong>
+    <p>配送先とメールアドレスを入れ、確認画面へ進む。入力値は sessionStorage に保持される。</p>
+  </div>
+  <div class="flow-step" data-layer="bff" data-ref="apps/web/proxy.ts::proxy">
+    <strong>Next.js が受ける（BFF）</strong>
+    <p>ブラウザは Next.js にしか話しかけない。Basic 認証をここで判定する。</p>
+  </div>
+  <div class="flow-step" data-layer="service" data-ref="apps/api/app/services/orders.py::create_order">
+    <strong>create_order が入口になる</strong>
+    <p>デッドロック時の再試行を含めて注文作成を呼び出す。</p>
+  </div>
+  <div class="flow-step" data-layer="service" data-ref="apps/api/app/services/orders.py::_confirm">
+    <strong>_confirm が確定処理を進める</strong>
+    <p>在庫引き当て、金額の再計算と照合、決済、確定の書き込みを順に行う。</p>
+  </div>
+  <div class="flow-step" data-layer="repo" data-ref="apps/api/app/repositories/orders.py::reserve_stock">
+    <strong>reserve_stock が在庫を減らす</strong>
+    <p>「在庫が数量以上あるときだけ減らす」条件付き UPDATE。マイナス在庫にならない。</p>
+  </div>
+  <div class="flow-step" data-layer="db">
+    <strong>MySQL に書き込む</strong>
+    <p>注文・明細・在庫は 1 トランザクション。ここは data-ref なしの例。</p>
+  </div>
+  <div class="flow-step" data-layer="ci" data-ref=".github/workflows/ci.yml">
+    <strong>CI が毎回テストする</strong>
+    <p>失敗すると main への取り込みが止まる。</p>
+  </div>
+</div>
+
+<h3 id="s00-arch">構成図</h3>
+<div class="arch">
+  <div class="arch-node" data-layer="browser"><strong>ブラウザ</strong><p>利用者の画面</p></div>
+  <div class="arch-link">HTTPS<br>Cookie</div>
+  <div class="arch-node" data-layer="web" data-ref="apps/web/proxy.ts::proxy"><strong>Next.js（BFF）</strong><p>画面と /api/*</p></div>
+  <div class="arch-link">内部 HTTP<br>CSRF 検証済み</div>
+  <div class="arch-node" data-layer="api"><strong>FastAPI</strong><p>業務ロジック</p></div>
+  <div class="arch-link">SQL</div>
+  <div class="arch-node" data-layer="db"><strong>MySQL</strong><p>注文・在庫</p></div>
+</div>
+
+<h3 id="s00-table">絞り込みできる表</h3>
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>ファイル</th><th>役割</th><th>層</th></tr></thead>
+<tbody>
+<tr><td><a class="ref" data-ref="apps/api/app/services/orders.py::create_order">services/orders.py</a></td><td>注文の作成・照会の業務ロジック</td><td><span class="layer" data-layer="service">サービス</span></td></tr>
+<tr><td><a class="ref" data-ref="apps/api/app/repositories/orders.py::insert_pending_order">repositories/orders.py</a></td><td>注文表と在庫表への SQL</td><td><span class="layer" data-layer="repo">リポジトリ</span></td></tr>
+<tr><td><a class="ref" data-ref="apps/web/lib/cookie.ts::buildCartTokenCookie">lib/cookie.ts</a></td><td>カート用 Cookie の組み立て</td><td><span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a class="ref" data-ref="apps/web/lib/client-ip.ts::resolveClientIp">lib/client-ip.ts</a></td><td>クライアント IP の決定</td><td><span class="layer" data-layer="bff">BFF</span></td></tr>
+<tr><td><a class="ref" data-ref=".github/workflows/ci.yml">ci.yml</a></td><td>自動テストの定義</td><td><span class="layer" data-layer="ci">CI</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="s00-qa">Q&amp;A</h3>
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>二重注文はどう防いでいますか</summary>
+  <div class="qa-body">
+    <p>冪等キーの一意制約と、カートの「注文済み」への切り替えで防いでいます。実装は <a class="ref" data-ref="apps/api/app/services/orders.py::_confirm">_confirm</a> です。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: 同時に 2 本届いたらどうなりますか</p>
+      <p>先に書き込んだ側が成功し、後の側は既存の注文を返されます。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>もう 1 つの質問（初期は閉じている）</summary>
+  <div class="qa-body"><p>開閉は素直な details です。</p></div>
+</details>
+
+<h3 id="s00-code">直書きコード</h3>
+<pre class="code" data-lang="sql">SELECT o.order_number, o.total
+FROM orders AS o
+WHERE o.idempotency_key = :key   -- 冪等キーで既存注文を引く
+LIMIT 1;</pre>
+</section>
+
+<section id="s99" data-title="サンプル 2 章目（目次確認用）">
+<h2>99. 2 章目</h2>
+<p>目次の現在地ハイライトと、狭い画面での折りたたみ目次を確認するための章です。</p>
+<h3 id="s99-a">小見出し A</h3>
+<p>本文。<a href="#s00-flow">フロー図へのリンク</a>。</p>
+<h3 id="s99-b">小見出し B</h3>
+<p>本文。</p>
+</section>

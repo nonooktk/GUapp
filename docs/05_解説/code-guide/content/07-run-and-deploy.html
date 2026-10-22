@@ -1,0 +1,199 @@
+<section id="s07" data-title="動かし方と公開環境">
+<h2>7. 動かし方と公開環境</h2>
+
+<p>店に例えると、自宅の作業台で試作品を作る段階と、貸し店舗に並べてレビュワーに見てもらう段階があります。作業台には自前の道具（Docker の MySQL）を置き、貸し店舗では共用の倉庫（講義の MySQL）に間借りして、入口に合言葉（Basic 認証）を掛けます。</p>
+
+<p>正確には、ローカルでは Docker の MySQL に Next.js（<code>127.0.0.1:3000</code>）と FastAPI（<code>127.0.0.1:8000</code>）を繋ぎます。公開環境では Azure App Service の 2 つのアプリ（web と api）が、講義共用の Azure Database for MySQL に繋がります。この章は、動かすコマンド、公開環境の構成、デプロイスクリプト、講義 DB への接続方法、環境変数の名前と役割の順に説明します。</p>
+
+<h3 id="s07-local">ローカルでの動かし方：MySQL、API、web の順に起動する</h3>
+
+<p>手順は <code>README.md</code> と <code>scripts/mysql-docker/README.md</code> にあります。次のコマンドは Mac（Docker Desktop）向けに、両方から抜き出してまとめたものです。Windows は <code>scripts/mysql-local/</code> の PowerShell を使います。</p>
+
+<pre class="code" data-lang="bash"># 0. 初回のみ: 事故防止の仕組み（秘匿ファイルや巨大ファイルを commit 時点で止める）を有効にする
+cd ~/GUapp
+pre-commit install
+
+# 1. MySQL 8.4 を起動する（Docker Desktop が起動していること）
+#    .env は MYSQL_PASSWORD だけを書く。コミット禁止（gitignore 済み）
+echo "MYSQL_PASSWORD=&lt;任意のローカル専用パスワード&gt;" &gt; .env
+docker compose up -d
+docker compose ps        # guapp-mysql が healthy になるまで待つ
+
+# 2. API（apps/api/.env に環境変数を書いておく。名前は本章の表を参照）
+cd ~/GUapp/apps/api
+uv sync
+uv run alembic upgrade head          # 13 表を作る
+uv run python -m app.seed            # 初期データ。商品があれば何もしない
+uv run uvicorn app.main:app --reload --port 8000
+curl http://127.0.0.1:8000/api/v1/health   # {"status":"ok","db":"ok"} なら成功
+
+# 3. web（別のターミナル。apps/web/.env.local に環境変数を書いておく）
+cd ~/GUapp/apps/web
+pnpm install
+pnpm dev                             # http://127.0.0.1:3000 で開く</pre>
+
+<p>API のホストは <code>uvicorn</code> の既定の <code>127.0.0.1</code> です。web は <code>package.json</code> の <code>dev</code> スクリプトが <code>next dev -H 127.0.0.1</code> なので、同じく自分の PC からしか届きません（デモの個人情報対策として PR #25 で限定）。<code>apps/api/.env</code> の <code>DATABASE_URL</code> は、Docker の場合 <code>mysql+asyncmy://guapp:&lt;MYSQL_PASSWORD&gt;@127.0.0.1:3306/guapp</code> の形です。<code>INTERNAL_TOKEN</code> は api と web で同じ任意の値にします。商品画像は <code>apps/web/public/products/</code> のプレースホルダーを使います。</p>
+
+<p>テストの実行は次のとおりです。結合テストは <code>DATABASE_URL_TEST</code> を渡したときだけ走ります。この DB 名は <code>_test</code> で終わる必要があり、そうでなければテストが中止されます（開発 DB を壊さないための安全装置）。</p>
+
+<pre class="code" data-lang="bash"># web（228 件）
+cd ~/GUapp/apps/web &amp;&amp; pnpm test
+
+# api の単体テスト（DB 不要。結合テストはスキップされる）
+cd ~/GUapp/apps/api &amp;&amp; uv run pytest -q
+
+# api の結合テストも含める（guapp_test は docker compose の初回起動時に作られる）
+DATABASE_URL_TEST="mysql+asyncmy://guapp:&lt;MYSQL_PASSWORD&gt;@127.0.0.1:3306/guapp_test" uv run pytest -q
+
+# 後片付け
+cd ~/GUapp &amp;&amp; docker compose stop          # データは残す
+cd ~/GUapp &amp;&amp; docker compose down -v       # データごと消して作り直す</pre>
+
+<p>Docker が使えない PC では、Windows 用の <code>scripts/mysql-local/</code>（zip 版 MySQL を管理者権限なしで置く PowerShell 一式）が同じ設定値で動きます。<code>docker-compose.yml</code> の 7 行目には「作成者の PC に Docker が無いため実行確認をしていない（2026-09-18）」とありますが、その後、Mac の Docker MySQL で検収の記録が取られており（<code>docs/05_検収/</code>）、注記は古くなっています。</p>
+
+<h3 id="s07-public">公開環境の構成：App Service 2 つと講義の MySQL</h3>
+
+<p>公開の目的は、講義のレビュー期間中だけ、限られたレビュワーに実際に触ってもらうことです（ADR-0004）。Azure のリソースグループ <code>rg-001-gen12</code>（受講生で共用）の東日本（japaneast）に、Linux の App Service プラン（B1）を 1 つ作り、web と api の 2 つのアプリを同居させます。DB は新しく作らず、講義共用の Azure Database for MySQL（<code>gen12-mysql-pos</code>）に、自分専用のスキーマ <code>guapp_nonooktk</code> を作って使います（ADR-0002）。</p>
+
+<div class="arch">
+  <div class="arch-node" data-layer="browser">
+    <strong>レビュワーのブラウザ</strong>
+    <p>URL と Basic 認証の ID・パスワードは、統括が個別に伝える</p>
+  </div>
+  <div class="arch-link">HTTPS（HTTPS Only、最小 TLS 1.2）／Basic 認証</div>
+  <div class="arch-node" data-layer="web" data-ref="apps/web/proxy.ts::proxy">
+    <strong>App Service（web）</strong>
+    <p>Node 24。<code>node server.js</code>（Next.js の standalone 出力）、ポート 3000。全ページと <code>/api/*</code> を Basic 認証で守る</p>
+  </div>
+  <div class="arch-link">HTTPS：X-Internal-Token・X-Cart-Token・X-Forwarded-For</div>
+  <div class="arch-node" data-layer="api" data-ref="scripts/azure-deploy/config.sh#L50-51">
+    <strong>App Service（api）</strong>
+    <p>Python 3.13。<code>uvicorn app.main:app --workers 2</code>、ポート 8000。<code>APP_ENV=production</code>（Swagger 非表示）</p>
+  </div>
+  <div class="arch-link">SQL（SSL 必須。CA 証明書をデプロイに同梱。プールは 5 本＋余裕 5 本）</div>
+  <div class="arch-node" data-layer="db" data-ref="scripts/azure-deploy/03-db-firewall.sh">
+    <strong>Azure Database for MySQL（gen12-mysql-pos）</strong>
+    <p>講義の共用サーバー。スキーマ <code>guapp_nonooktk</code>。ファイアウォールは api の送信 IP だけを許可</p>
+  </div>
+  <div class="arch-link">同じプラン・同じリソースグループ</div>
+  <div class="arch-node" data-layer="infra" data-ref="scripts/azure-deploy/01-create.sh">
+    <strong>App Service プラン（B1・Linux）</strong>
+    <p>web と api が同居する。停止しても基本料金は残る</p>
+  </div>
+</div>
+
+<p>入口の保護は 3 段です。1 段目は HTTPS Only（http で来ると https へ転送）、2 段目は Next.js の <a class="ref" data-ref="apps/web/proxy.ts::proxy" data-note="環境変数が両方あるときだけ Authorization を検証。無ければ 401 と WWW-Authenticate">proxy.ts</a> による Basic 認証、3 段目は api の内部トークン（第 4 章）です。Basic 認証の判定は <a class="ref" data-ref="apps/web/lib/basic-auth.ts::verifyBasicAuthHeader" data-note="ID とパスワードを別々に SHA-256 でダイジェスト化してから timingSafeEqual で比べる">verifyBasicAuthHeader</a> にあり、環境変数の読み取りは <a class="ref" data-ref="apps/web/lib/basic-auth.ts::parseBasicAuthConfig" data-note="両方未設定は認証なし、片方だけは例外">parseBasicAuthConfig</a> が担います。次の動作になります。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>環境変数の状態</th><th>動作</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td><code>BASIC_AUTH_USER</code> と <code>BASIC_AUTH_PASSWORD</code> が両方未設定</td><td>認証なし（ローカル開発向け）</td><td>手元の開発を妨げない</td></tr>
+<tr><td>片方だけ設定</td><td>例外で失敗（<code>BasicAuthConfigError</code>）</td><td>設定漏れのまま無防備に公開するのを防ぐ</td></tr>
+<tr><td>両方設定</td><td>正しい Authorization がなければ 401 を返す</td><td>本番</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>対象外にしているのは、<code>_next/static</code>、<code>_next/image</code>、<code>favicon.ico</code>、<code>sitemap.xml</code>、<code>robots.txt</code> です（<a class="ref" data-ref="apps/web/proxy.ts::config">config の matcher</a>）。ファイル名にハッシュが付いていて、認証済みの画面を経由しないと URL が分からず、中身もビルド成果物で個人情報を含まないため、と設計書にあります。<code>/api/*</code> は <code>/api/health</code> も含めて保護の対象です。</p>
+
+<p>公開期間は 2026-10-09 までです。全ページの上部に「講義レビュー用のデモとして、YYYY/MM/DD まで期間限定で公開しています」の帯が出ます。終了日は環境変数 <code>DEMO_PUBLIC_UNTIL</code> で、再デプロイなしに延長できます（<a class="ref" data-ref="apps/web/lib/demo-banner.ts::parseDemoPublicUntil">parseDemoPublicUntil</a>。<code>NEXT_PUBLIC_</code> を付けるとビルド時に値が埋まって延長できなくなるため付けていません）。期限が来ても自動では止まらず、停止は手動の <code>90-stop.sh</code> です（ADR-0004）。注文手続きのフォームには、ダミーの初期値と注意書きが常時出ます（<a class="ref" data-ref="apps/web/lib/demo-defaults.ts::DEMO_CHECKOUT_FORM">DEMO_CHECKOUT_FORM</a>）。講義サーバーの管理者はスキーマの中身も読めるため、本物の個人情報を入れさせないための仕組みです。</p>
+
+<p>公開後の確認は 2026-09-25 に行い、記録は <code>docs/05_検収/公開環境_確認記録_20260925.md</code> にあります。api のヘルスチェック、Basic 認証（認証なし・誤り・正しい資格情報で 401・401・200）、期間限定の帯、商品閲覧・検索・お知らせ、注文確定 1 件（ダミー値）、Cookie の <code>Secure</code>、api の <code>/docs</code> の 404、CORS、http から https への転送が合格と記録されています。ただし確認画面（<code>/checkout/confirm</code>）は、ルートの疎通までしか確認しておらず、ブラウザでの目視は未実施です。</p>
+
+<h3 id="s07-deploy">デプロイスクリプト：01 から 06 が順番、90 と 99 は後片付け</h3>
+
+<p><code>scripts/azure-deploy/</code> のスクリプトは Azure CLI（<code>az</code>）で操作する手動デプロイです（GitHub Actions による自動デプロイは、この時点では作っていません）。作成・変更するスクリプトは、実行前に <code>az account show</code> を表示して確認を求め、既存のリソースがあれば作成をスキップします。番号順に実行します。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>ファイル</th><th>やること</th><th>気をつける点</th></tr></thead>
+<tbody>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/config.sh">config.sh</a></td><td>他のスクリプトが読む共通設定。リソース名、SKU（B1）、ランタイム（Node 24・Python 3.13）、起動コマンド、DB プールの推奨値、公開期限</td><td>単体では何もしない。名前が衝突したら <code>GUAPP_NAME_SUFFIX="-1"</code> のように設定して再実行する</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/01-create.sh">01-create.sh</a></td><td>App Service プランと web・api の 2 アプリを作り、Always On、HTTPS Only、最小 TLS 1.2、起動コマンド、ポート関連の設定を入れる</td><td>リソースグループは共用のため作らず、存在確認だけ行う。api に <code>SCM_DO_BUILD_DURING_DEPLOYMENT=true</code> を入れるのは、zip デプロイが既定では <code>pip install</code> を走らせないため</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/02-settings.sh">02-settings.sh</a></td><td>web・api の環境変数（アプリ設定）を投入する。<code>INTERNAL_TOKEN</code> と Basic 認証の ID・パスワードをその場で乱数生成する</td><td>秘密は画面に出さず、権限 600 の一時ファイルで <code>az</code> に渡す。再実行するたびに秘密が新しい値に替わる（漏えい時の再生成を兼ねる）。ID・パスワードは <code>apps/web/.env.basic-auth</code> に書かれる</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/03-db-firewall.sh">03-db-firewall.sh</a></td><td>api の送信 IP（<code>possibleOutboundIpAddresses</code>）を、講義 MySQL のファイアウォールに <code>guapp-appsvc-&lt;連番&gt;</code> の名前で 1 件ずつ追加する</td><td>「Azure サービスからのアクセスをすべて許可」は共用設定全体を変えるため使わない。他の受講生の規則は触らず、古い規則の自動削除もしない。公開時は 31 件を追加</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/04-deploy-api.sh">04-deploy-api.sh</a></td><td>CA 証明書を <code>apps/api/certs/</code> にコピーし、<code>uv export</code> で <code>requirements.txt</code> を作り、不要ファイルを除いた zip を <code>az webapp deploy</code> で配置する</td><td><code>requirements.txt</code> はコミットせず毎回作る（<code>uv.lock</code> との二重管理を避ける）。zip から <code>.venv</code>、<code>tests</code>、<code>.env*</code>、<code>.mail-outbox</code> を除く</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/05-deploy-web.sh">05-deploy-web.sh</a></td><td><code>pnpm build</code>（standalone 出力）のあと、シンボリックリンクを実体化して zip にし、配置する</td><td>次の段落を参照。ビルド時の環境変数はダミー値でよい（実行時に本物を読むため）</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/06-migrate-seed.sh">06-migrate-seed.sh</a></td><td>講義 MySQL に対して <code>alembic upgrade head</code> を実行する。<code>--seed</code> を付け、確認に答えたときだけ seed も実行する</td><td>seed は <code>--reset --yes</code> で既存データを消すため、統括の指示があるときだけ。資格情報の扱いは <code>with-azure-db.sh</code> に任せる</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/90-stop.sh">90-stop.sh</a></td><td>公開期間の終了後に、web・api を停止する（削除はしない）</td><td>停止中もプランの基本料金は続く</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/99-delete.sh">99-delete.sh</a></td><td>App Service、プラン、講義 MySQL の <code>guapp-appsvc-*</code> 規則を削除する</td><td><code>delete</code> と入力する確認は、<code>GUAPP_ASSUME_YES=1</code> でも省略できない。講義 MySQL 本体・スキーマ・共用のリソースグループは消さない</td></tr>
+<tr><td><a class="ref" data-ref="scripts/azure-deploy/README.md">README.md</a></td><td>実行順序、動作確認の curl、期限の延長、停止・削除、費用の目安、つまずきやすい点</td><td>実行前に統括の承認を得る、という注意書きが冒頭にある</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>05-deploy-web.sh がシンボリックリンクを実体化するのは、pnpm の <code>node_modules</code> が大量のシンボリックリンクでできていて、zip にして Azure 側で展開すると壊れたためです。スクリプト冒頭のコメントと公開環境の確認記録によると、経緯は次のとおりです。まず <code>zip</code> をそのまま使うと、リンク先の実体（<code>@swc/helpers</code> など）が欠けて起動に失敗しました。次に <code>zip -y</code> でリンクのまま格納すると、Mac で作ったリンクを Azure 側が「リンク先の文字列を中身とする通常のファイル」として展開し、<code>SyntaxError</code> で起動に失敗しました（コメントは、展開時の解釈の違いと推定している）。そこで <code>rsync -a --copy-links</code> でリンクを実体に置き換えた一時フォルダを作ってから zip にしました。</p>
+
+<p>実体化だけでは、今度は <code>next</code> が必要とする兄弟パッケージを見つけられなくなりました。Node はリンク越しに読んだファイルの実体パスを基準にモジュールを探すため、コピーで独立した実体にすると探索が効かなくなるからです。このため、pnpm が標準で作る共有フォルダ <code>node_modules/.pnpm/node_modules/</code> の中身を、トップレベルの <code>node_modules/</code> に重ねてコピーして解決しています。あわせて、リポジトリが iCloud 同期の Desktop 配下にあり、<code>node_modules 3</code> のような複製フォルダが混ざるため、それを除外し、コピー後にリンクの数と複製名の数を数えて 0 でなければ中止します。この対応を入れた 4 回目のデプロイで、web が起動しました。</p>
+
+<p>api の起動コマンドが <code>gunicorn</code> ではなく <code>uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2</code> なのは、<code>gunicorn</code> が依存に入っておらず、依存の追加に承認が必要なためです（設計仕様書 公開追補の DS-DEC-54）。<code>--workers 2</code> のためレート制限がワーカーごとに数えられる点は第 4 章にあります。<code>az webapp deploy</code> は「Site failed to start within 10 mins」でタイムアウト表示になることがありますが、api と web の両方で、Azure 側ではその後も起動処理が続き、数分後に正常起動したと記録されています。</p>
+
+<h3 id="s07-azure-db">講義の DB への接続：接続先を検査してからコマンドを実行する</h3>
+
+<p>手元から講義の MySQL に対して、マイグレーションや seed を実行するための仕組みが <a class="ref" data-ref="scripts/azure-db/with-azure-db.sh" data-note="ホスト名とスキーマ名は上書きできない固定値。組み立てた URL を検査してから exec する">with-azure-db.sh</a> です。<code>with-azure-db.sh &lt;コマンド...&gt;</code> の形で、そのコマンドに接続用の環境変数を付けて実行します。資格情報の扱いが最重要で、値を画面にもログにも出さないように作られています。</p>
+
+<div class="flow" data-title="with-azure-db.sh が接続してコマンドを実行するまで">
+  <div class="flow-step" data-layer="infra" data-ref="scripts/azure-db/fetch-ca.sh">
+    <strong>CA 証明書を用意する（初回のみ）</strong>
+    <p><code>fetch-ca.sh</code> が公開されている 3 つの証明書を束ね、リポジトリの外の <code>~/.config/guapp/azure-mysql-ca.pem</code> に保存する。</p>
+  </div>
+  <div class="flow-step" data-layer="infra" data-ref="scripts/azure-db/with-azure-db.sh#L66-73">
+    <strong>資格情報を読む</strong>
+    <p><code>apps/api/.env.azure</code>（<code>DB_USER</code>・<code>DB_PASSWORD</code> の 2 行、権限 600）だけを読み、値は表示しない。</p>
+  </div>
+  <div class="flow-step" data-layer="infra" data-ref="scripts/azure-db/with-azure-db.sh#L82-109">
+    <strong>接続 URL を組み立てて検査する</strong>
+    <p>パスワードを URL エンコードして URL を作り、ホストとスキーマ名が固定値（<code>gen12-mysql-pos…</code>・<code>guapp_nonooktk</code>）と一致しなければ中止する。検査は環境変数経由の Python で行い、コマンドライン引数に載せない。</p>
+  </div>
+  <div class="flow-step" data-layer="infra" data-ref="scripts/azure-db/with-azure-db.sh#L111-118">
+    <strong>環境変数を付けて実行する</strong>
+    <p><code>DATABASE_URL</code>、<code>DB_POOL_SIZE=5</code>、<code>DB_MAX_OVERFLOW=5</code> を付けて、渡されたコマンドを <code>exec</code> で実行する。</p>
+  </div>
+</div>
+
+<p>ホスト名とスキーマ名を環境変数で上書きできない固定値にしているのは、上書き用の変数を用意すると検査もその変数を参照することになり、検査の意味がなくなるためです（スクリプト内のコメント）。<a class="ref" data-ref="scripts/azure-db/check_connection.py">check_connection.py</a> は <code>SELECT 1</code> と SSL の暗号方式を読むだけの疎通確認で、例外メッセージに接続文字列が混ざる場合に備えてパスワード部分を伏せてから表示します。</p>
+
+<div class="note warn">
+<p>講義サーバーの結合テストは実行しない決まりです（共用サーバーへの負荷とデータの汚染を避けるため。DS-DEC-44）。<code>with-azure-db.sh</code> 経由で動かしてよいのは、マイグレーション、seed、疎通確認、単体テストです。本物の氏名・住所・電話・メールも入れません。</p>
+</div>
+
+<p>DB への SSL 接続は、<code>DATABASE_URL</code> に <code>ssl_ca=&lt;CA 証明書のパス&gt;</code> のクエリを付ける形で行います（<code>scripts/azure-deploy/02-settings.sh</code> の <code>DATABASE_URL</code> の組み立てと、<code>with-azure-db.sh</code> の L82）。公開環境の証明書は、<code>04-deploy-api.sh</code> が zip に同梱し、App Service 上の <code>/home/site/wwwroot/certs/azure-mysql-ca.pem</code> を指します。</p>
+
+<h3 id="s07-env">環境変数の一覧：名前と役割（値は書かない）</h3>
+
+<p>api の設定は <a class="ref" data-ref="apps/api/app/core/config.py::Settings">Settings</a>、web の設定は <a class="ref" data-ref="apps/web/lib/env-validation.ts::validateEnv">validateEnv</a> が受け取るものが正本です。ローカルでは api が <code>apps/api/.env</code>、web が <code>apps/web/.env.local</code> に書き、公開環境では <code>02-settings.sh</code> が App Service のアプリ設定に入れます。どちらの <code>.env</code> もコミットできません（<code>.gitignore</code> と pre-commit の二重）。</p>
+
+<div class="table-wrap">
+<table class="filterable">
+<thead><tr><th>名前</th><th>置き場</th><th>役割</th><th>秘密</th><th>公開環境での設定</th></tr></thead>
+<tbody>
+<tr><td><code>APP_ENV</code></td><td>api・web</td><td><code>development</code>／<code>test</code>／<code>production</code>。<code>production</code> で Swagger 非表示、Cookie に <code>Secure</code></td><td>いいえ</td><td>両方 <code>production</code></td></tr>
+<tr><td><code>DATABASE_URL</code></td><td>api</td><td>DB の接続 URL（<code>mysql+asyncmy://…</code>）</td><td>はい</td><td>02-settings.sh が組み立てる</td></tr>
+<tr><td><code>INTERNAL_TOKEN</code></td><td>api・web</td><td>BFF から FastAPI への内部認証。両方で同じ値</td><td>はい</td><td>乱数生成して両方に設定</td></tr>
+<tr><td><code>CORS_ALLOW_ORIGIN</code></td><td>api</td><td>許可する 1 オリジン（web の URL）</td><td>いいえ</td><td>web の App Service の URL</td></tr>
+<tr><td><code>PAYMENT_STUB_RESULT</code></td><td>api</td><td>決済スタブの結果 <code>ok</code>／<code>ng</code>。未設定は <code>ok</code></td><td>いいえ</td><td>未設定（常に ok）</td></tr>
+<tr><td><code>DB_POOL_SIZE</code>・<code>DB_MAX_OVERFLOW</code></td><td>api</td><td>DB 接続プールの本数（既定 20・10）</td><td>いいえ</td><td>5・5</td></tr>
+<tr><td><code>DB_SSL_CA_PATH</code></td><td>api</td><td>CA 証明書のパス。設定項目はあるが、コードからは参照されていない</td><td>いいえ</td><td>設定済み（効いていない）</td></tr>
+<tr><td><code>IMAGE_BASE_URL</code></td><td>web（api の Settings にも項目あり）</td><td>商品画像の配信ベース URL。web は必須</td><td>いいえ</td><td>web の URL</td></tr>
+<tr><td><code>TEST_RESERVE_DELAY_MS</code></td><td>api</td><td>テスト専用の待ち時間（<code>APP_ENV=test</code> のときだけ有効）</td><td>いいえ</td><td>設定しない</td></tr>
+<tr><td><code>API_BASE_URL</code></td><td>web</td><td>FastAPI の URL（サーバー側だけ）。必須</td><td>いいえ</td><td>api の App Service の URL</td></tr>
+<tr><td><code>SESSION_COOKIE_DOMAIN</code></td><td>web</td><td>Cookie の Domain 属性。空なら付けない</td><td>いいえ</td><td>設定しない</td></tr>
+<tr><td><code>TRUSTED_PROXY_HOPS</code></td><td>web</td><td>信頼するプロキシの段数（既定 0）。利用者 IP の決定に使う（第 4 章）</td><td>いいえ</td><td><strong>設定しない</strong>（設計書では 1）</td></tr>
+<tr><td><code>BASIC_AUTH_USER</code>・<code>BASIC_AUTH_PASSWORD</code></td><td>web</td><td>Basic 認証の ID・パスワード。両方そろえて設定する</td><td>はい</td><td>乱数生成して設定</td></tr>
+<tr><td><code>DEMO_PUBLIC_UNTIL</code></td><td>web</td><td>期間限定の帯に出す終了日（<code>YYYY-MM-DD</code>）</td><td>いいえ</td><td><code>2026-10-09</code></td></tr>
+<tr><td><code>DATABASE_URL_TEST</code></td><td>api のテスト</td><td>結合テストの接続先（DB 名は <code>_test</code> で終わる）。無ければ結合テストはスキップ</td><td>はい</td><td>公開環境では使わない</td></tr>
+<tr><td><code>MYSQL_PASSWORD</code></td><td>リポジトリ直下の <code>.env</code></td><td>Docker の MySQL のパスワード（<code>docker-compose.yml</code> が読む）</td><td>はい</td><td>公開環境では使わない</td></tr>
+<tr><td><code>WEBSITES_PORT</code>・<code>PORT</code></td><td>web（App Service）</td><td>standalone の <code>server.js</code> が待ち受けるポート 3000</td><td>いいえ</td><td>3000</td></tr>
+<tr><td><code>WEBSITES_CONTAINER_START_TIME_LIMIT</code></td><td>web（App Service）</td><td>起動を待つ秒数（600）</td><td>いいえ</td><td>600</td></tr>
+<tr><td><code>SCM_DO_BUILD_DURING_DEPLOYMENT</code></td><td>api（App Service）</td><td>zip デプロイ時に <code>pip install</code> を走らせる</td><td>いいえ</td><td><code>true</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>スクリプト側にも、操作を変える環境変数があります。<code>GUAPP_NAME_SUFFIX</code>（名前の衝突を避ける連番）、<code>GUAPP_ASSUME_YES=1</code>（Azure のコンテキスト確認のプロンプトを省く。<code>99-delete.sh</code> の最終確認は省けない）、<code>GUAPP_CA_DIR</code>（CA 証明書の保存先）です。</p>
+
+<div class="note warn">
+<p>公開環境の設定には、設計書と食い違う点が 2 つあります。<code>TRUSTED_PROXY_HOPS</code> はデプロイスクリプトのどこにも設定がなく、設計書の表（App Service 配下は 1）と異なります（第 4 章、第 9 章の A1）。また、<code>DB_SSL_CA_PATH</code> は設定しているのにコードが読まないため、SSL は <code>DATABASE_URL</code> の <code>ssl_ca</code> だけで成り立っています。</p>
+</div>
+</section>

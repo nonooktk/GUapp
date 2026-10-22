@@ -1,0 +1,141 @@
+<section id="r10" data-title="Basic 認証と公開期間の帯">
+<h2>10. Basic 認証と公開期間の帯</h2>
+
+<h3 id="r10-start">指定のされ方と 30 秒版</h3>
+<p class="asked">「サイトへのアクセスをどう制限していますか」「認証の仕組み」「公開環境の守り方」「ヘッダーの上の『期間限定で公開』の帯」</p>
+<div class="script">
+  <p class="script-title">30 秒版</p>
+  <p>レビュー用に公開しているサイトは、Next.js の <code>proxy.ts</code> で、全ページと BFF の <code>/api/*</code> に Basic 認証をかけています。ID とパスワードは環境変数で管理していて、照合は、かかる時間が一定になる比較で行っています。この認証は Next.js の中だけで完結していて、FastAPI までは届きません。全ページの上に出る「期間限定で公開しています」の帯は、環境変数の終了日を <code>layout.tsx</code> が読んで表示しています。</p>
+</div>
+<div class="note fact"><p>この章で扱うのは、個別の機能というより、全ページにかかる仕組みです。ID とパスワードの値そのものは、この手引きにもコードにも書いていません（環境変数にだけあります）。</p></div>
+
+<h3 id="r10-s2">② 画面からバックエンドへ（proxy で判定されるまで）</h3>
+<p>Next.js 16 で、従来の <code>middleware.ts</code> が <code>proxy.ts</code> に名前を変えました。ページの表示も <code>/api/*</code> も、ルートの処理に入る前に、まずここを通ります。</p>
+<ol class="route" data-title="順路：リクエストが proxy.ts で判定されるまで">
+  <li class="stop" data-ref="apps/web/proxy.ts::config" data-focus="matcher:" data-layer="bff" data-link="全リクエストの前に Next.js が呼ぶ">
+    <p class="stop-see"><code>config.matcher</code>。<code>_next/static</code>・<code>_next/image</code>・<code>favicon.ico</code>・<code>sitemap.xml</code>・<code>robots.txt</code> を除く全リクエストが対象。<code>/api/*</code> も含む。</p>
+    <p class="stop-say">静的ファイルを除いた、全ページと BFF が対象です。静的ファイルは、ファイル名にハッシュが付いていて、中身もビルドの成果物なので、対象から外しました（公開追補 7.1）。</p>
+    <p class="stop-next">次へ: 同じファイルの <code>basicAuthConfig</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/proxy.ts::basicAuthConfig" data-focus="parseBasicAuthConfig(process.env)" data-layer="bff">
+    <p class="stop-see">モジュールの読み込み時に 1 回だけ、環境変数から設定を作る。</p>
+    <p class="stop-say">環境変数を読むのは、起動後にこのファイルを最初に読み込むときの 1 回だけです。リクエストのたびには読みません。</p>
+    <p class="stop-next">次へ: <code>parseBasicAuthConfig</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/basic-auth.ts::parseBasicAuthConfig" data-focus="if (!user || !password) {" data-layer="bff">
+    <p class="stop-see">両方未設定なら <code>null</code>（認証なし）。片方だけなら <code>BasicAuthConfigError</code> を投げる。</p>
+    <p class="stop-say">両方とも空なら、ローカル開発用に認証なしで通します。片方だけ入っているのは設定ミスなので、例外を投げます。無防備なまま公開してしまう事故が、全リクエストの失敗という形で表に出るようにしています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/proxy.ts</code> に戻り、<code>proxy</code> 関数へ（<kbd>⌃-</kbd> で戻る）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/proxy.ts::proxy" data-focus="verifyBasicAuthHeader(header" data-layer="bff">
+    <p class="stop-see"><code>proxy</code>。<code>Authorization</code> ヘッダを取り、<code>verifyBasicAuthHeader</code> に ID・パスワードの期待値と一緒に渡す。</p>
+    <p class="stop-say">リクエストのヘッダを、期待する ID・パスワードと照らし合わせます。</p>
+    <p class="stop-next">次へ: <code>verifyBasicAuthHeader</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/basic-auth.ts::verifyBasicAuthHeader" data-focus="Buffer.from(match[1], &quot;base64&quot;)" data-layer="bff">
+    <p class="stop-see">書式の確認、base64 の復号、最初のコロンで ID とパスワードに分ける。例外は投げず、書式が違えば <code>false</code>。</p>
+    <p class="stop-say">書式が違う場合も、base64 が壊れている場合も、コロンが無い場合も、どれも「認証失敗」として扱います。例外は投げません。</p>
+    <p class="stop-next">次へ: 下の <code>timingSafeEqualString(user, expectedUser)</code> の関数名にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/basic-auth.ts::timingSafeEqualString" data-focus="timingSafeEqual(digestA, digestB)" data-layer="bff">
+    <p class="stop-see">SHA-256 で固定長にしてから <code>timingSafeEqual</code> で比べる。</p>
+    <p class="stop-say">入力の長さが違うせいで比較が早く終わることのないよう、先に固定長のダイジェストにしてから比べます。ID とパスワードは別々に比べて、両方とも比べ終えてから結果を合わせます。</p>
+  </li>
+</ol>
+
+<h3 id="r10-s3">③ バックエンドの処理</h3>
+<p>FastAPI には届きません。<code>proxy</code> は Next.js の中の処理で、認証に失敗したリクエストは、ここで 401 を返して終わります。認証に通ると <code>NextResponse.next()</code> で通常のページや BFF の処理に進みます。その先は他の章で扱う経路です。</p>
+<ol class="route" data-title="順路：proxy が 401 を返す、または素通しにするところ">
+  <li class="stop" data-ref="apps/web/proxy.ts::proxy" data-focus="return new Response(null, {" data-layer="bff">
+    <p class="stop-see">認証に失敗したときの応答。本文なしの 401 に <code>WWW-Authenticate: Basic realm="GUapp demo"</code> を付ける。</p>
+    <p class="stop-say">失敗したら、本文なしの 401 を返して終わります。ブラウザはこのヘッダを手がかりに、ID とパスワードの入力欄を出します。</p>
+    <p class="stop-next">次へ: 同じ関数の先頭へスクロール</p>
+  </li>
+  <li class="stop" data-ref="apps/web/proxy.ts::proxy" data-focus="if (basicAuthConfig === null) {" data-layer="bff">
+    <p class="stop-see">設定が両方未設定（<code>null</code>）のときは認証せずに通す分岐。</p>
+    <p class="stop-say">環境変数が無いローカル開発では、認証なしで通します。公開環境では、アプリ設定に両方とも入れています。</p>
+  </li>
+</ol>
+<div class="table-wrap">
+<table>
+<thead><tr><th>状況</th><th>どこで判定するか</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td><code>Authorization</code> が無い、または ID・パスワードが違う</td><td><code>proxy</code> → <code>verifyBasicAuthHeader</code></td><td>本文なしの 401 と <code>WWW-Authenticate</code>。ブラウザが認証の入力欄を出す</td></tr>
+<tr><td>書式が Basic でない、base64 が壊れている、コロンが無い</td><td><code>verifyBasicAuthHeader</code></td><td>例外にせず <code>false</code>。結果は 401</td></tr>
+<tr><td>環境変数が両方未設定</td><td><code>parseBasicAuthConfig</code> が <code>null</code></td><td>認証なしで通る</td></tr>
+<tr><td>環境変数が片方だけ</td><td><code>parseBasicAuthConfig</code> が <code>BasicAuthConfigError</code></td><td>モジュールの読み込みで失敗し、リクエストは処理されない（実機での挙動は未確認）</td></tr>
+<tr><td><code>_next/static</code>・<code>_next/image</code>・<code>favicon.ico</code> など</td><td><code>config.matcher</code> が対象にしない</td><td><code>proxy</code> が呼ばれず、認証なしで配信</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r10-s4">④ 応答から表示まで（帯の表示）</h3>
+<p>ここからは、認証に通ったあと全ページの上に出る「期間限定で公開しています」の帯の話です。終了日は環境変数 <code>DEMO_PUBLIC_UNTIL</code>（<code>YYYY-MM-DD</code>）で指定します。<code>NEXT_PUBLIC_</code> を付けていないので、ビルドし直さなくても、値を変えて延長できます（公開追補 6.1、DS-DEC-50）。</p>
+<ol class="route" data-title="順路：終了日が帯の文言になるまで">
+  <li class="stop" data-ref="apps/web/app/layout.tsx::RootLayout" data-focus="parseDemoPublicUntil(process.env.DEMO_PUBLIC_UNTIL)" data-layer="screen" data-link="proxy が通したあとの描画">
+    <p class="stop-see"><code>RootLayout</code>。実行時の環境変数を読み、<code>parseDemoPublicUntil</code> で検証して <code>YYYY/MM/DD</code> にする。</p>
+    <p class="stop-say">全ページ共通のレイアウトが、環境変数の終了日を読みます。</p>
+    <p class="stop-next">次へ: <code>parseDemoPublicUntil</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/demo-banner.ts::parseDemoPublicUntil" data-focus="if (!match) {" data-layer="screen">
+    <p class="stop-see">未設定・空は <code>null</code>（警告なし）。形式が違う日付と、実在しない日付は警告を出して <code>null</code>。</p>
+    <p class="stop-say">形式を間違えていても、例外にはしません。帯を出さずに警告だけ残して、環境変数 1 件の誤りでサイト全体が止まらないようにしています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>apps/web/components/DemoPeriodBanner.tsx</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/DemoPeriodBanner.tsx::DemoPeriodBanner" data-focus="if (!untilDisplay) return null;" data-layer="screen">
+    <p class="stop-see">文字列が <code>null</code> なら何も描画しない。あれば <code>role="status"</code> の帯に終了日を入れる。</p>
+    <p class="stop-say">帯の文言に「期間限定」「デモ」と書いてあるので、色が見えなくても意味が伝わります。本番でも常に表示します。</p>
+  </li>
+</ol>
+<p>帯の文言は <span class="loc" data-ref="apps/web/components/DemoPeriodBanner.tsx::DemoPeriodBanner" data-focus="講義レビュー用のデモとして"></span> の行、配置は <span class="loc" data-ref="apps/web/app/layout.tsx::RootLayout" data-focus="&lt;DemoPeriodBanner untilDisplay"></span> の行です（ヘッダーより前）。</p>
+
+<h3 id="r10-s5">⑤ テスト 1 本の説明</h3>
+<p>推しは、環境変数が片方だけのときに、起動時（モジュールの読み込み時）に失敗することを確かめる <span class="tid">UT-WEB-09</span> の 1 本です。設計判断（DS-DEC-49）の「設定ミスのまま無防備に公開しない」に対応します。 <span class="tstat pass">✅ 通過（ローカル）</span> web のテストなので CI でも実行されます。</p>
+<ul>
+  <li>テスト: <a class="ref" data-ref="apps/web/tests/ut-web-09.proxy-basic-auth.test.ts#L39-44" data-focus="片方だけ設定されていると import 時（起動時相当）に BasicAuthConfigError で失敗する">ut-web-09.proxy-basic-auth.test.ts の「片方だけ設定されていると import 時（起動時相当）に BasicAuthConfigError で失敗する」</a>（テスト設計書 公開追補 3.1。ST-SEC-16b に当たる UT レベルのテスト）</li>
+  <li>前提: テストごとに環境変数を作り直し、<code>vi.resetModules()</code> を呼ぶ。<code>proxy.ts</code> は読み込み時に環境変数を 1 回だけ評価する設計のため、読み込み直すたびに結果が変わる。</li>
+  <li>操作: <code>BASIC_AUTH_USER</code> だけを設定し、<code>proxy</code> を動的 <code>import</code> で読み込む。</li>
+  <li>確認: <span class="loc" data-ref="apps/web/tests/ut-web-09.proxy-basic-auth.test.ts#L39-44" data-focus="rejects.toMatchObject"></span> で、読み込みが <code>BasicAuthConfigError</code> で失敗する。<code>instanceof</code> でなく <code>name</code> で比べているのは、<code>vi.resetModules()</code> のあとはクラスが別のモジュールインスタンスになりうるため（コメントに記載）。</li>
+</ul>
+<p>実装側は、<a class="ref" data-ref="apps/web/lib/basic-auth.ts::parseBasicAuthConfig">parseBasicAuthConfig</a> の <code>BasicAuthConfigError</code> と、<a class="ref" data-ref="apps/web/proxy.ts::basicAuthConfig">basicAuthConfig</a> の読み込みです。同じ describe には、次の 5 本があります。両方未設定なら 401 にしないこと、Authorization ヘッダが無ければ 401 と <code>WWW-Authenticate</code> を返すこと、誤った認証は 401 になること、正しい認証は 401 にならないこと、<code>config.matcher</code> の中身です。ID・パスワードの正誤とヘッダの書式は、<code>ut-web-09.basic-auth.test.ts</code> の 15 本で確かめています。</p>
+
+<h3 id="r10-s6">⑥ 仕様書との突き合わせ</h3>
+<p>基準は <code>docs/04_テスト設計書/GU_ECsite_テスト設計書_公開追補_draft-v1.md</code>（以下「公開追補」）と、設計仕様書 公開追補です。</p>
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>確認する条件</th><th>仕様書</th><th>テスト・実施記録の実際</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>認証なしで 401 <span class="tid">ST-SEC-16</span></td><td><code>/</code>・<code>/products</code>・<code>/api/health</code> が 401 で、<code>WWW-Authenticate</code> が付く</td><td>自動テストで見ているのは <code>/</code> です（<code>/api/products</code> は誤った認証のケース）。公開環境の確認記録（2026-09-25）では <code>/</code> が 401。<code>/products</code>・<code>/api/health</code> の個別の記録は無い。仕様書の実施結果欄には、ローカルの standalone で確認したと書かれている</td><td class="warn">一部は記録なし</td></tr>
+<tr><td>誤った認証で 401 <span class="tid">ST-SEC-17</span></td><td>誤った ID・パスワードで 401</td><td><span class="tid">UT-WEB-09</span> で確認。公開環境でも確認の記録がある（2026-09-25）</td><td class="ok">一致</td></tr>
+<tr><td>正しい認証で通る <span class="tid">ST-SEC-18</span></td><td>200（<code>/api/health</code> も同じ扱い）</td><td><span class="tid">UT-WEB-09</span> では 401 にならないことを確認（<code>/api/cart</code>）。公開環境では <code>/</code> が 200（2026-09-25）</td><td class="ok">一致</td></tr>
+<tr><td>両方未設定は認証なし <span class="tid">ST-SEC-16a</span></td><td>401 にならず、ローカル開発を続けられる</td><td><span class="tid">UT-WEB-09</span> で確認</td><td class="ok">一致</td></tr>
+<tr><td>片方だけで起動失敗 <span class="tid">ST-SEC-16b</span></td><td>起動時（モジュール読み込み時）に失敗する</td><td><span class="tid">UT-WEB-09</span> で <code>BasicAuthConfigError</code> を確認。App Service 実機での起動確認は、仕様書にも「デプロイ後に確認する」とあるが、記録は無い</td><td class="warn">実機は未確認</td></tr>
+<tr><td>静的ファイルは認証しない <span class="tid">ST-SEC-16c</span></td><td><code>_next/static</code> を認証なしで取得して 200</td><td>自動テストは、<code>config.matcher</code> が仕様の文字列と等しいことを確かめるだけで、実際にどのパスが除外されるかは検証していない。ローカル standalone での確認は仕様書に書かれているが、<code>docs/05_検収/</code> に記録は無い</td><td class="warn">実際の除外は未検証</td></tr>
+<tr><td>時間一定の比較（DS-DEC-49）</td><td>SHA-256 にしてから <code>timingSafeEqual</code> で比べる</td><td>コードは仕様のとおり。テストが見ているのは正誤の判定だけで、比較時間が一定であることは検証していない</td><td class="warn">性質は未検証</td></tr>
+<tr><td>帯の表示 <span class="tid">ST-SEC-19</span>・<span class="tid">UT-WEB-10</span></td><td>終了日があれば「…まで期間限定で公開しています」、未設定・不正なら出さず警告</td><td>ユニットテストで、変換・警告・表示・非表示を確認。<code>layout.tsx</code> への配置を確かめる自動テストは無い。公開環境の記録では <code>2026/10/09</code> の表示を確認（2026-09-25）</td><td class="ok">一致</td></tr>
+<tr><td>テストの件数（公開追補 3.1）</td><td>basic-auth 15・proxy 6・demo-banner 11・DemoPeriodBanner 3</td><td>実際の件数も仕様書の記載と同じ（15・6・11・3）</td><td class="ok">一致</td></tr>
+</tbody>
+</table>
+</div>
+<p>状態: UT-WEB-09・UT-WEB-10 は <span class="tstat pass">✅ 通過（ローカル）</span>（CI でも実行）。公開環境での Basic 認証・帯の確認は <span class="tstat manual">🖐 手動で合格（2026-09-25）</span>。片方だけ設定した場合の実機確認と <code>_next/static</code> の実測は <span class="tstat none">— 実施記録なし</span>。</p>
+
+<h3 id="r10-qa">詰まりそうな質問</h3>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>ID とパスワードはどこで管理していますか</summary>
+  <div class="qa-body">
+    <p>環境変数 <code>BASIC_AUTH_USER</code> と <code>BASIC_AUTH_PASSWORD</code> です。<code>NEXT_PUBLIC_</code> を付けていないので、ブラウザには出ません。リポジトリにも入れていません。公開環境では、デプロイ用のスクリプト（<span class="loc" data-ref="scripts/azure-deploy/02-settings.sh#L110-118" data-focus="&quot;name&quot;: &quot;APP_ENV&quot;"></span> の近く）が値をその場で作り、Azure のアプリ設定に入れます。ターミナルには表示しません。レビュワーに伝えるため、ID とパスワードだけは、git の管理対象外にした権限 600 のファイルに残します。</p>
+    <p>弱点: このスクリプトは、再実行するたびに内部トークンと Basic 認証の値を作り直します（解説書 第 9 章 A1 の補足）。すでに伝えた資格情報が変わってしまうので、反映の方法はその都度選びます。</p>
+    <div class="followup">
+      <p class="followup-q">追撃: Basic 認証だけで十分ですか</p>
+      <p>意見: レビュー期間に限って、不特定多数には見せない、という目的には足りると考えています。ただ、FastAPI の App Service にはアクセス制限が掛かっていません（設計の方針とは違います。解説書 第 9 章 D4）。FastAPI は内部トークンで守っていて、閉域化は後の対応になります。</p>
+    </div>
+  </div>
+</details>
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>静的ファイルを認証の対象から外して問題ありませんか</summary>
+  <div class="qa-body">
+    <p>設計の段階で、外すと決めたものです（公開追補 7.1、DS-DEC-48）。<code>_next/static</code> と <code>_next/image</code> はビルド時にハッシュ付きのファイル名になり、そのファイル名は認証済みの HTML からしか分かりません。中身もアプリのコードと画像で、個人情報や非公開の業務データは含みません。</p>
+    <p>弱点: 除外されていること自体を確かめるテストはありません。自動テストが見ているのは <code>matcher</code> の文字列が仕様どおりかどうかまでで、Next.js がその正規表現でどのパスを除外するかは検証していません。</p>
+  </div>
+</details>
+</section>

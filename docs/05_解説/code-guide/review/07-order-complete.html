@@ -1,0 +1,410 @@
+<section id="r07" data-title="注文完了画面と注文照会">
+<h2>7. 注文完了画面と注文照会</h2>
+
+<p class="asked">「注文完了画面を説明してください」「注文番号とメールアドレスで照会する処理を説明してください」「他人の注文を見られませんか」「レート制限はどう掛けていますか」「完了画面をリロードしたらどうなりますか」</p>
+
+<div class="script">
+<p class="script-title">30 秒版</p>
+<p>完了画面は、注文を確定した直後なら、sessionStorage に保存した注文をそのまま表示します。あとから見るときは、注文番号とメールアドレスを添えて POST /api/orders/{番号}/lookup を送ります。リクエストは BFF を通って FastAPI に届き、番号とメールの両方が一致した注文だけを返します。一致しないときは、注文の有無が分からないよう、番号違いでもメール違いでも同じ 404 です。同じ IP からの照会は、1 時間に 100 回を超えると 429 になります。</p>
+</div>
+
+<div class="note warn"><p>未実装・スタブ: 確認メールは送信せず、サーバー側のファイルに書き出すだけです。そのため、完了画面には「テスト環境ではメールは送信されず、サーバー側に保存されます」と出ます。会員のマイページからの注文履歴（P2）は未実装です。<span class="tstat notimpl">未実装</span></p></div>
+
+<h3 id="r07-to-backend">② 画面からバックエンドへ</h3>
+
+<p>完了画面を表示するだけなら、API は呼びません（sessionStorage に保存した注文を出すだけです）。バックエンドを呼ぶのは、保存した注文が無いときに出る照会フォームを送信したときです。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>区間</th><th>メソッドとパス</th><th>主なヘッダー</th><th>本文</th></tr></thead>
+<tbody>
+<tr><td>ブラウザ → BFF</td><td>POST <code>/api/orders/{注文番号}/lookup</code></td><td><code>X-CSRF-Token</code>（Cookie <code>csrf_token</code> と一致が必要）</td><td><code>{"guest_email": "…"}</code>（メールは URL に載せない）</td></tr>
+<tr><td>BFF → FastAPI</td><td>POST <code>/api/v1/orders/{注文番号}/lookup</code></td><td><code>X-Internal-Token</code>、<code>X-Forwarded-For</code>（BFF が決めた利用者の IP。レート制限が IP を数えるときに使う）、<code>X-Cart-Token</code>（付いても使わない）</td><td>同じ <code>{"guest_email": "…"}</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<ol class="route" data-title="順路：完了画面の照会フォームから FastAPI への呼び出しまで">
+  <li class="stop" data-ref="apps/web/app/orders/complete/page.tsx::OrderCompletePage" data-focus="isOrderNumber(raw) ? raw : null" data-layer="screen">
+    <p class="stop-see">URL の <code>?n=</code> を <code>isOrderNumber</code>（<code>GU-YYMMDD-</code> ＋ I・O・0・1 を除く 8 文字）で確かめ、合わなければ <code>null</code>。本体 <code>OrderComplete</code> に番号を渡す。Next.js 16 では <code>searchParams</code> が Promise。</p>
+    <p class="stop-say">完了画面のページです。URL の注文番号は、形を確かめてから本体に渡します。形が違えば、番号なしとして扱います。</p>
+    <p class="stop-next">次へ: <code>OrderComplete</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="if (orderNumber !== null &amp;&amp; v.order_number !== orderNumber) return null;" data-layer="screen">
+    <p class="stop-see">sessionStorage の <code>guapp.lastOrder</code> を読み、URL の番号と一致するときだけ <code>stored</code> として使う。別の番号で開かれたとき（2 タブなど）は null にして、保存済みの注文は見せない。</p>
+    <p class="stop-say">保存してある注文は、URL の番号と一致するときだけ表示します。違う番号で開かれたときは、保存済みの注文は使いません。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進む</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="&lt;LookupForm" data-layer="screen">
+    <p class="stop-see"><code>order</code>（<code>found ?? stored</code>）が無ければ <code>LookupForm</code>。番号の初期値は URL の <code>n</code>、メールは空。照会に成功したら <code>onFound</code> で保存して表示に切り替える。</p>
+    <p class="stop-say">保存した注文が無いときは、照会フォームを出します。注文番号は URL から入れ、メールアドレスは本人に入力してもらいます。</p>
+    <p class="stop-next">次へ: <code>LookupForm</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::LookupForm" data-focus="const n = number.trim().toUpperCase();" data-layer="screen">
+    <p class="stop-see"><code>onSubmit</code> の先頭。番号を trim して大文字にし、<code>isOrderNumber</code> と <code>isValidEmail</code> で形式を確かめる。どちらかが合わなければ、API を呼ばずに「注文番号かメールアドレスが違います」と出す。形式の不備も同じ文言にして、番号が存在するかどうかを悟らせない。</p>
+    <p class="stop-say">まず画面で、番号とメールの形を確かめます。形が合わないときも、番号が違うのかメールが違うのかは区別せず、同じ文言を出します。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進む</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::LookupForm" data-focus="onFound(await lookupOrder(n, em));" data-layer="screen">
+    <p class="stop-see">検査を通ったら <code>lookupOrder(n, em)</code>。成功は <code>onFound</code>、失敗は <code>catch</code> でメッセージにする（④）。<code>busy</code> で二重送信を止め、<code>finally</code> で戻す。</p>
+    <p class="stop-say">形が合っていれば、照会の API を呼びます。</p>
+    <p class="stop-next">次へ: <code>lookupOrder</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::lookupOrder" data-focus="{ guest_email: guestEmail }" data-layer="screen">
+    <p class="stop-see">POST <code>/api/orders/{番号}/lookup</code>。番号は URL のパスに、メールは本文に入れる。内部で呼ぶ <code>post</code> は 5 章と同じ（CSRF ヘッダーを付け、失敗は <code>OrderApiError</code>）。</p>
+    <p class="stop-say">注文番号はパスに、メールアドレスは本文に入れます。メールを URL に載せないのは、アクセスログなどに残らないようにするためです。</p>
+    <p class="stop-next">次へ: URL は文字列なので <kbd>⌘P</kbd> で <code>orders/[orderNumber]/lookup/route</code> と入力して開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="verifyCsrf(request)" data-layer="bff" data-link="HTTP POST /api/orders/{番号}/lookup（CSRF トークン付き）">
+    <p class="stop-see">最初に CSRF を検証。通らなければ 403 <code>forbidden</code> で FastAPI へは進まない。</p>
+    <p class="stop-say">BFF は、最初に CSRF を検証します。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進む</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="if (!isOrderNumber(orderNumber)) {" data-layer="bff">
+    <p class="stop-see">パスの注文番号が <code>GU-YYMMDD-XXXXXXXX</code> の形でなければ、FastAPI を呼ばずに 404 <code>not_found</code>。存在しない番号と、形の違う番号を区別しない。</p>
+    <p class="stop-say">番号の形が違うものは、FastAPI を呼ばずに BFF で 404 にします。</p>
+    <p class="stop-next">次へ: 同じ関数の下へ進む</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="email.length &gt; 254" data-layer="bff">
+    <p class="stop-see">本文の <code>guest_email</code> が文字列でない・空・254 文字超なら、FastAPI を呼ばずに 400 <code>validation_error</code>（<code>fields</code> は <code>guest_email</code>・<code>format</code>）。</p>
+    <p class="stop-say">メールの形が明らかにおかしいときは、BFF で 400 にします。形式の本検査は FastAPI の Pydantic が行います。</p>
+    <p class="stop-next">次へ: 同じ関数の最後の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/app/api/orders/[orderNumber]/lookup/route.ts::POST" data-focus="{ json: { guest_email: email } }" data-layer="bff">
+    <p class="stop-see"><code>proxyOrderRequest(request, "/orders/番号/lookup", { json: { guest_email: email } })</code>。番号は <code>encodeURIComponent</code> してパスに入れる。</p>
+    <p class="stop-say">メールだけを本文に入れて、取り次ぎ関数に渡します。</p>
+    <p class="stop-next">次へ: <code>proxyOrderRequest</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="[FORWARDED_FOR_HEADER]: clientIp(request)" data-layer="bff">
+    <p class="stop-see"><code>X-Forwarded-For</code> に <code>clientIp(request)</code> の値を載せる。FastAPI のレート制限は、この値を IP として数える。利用者が付けた <code>X-Forwarded-For</code> は転送しない（偽装で制限を逃れたり、他人を 429 にしたりされないため）。</p>
+    <p class="stop-say">レート制限が数える IP は、BFF が決めた値を X-Forwarded-For に載せて渡します。利用者が自分で付けたヘッダーは信用しません。</p>
+    <p class="stop-next">次へ: <code>clientIp</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::clientIp" data-focus="trustedProxyHops: getEnv().TRUSTED_PROXY_HOPS" data-layer="bff">
+    <p class="stop-see">環境変数 <code>TRUSTED_PROXY_HOPS</code>（既定 0）を <code>resolveClientIp</code> に渡す。</p>
+    <p class="stop-say">信頼するプロキシの段数を環境変数から取って、IP を決める関数に渡します。</p>
+    <p class="stop-next">次へ: <code>resolveClientIp</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client-ip.ts::resolveClientIp" data-focus="if (hops &gt;= 1) {" data-layer="bff">
+    <p class="stop-see">段数が 0 なら、利用者が付けられるヘッダーは一切使わず、接続元（無ければ <code>127.0.0.1</code>）。1 以上なら、<code>X-Client-IP</code>（App Service が付ける）→ <code>X-Forwarded-For</code> を右から数えた位置の順。</p>
+    <p class="stop-say">段数が 0 のときは、ヘッダーを一切使いません。App Service の後ろでは 1 にして、サービスが付けた値だけを使う設計です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/api.ts</code> を開き、<code>apiFetch</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/api.ts::apiFetch" data-focus="X-Internal-Token" data-layer="bff">
+    <p class="stop-see">URL は <code>API_BASE_URL</code> ＋ <code>/api/v1</code> ＋ <code>/orders/番号/lookup</code>。<code>X-Internal-Token</code> を付ける。429 のときだけ <code>Retry-After</code> を読み取って返す。</p>
+    <p class="stop-say">内部トークンを付けて、バックエンドの FastAPI、POST /api/v1/orders/{番号}/lookup に送ります。</p>
+    <p class="stop-next">次へ（③）: パスは文字列なので <kbd>F12</kbd> では飛べません。<kbd>⌘P</kbd> で <code>main.py</code> を開く</p>
+  </li>
+</ol>
+
+<div class="note warn"><p>今は直していない点（コード解説書 9 章 A1）: 公開環境では、注文照会のレート制限が利用者全員で 1 つの枠になる見込みです。BFF が信頼するプロキシ数 <code>TRUSTED_PROXY_HOPS</code> は、設計仕様書 8.2 では App Service 配下で 1 と決めていますが、web のアプリ設定を投入する <code>scripts/azure-deploy/02-settings.sh</code> に、この変数がありません（grep で確認）。0 のままだと、送信元 IP が全員 <code>127.0.0.1</code> になります。そうなると、誰かが 100 回照会しただけで、ほかの利用者も 429 になります。Azure 上の実際の設定値は見ていません。</p></div>
+
+<h3 id="r07-backend">③ バックエンドの処理</h3>
+
+<ol class="route" data-title="順路：FastAPI の lookup からテーブルの検索まで">
+  <li class="stop" data-ref="apps/api/app/main.py::create_app" data-focus="app.state.lookup_rate_limiter = SlidingWindowRateLimiter()" data-layer="api">
+    <p class="stop-see">レート制限器は、アプリ（プロセス）ごとに 1 つ。<code>app.state</code> に置く。中身は IP ごとの時刻のリストで、メモリ上にしかない。</p>
+    <p class="stop-say">レート制限の記録は、プロセスのメモリ上に置いています。アプリごとに 1 つです。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>build_protected_router</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/main.py::build_protected_router" data-focus="Depends(verify_internal_token)" data-layer="api">
+    <p class="stop-see"><code>/api/v1</code> 配下の全ルーターに <code>verify_internal_token</code>。<code>orders.router</code> もここに登録されている。</p>
+    <p class="stop-say">/api/v1 配下には、内部トークンの検証が付いています。</p>
+    <p class="stop-next">次へ: <code>verify_internal_token</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/security.py::verify_internal_token" data-focus="raise AppError(401" data-layer="api">
+    <p class="stop-see">無い・不一致・未設定は 401 <code>unauthorized</code>。これが先に走るので、トークンの無い呼び出しはレート制限の回数にも入らないと思われる（ルーター全体の依存関数が先に解決される FastAPI の仕組みから読んだ推測で、テストでは確かめていない）。</p>
+    <p class="stop-say">内部トークンが違うときは 401 です。BFF 以外からは、ここで止まります。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> を開き、<kbd>⌘⇧O</kbd> で <code>lookup_order</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/routers/orders.py::lookup_order" data-focus="dependencies=[Depends(lookup_rate_limit)]" data-layer="api">
+    <p class="stop-see">POST <code>/api/v1/orders/{order_number}/lookup</code>。デコレータの <code>dependencies</code> でレート制限の依存関数を付ける。<code>order_number</code> は文字列のまま受け、形の検査はこの層では行わない。</p>
+    <p class="stop-say">照会のエンドポイントには、レート制限の依存関数を付けています。</p>
+    <p class="stop-next">次へ: <code>lookup_rate_limit</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/rate_limit.py::lookup_rate_limit" data-focus="retry_after = limiter.hit(client_ip(request))" data-layer="api">
+    <p class="stop-see">IP を <code>client_ip</code> で決め、<code>limiter.hit</code> を呼ぶ。上限を超えていれば <code>AppError(429, "rate_limited", headers={"Retry-After": …})</code>。</p>
+    <p class="stop-say">IP ごとに回数を数え、上限を超えたら 429 を返します。待つ秒数は Retry-After のヘッダーで伝えます。</p>
+    <p class="stop-next">次へ: <code>client_ip</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/rate_limit.py::client_ip" data-focus="[0].strip()" data-layer="api">
+    <p class="stop-see"><code>X-Forwarded-For</code> の先頭を IP とみなす。無ければ接続元。FastAPI は内部トークンを通った呼び出しだけを受けるので、このヘッダーは BFF が付けたものとして信用している。</p>
+    <p class="stop-say">FastAPI は、BFF が付けた X-Forwarded-For の先頭を IP として数えます。直接叩かれても、内部トークンが無ければここまで来ません。</p>
+    <p class="stop-next">次へ: <kbd>⌘⇧O</kbd> で <code>SlidingWindowRateLimiter.hit</code> へ（または <code>limiter.hit</code> にカーソルを置いて <kbd>F12</kbd>）</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/core/rate_limit.py::SlidingWindowRateLimiter.hit" data-focus="if len(q) &gt;= self.limit:" data-layer="api">
+    <p class="stop-see">窓（3,600 秒）より古い記録を捨て、残りが 100 件以上なら <code>Retry-After</code> の秒数を返す。100 件未満なら今回の時刻を追加して <code>None</code>（通す）。404 になった呼び出しも回数に入る。回数はプロセスのメモリにあり、ワーカーごとに別々に数える。</p>
+    <p class="stop-say">直近 1 時間の呼び出しが 100 回に達していたら制限します。404 になった呼び出しも数えるので、総当たりで番号を試す回数も抑えられます。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開き、<code>LookupIn</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::LookupIn" data-focus="guest_email: EmailStr = Field(max_length=254)" data-layer="api">
+    <p class="stop-see">本文の入力検査。メールは <code>EmailStr</code> で 254 文字以内。満たさないと 400 <code>validation_error</code>（<code>guest_email</code>・<code>format</code>）。</p>
+    <p class="stop-say">本文のメールアドレスは、Pydantic で形を検査します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>routers/orders.py</code> に戻り、<code>lookup_order</code> の最後の行の <code>orders_service.lookup_order</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::lookup_order" data-focus="raise AppError(404" data-layer="service" data-link="関数の呼び出し">
+    <p class="stop-see"><code>get_by_number_and_email</code> が <code>None</code> なら 404 <code>not_found</code>。番号が無い場合とメールが違う場合を区別しない。見つかれば <code>build_order_response</code> で注文応答を作る。</p>
+    <p class="stop-say">番号が無い場合も、メールが違う場合も、同じ 404 です。他人には、その番号の注文があるかどうかが分かりません。</p>
+    <p class="stop-next">次へ: <code>get_by_number_and_email</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/repositories/orders.py::get_by_number_and_email" data-focus="Order.order_number == order_number, Order.guest_email == guest_email" data-layer="repo" data-link="関数の呼び出し">
+    <p class="stop-see">番号とメールの両方が一致する注文だけを 1 件返す SELECT。一致しなければ <code>None</code>。メールは小文字化も正規化もしない完全一致（コードを読んだ範囲。大文字小文字の違うメールで照会したときの挙動は、実行して確かめていない）。</p>
+    <p class="stop-say">注文番号とメールアドレスが、両方とも一致した注文だけを返します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>models/order.py</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/models/order.py::Order" data-focus="order_number: Mapped[str]" data-layer="db" data-link="SQL の SELECT（orders）">
+    <p class="stop-see"><code>orders</code> テーブル。<code>order_number</code> は UNIQUE、<code>guest_email</code> は平文の列。明細は <code>order_items</code>（<code>list_items</code> が <code>order_id</code> で取る）。</p>
+    <p class="stop-say">orders テーブルを番号とメールで検索し、明細は order_items から取ります。</p>
+    <p class="stop-next">次へ（④）: <kbd>⌘P</kbd> で <code>schemas/order.py</code> を開き、<code>OrderOut</code> へ</p>
+  </li>
+</ol>
+
+<p>エラーの分岐は次のとおりです。</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>状態</th><th>code</th><th>条件</th><th>判定する場所</th></tr></thead>
+<tbody>
+<tr><td>401</td><td><code>unauthorized</code></td><td>内部トークンが無い・不一致</td><td><a class="ref" data-ref="apps/api/app/core/security.py::verify_internal_token">verify_internal_token</a></td></tr>
+<tr><td>429</td><td><code>rate_limited</code>（本文は <code>{code}</code>、ヘッダー <code>Retry-After</code>）</td><td>同じ IP の呼び出しが、1 時間で 100 回に達している</td><td><a class="ref" data-ref="apps/api/app/core/rate_limit.py::lookup_rate_limit">lookup_rate_limit</a></td></tr>
+<tr><td>400</td><td><code>validation_error</code>（<code>fields</code>）</td><td>メールの形が違う</td><td><a class="ref" data-ref="apps/api/app/schemas/order.py::LookupIn">LookupIn</a></td></tr>
+<tr><td>404</td><td><code>not_found</code></td><td>番号が無い、またはメールが一致しない（区別しない）</td><td><a class="ref" data-ref="apps/api/app/services/orders.py::lookup_order">lookup_order</a></td></tr>
+<tr><td>403</td><td><code>forbidden</code></td><td>CSRF 不一致（BFF）</td><td><a class="ref" data-ref="apps/web/lib/server/csrf.ts::verifyCsrf">verifyCsrf</a></td></tr>
+<tr><td>404</td><td><code>not_found</code></td><td>番号の形が違う（BFF。FastAPI は呼ばない）</td><td>lookup の <code>route.ts</code></td></tr>
+<tr><td>400</td><td><code>validation_error</code></td><td>メールが文字列でない・空・254 文字超（BFF）</td><td>lookup の <code>route.ts</code></td></tr>
+<tr><td>503</td><td><code>upstream_unavailable</code></td><td>FastAPI に接続できない（BFF）</td><td><a class="ref" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest">proxyOrderRequest</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<p>429 を数える依存関数は、本文の検査（400）より先に動くと思われます。FastAPI が依存関数を先に解決するためですが、テストでは確かめていません。設計仕様書 4.5 の判定順序は、429 を 6 番目（ミドルウェア）としていて、実装とは位置が違います。</p>
+
+<div class="note warn"><p>今は直していない点（コード解説書 9 章 B1）: レート制限の回数はプロセスのメモリで数えます。Azure の API は <code>uvicorn --workers 2</code> なので、ワーカーごとに別々に数え、同じ IP でも 1 時間に最大 200 回まで通ります。設計仕様書 9.4 には、複数ワーカーのときは MySQL の表か Redis に置き換えると書いてあり、P2 で対応する予定です。</p></div>
+
+<h3 id="r07-display">④ 応答から表示まで</h3>
+
+<ol class="route" data-title="順路：確定直後の完了画面の再掲">
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="const raw = useSessionItem(LAST_ORDER_KEY);" data-layer="screen">
+    <p class="stop-see">6 章で保存した <code>guapp.lastOrder</code> を読む。サーバーの描画とハイドレーション中は <code>null</code>、その後にブラウザの値で描き直す（<code>useSyncExternalStore</code>）。</p>
+    <p class="stop-say">確定直後は、前の画面が保存した注文を読んで、そのまま表示します。API は呼びません。</p>
+    <p class="stop-next">次へ: 同じ関数の <code>stored</code> の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="Array.isArray(v.items)" data-layer="screen">
+    <p class="stop-see">壊れた JSON、<code>order_number</code> が文字列でない、<code>items</code> が配列でないものは使わない（<code>null</code> にして照会に回す）。</p>
+    <p class="stop-say">保存してある内容の形が崩れていたら、使わずに照会フォームへ回します。</p>
+    <p class="stop-next">次へ: 同じ関数の <code>useEffect</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="clearCheckoutSession();" data-layer="screen">
+    <p class="stop-see">完了画面に来たら、確定前の入力（<code>guapp.checkout</code>、配送先と冪等キー）は不要なので、確定の成否に関わらず消す。</p>
+    <p class="stop-say">完了画面に来たら、確定前の入力は消します。配送先を、ブラウザに長く残さないためです。</p>
+    <p class="stop-next">次へ: <code>CompletedOrder</code> にカーソルを置いて <kbd>F12</kbd>（または <kbd>⌘⇧O</kbd>）</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::CompletedOrder" data-focus="const failed = " data-layer="screen">
+    <p class="stop-see"><code>status</code> が <code>payment_failed</code> の注文は、見出しが「この注文は決済に失敗しています」になり、メール案内が出ない。それ以外は「ご注文ありがとうございます」。</p>
+    <p class="stop-say">注文の状態が決済失敗のときは、見出しを変えて、メールの案内は出しません。</p>
+    <p class="stop-next">次へ: 同じ関数の注文日時の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::CompletedOrder" data-focus="formatJst(order.ordered_at)" data-layer="screen">
+    <p class="stop-see">注文日時は UTC の文字列を <code>formatJst</code> で JST に直して表示する。</p>
+    <p class="stop-say">注文日時は、サーバーが UTC で返したものを、日本時間に直して表示します。</p>
+    <p class="stop-next">次へ: <code>formatJst</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/datetime.ts::formatJst" data-focus="HAS_OFFSET.test(iso)" data-layer="screen">
+    <p class="stop-see">タイムゾーンの指定が無い文字列は UTC とみなして <code>Z</code> を補い、<code>Asia/Tokyo</code> で <code>2026/09/18 12:04</code> の形にする。</p>
+    <p class="stop-say">タイムゾーンの付いていない文字列は、UTC として扱います。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderComplete.tsx</code> に戻り、<code>CompletedOrder</code> のメール案内の行へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::CompletedOrder" data-focus="order.guest_email" data-layer="screen">
+    <p class="stop-see">メール案内。「テスト環境ではメールは送信されず、サーバー側に保存されます」の注記が付く（メールが実際には送られないため）。</p>
+    <p class="stop-say">メールは実際には送らず、サーバーのファイルに書き出しているので、画面にもその旨を書いています。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>components/OrderSummary.tsx</code> を開き、<code>ShippingSummary</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderSummary.tsx::ShippingSummary" data-focus="formatPostal(p.ship_postal_code)" data-layer="screen">
+    <p class="stop-see">お届け先・メール・受け取り方法・支払い方法を並べる。郵便番号は表示のときだけ <code>100-0001</code> の形にする（送信値は数字のみ）。明細（<code>OrderItemsList</code>）と金額（<code>AmountSummary</code>）は 6 章と同じ部品。</p>
+    <p class="stop-say">お届け先などは、保存した注文の値をそのまま並べます。郵便番号は、表示のときだけハイフンを入れます。</p>
+    <p class="stop-next">次へ（照会のとき）: 下の順路へ</p>
+  </li>
+</ol>
+
+<ol class="route" data-title="順路：照会の応答から表示、エラーの出し分けまで">
+  <li class="stop" data-ref="apps/api/app/schemas/order.py::OrderOut" data-focus="ordered_at: datetime" data-layer="api">
+    <p class="stop-see">応答の形は、6 章の注文確定と同じ <code>OrderOut</code>（DS-API-022・023 共通）。<code>ordered_at</code> は UTC の ISO 8601。内部 ID は含まない。</p>
+    <p class="stop-say">照会の応答は、注文確定と同じ形です。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>services/orders.py</code> を開き、<code>build_order_response</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/api/app/services/orders.py::build_order_response" data-focus="tax_included=calc_tax_included(order.total, order.tax_rate_at_order)," data-layer="service" data-link="OrderOut を作る関数の呼び出し">
+    <p class="stop-see">応答は DB の注文と明細から組み立てる。内税は注文時の税率（<code>tax_rate_at_order</code>）で求めるので、あとで税率が変わっても注文の内税は変わらない。明細は確定時の単価・商品名。</p>
+    <p class="stop-say">照会の結果は、注文したときの単価と税率で組み立てます。あとから価格や税率を変えても、過去の注文の表示は変わりません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/server/order-proxy.ts</code> を開く</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/server/order-proxy.ts::proxyOrderRequest" data-focus="result.status === 429" data-layer="bff" data-link="HTTP 応答（JSON。429 なら Retry-After 付き）">
+    <p class="stop-see">429 のときだけ、FastAPI の <code>Retry-After</code>（数字か HTTP 日付の形のものだけ）を応答ヘッダーに載せる。本文は <code>{"code":"rate_limited"}</code>。</p>
+    <p class="stop-say">429 のときは、待つ秒数のヘッダーも画面側へ通します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>lib/client/order-api.ts</code> を開き、<code>post</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/client/order-api.ts::post" data-focus="? Number(ra) : null" data-layer="screen" data-link="HTTP 応答（JSON）">
+    <p class="stop-see"><code>Retry-After</code> が数字なら <code>retryAfterSec</code> として <code>OrderApiError</code> に入れて投げる。ただし画面側はこの値をどこでも使っておらず（grep で確認）、429 の文言に秒数は出ない。</p>
+    <p class="stop-say">待つ秒数は、エラーに入れてあります。ただ、いまの画面は、その秒数を使っていません。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderComplete.tsx</code> を開き、<code>LookupForm</code> の <code>catch</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::LookupForm" data-focus="setError(lookupErrorMessage(status, body));" data-layer="screen">
+    <p class="stop-see">失敗は status と本文を <code>lookupErrorMessage</code> に渡し、フォームの下の <code>role="alert"</code> の 1 行に出す。トーストは使わない。</p>
+    <p class="stop-say">失敗したときは、フォームの下に 1 行のメッセージを出します。</p>
+    <p class="stop-next">次へ: <code>lookupErrorMessage</code> にカーソルを置いて <kbd>F12</kbd></p>
+  </li>
+  <li class="stop" data-ref="apps/web/lib/order-errors.ts::lookupErrorMessage" data-focus="if (status === 404)" data-layer="screen">
+    <p class="stop-see">404 は番号とメールを区別せず「注文番号かメールアドレスが違います」。429・400・403・503・その他で文言が分かれる（下の表）。</p>
+    <p class="stop-say">404 のときは、番号が違うのかメールが違うのかを言わずに、まとめて「違います」と出します。</p>
+    <p class="stop-next">次へ: <kbd>⌘P</kbd> で <code>OrderComplete.tsx</code> に戻り、<code>OrderComplete</code> の <code>onFound</code> へ</p>
+  </li>
+  <li class="stop" data-ref="apps/web/components/OrderComplete.tsx::OrderComplete" data-focus="saveLastOrder(o);" data-layer="screen">
+    <p class="stop-see">照会が成功したら、注文を <code>saveLastOrder</code> で sessionStorage に保存し、<code>setFound</code> で表示を切り替える。以降は、リロードしても（タブを閉じるまで）同じ注文が表示される。表示は前の順路の <code>CompletedOrder</code> と同じ。</p>
+    <p class="stop-say">照会できたら、その注文を保存して、完了画面と同じ表示に切り替えます。</p>
+  </li>
+</ol>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>応答・状況</th><th>画面のメッセージ（<code>lookupErrorMessage</code>）</th></tr></thead>
+<tbody>
+<tr><td>画面の検査で外れた（番号・メールの形）</td><td>注文番号かメールアドレスが違います（API は呼ばない）</td></tr>
+<tr><td>404 <code>not_found</code></td><td>注文番号かメールアドレスが違います</td></tr>
+<tr><td>429 <code>rate_limited</code></td><td>しばらくしてからお試しください</td></tr>
+<tr><td>400 <code>validation_error</code></td><td>メールアドレスの形式が正しくありません</td></tr>
+<tr><td>403 <code>forbidden</code></td><td>ページを再読み込みしてからもう一度お試しください</td></tr>
+<tr><td>503 <code>upstream_unavailable</code></td><td>サーバーに接続できません。時間をおいてお試しください</td></tr>
+<tr><td>その他</td><td>処理に失敗しました。時間をおいてお試しください</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="r07-test">⑤ テスト 1 本の説明</h3>
+
+<p><strong>推し:</strong> <span class="tid">IT-023-02</span> <span class="req">F-025</span> <span class="tstat pass">✅ 通過（ローカル 2026-10-03）</span> <span class="tstat ciskip">⏭ CI ではスキップ</span> <span class="tstat manual">🖐 手動 ST-F025-03 は 2026-09-24 合格</span></p>
+
+<div class="table-wrap">
+<table>
+<tbody>
+<tr><th>仕様（テスト設計書 4 章）</th><td>IT-023-02 ／ DS-API-023 ／ 境界 ／ 「同一 IP から 100 回・101 回」→「101 回目が 429」</td></tr>
+<tr><th>この仕様が守るもの</th><td>注文番号とメールを総当たりで試す回数に上限を付けること。上限を超えたら、正しい組み合わせでも照会できなくなる。</td></tr>
+<tr><th>テストコード</th><td><a class="ref" data-ref="apps/api/tests/integration/test_it_023_lookup.py::test_it_023_02_100_requests_ok_101st_is_429_with_retry_after">test_it_023_02_100_requests_ok_101st_is_429_with_retry_after</a></td></tr>
+<tr><th>実行条件</th><td>MySQL（<code>guapp_test</code>）と seed が必要。<code>DATABASE_URL_TEST</code> が無いと全件スキップする（CI の現状）。</td></tr>
+</tbody>
+</table>
+</div>
+
+<ol>
+<li><strong>準備:</strong> 注文を 1 件作る（<code>_place_order</code>: カート → 商品 1 点 → prepare → POST <code>/orders</code> が 201。outbox のファイルは消す）。</li>
+<li><strong>実行:</strong> 同じ番号と正しいメールで、POST <code>/api/v1/orders/{番号}/lookup</code> を 100 回呼ぶ（<span class="loc" data-ref="apps/api/tests/integration/test_it_023_lookup.py::test_it_023_02_100_requests_ok_101st_is_429_with_retry_after" data-focus="for i in range(100):"></span>）。</li>
+<li><strong>確認:</strong>
+  <ol>
+    <li>100 回とも 200。失敗したときは何回目かをメッセージに出す。</li>
+    <li>101 回目は 429 で、本文は <code>{"code":"rate_limited"}</code>、<code>Retry-After</code> は 1〜3,600 の整数（<span class="loc" data-ref="apps/api/tests/integration/test_it_023_lookup.py::test_it_023_02_100_requests_ok_101st_is_429_with_retry_after" data-focus="assert res.status_code == 429, res.text"></span>）。</li>
+    <li>メールを変えて 404 になる呼び出しも、429 のまま（404 になる要求も回数に入ることの確認）。</li>
+    <li><code>X-Forwarded-For: 203.0.113.7, 10.0.0.1</code> を付けると、別の IP として数えられ 200 に戻る。</li>
+  </ol>
+</li>
+</ol>
+
+<div class="note fact"><p>事実: このテストは、FastAPI に直接 <code>X-Forwarded-For</code> を付けて送ります。BFF 経由のとき利用者の送った値が使われないことは、別のテスト（<code>it-bff-01-02</code> と <code>st-sec-xff.client-ip</code>）が確かめます。</p></div>
+
+<p><strong>予備:</strong> <a class="ref" data-ref="apps/api/tests/unit/test_ut_adapters_and_rate_limit.py::test_ut_rate_limit_100_ok_101_limited_with_retry_after">test_ut_rate_limit_100_ok_101_limited_with_retry_after</a> <span class="tstat pass">✅ 通過（ローカル・CI とも）</span> <span class="tstat none">— テスト設計書に対応する UT の ID なし</span></p>
+<p><code>SlidingWindowRateLimiter</code> を、時計を差し替えて単体で確かめる。同じキーで 100 回は通り、101 回目は 1〜3,600 の <code>Retry-After</code> が返る。別のキーは別カウントで、窓の 3,600 秒が過ぎるとまた通るようになり、<code>reset()</code> で全部消える。IT-023-02 と同じ境界を DB なしで確かめるテストなので、CI でも動く。</p>
+
+<h3 id="r07-compare">⑥ 仕様書との突き合わせ</h3>
+
+<div class="table-wrap">
+<table class="compare">
+<thead><tr><th>条件</th><th>テスト仕様書の記述（ID・該当箇所）</th><th>テストコードの値（参照）</th><th>判定</th></tr></thead>
+<tbody>
+<tr>
+<td>番号とメールの一致</td>
+<td><span class="tid">IT-023-01</span>（4 章）「正しい番号＋メール／メール不一致 → 200／404」</td>
+<td>正しい組み合わせで 200（応答は注文確定のときと同じ）、メール違い・存在しない番号は 404 <code>{"code":"not_found"}</code>。仕様に無い 400（メール形式）と 401（トークン無し）も確認（<a class="ref" data-ref="apps/api/tests/integration/test_it_023_lookup.py::test_it_023_01_number_and_email_match_200_otherwise_404">test_it_023_01…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>100 回・101 回</td>
+<td><span class="tid">IT-023-02</span>（4 章）「同一 IP から 100 回・101 回 → 101 回目が 429」</td>
+<td>100 回目まで 200、101 回目が 429（<code>rate_limited</code>、<code>Retry-After</code> は 1〜3,600）。404 の要求も数える。XFF を変えると別カウント（<a class="ref" data-ref="apps/api/tests/integration/test_it_023_lookup.py::test_it_023_02_100_requests_ok_101st_is_429_with_retry_after">test_it_023_02…</a>）</td>
+<td class="ok">ok</td>
+</tr>
+<tr>
+<td>100 回・101 回の手動確認</td>
+<td><span class="tid">ST-F025-03</span>（3.1 章）「同一 IP から 100 回と 101 回照会 → 100 回目は応答、101 回目は 429」</td>
+<td>Mac は 2026-09-24 に合格（FastAPI 直・接続元 IP で 101 回、101 回目は 429 と <code>Retry-After: 3599</code>）。Windows の記録も合格（<code>X-Forwarded-For</code> を付けた FastAPI 直）。BFF 経由・公開環境での確認ではない</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>他人の注文を隠す</td>
+<td><span class="tid">ST-F025-02</span>（3.1 章）と <span class="tid">ST-SEC-08</span>（3.2 章）。どちらも「正しい番号＋違うメール → 404」</td>
+<td>手動 <span class="tstat manual">🖐 2026-09-24 合格</span>（両方）。同じ操作・同じ期待結果で ID が 2 つあり、記録でも同一の証拠を指している（ST 実施記録の提案 3 番）。自動は IT-023-01 が確認</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>完了画面からの照会</td>
+<td><span class="tid">ST-F025-01</span>（3.1 章）「ゲストで注文後、注文番号とメールで照会」、<span class="tid">AT-01</span>・<span class="tid">AT-06</span></td>
+<td>手動 <span class="tstat manual">🖐 2026-09-18 合格</span>（別タブで照会フォームから）。<code>OrderComplete</code> と <code>LookupForm</code> を対象にした自動テストは無い（<code>apps/web/tests</code> の grep で確認。照会失敗の文言を返す関数 <code>lookupErrorMessage</code> のテストだけがある）<span class="tstat none">— 画面のテストなし</span></td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>BFF が番号の形を先に弾く</td>
+<td>テスト設計書に対応する ID が見当たらない（BFF の挙動は <code>route.ts</code> のコメントにあり、設計仕様書 4.3 の BFF 一覧には記載が無い）</td>
+<td>番号 <code>abc</code> で 404、<code>fetch</code> は 0 回。429 の <code>Retry-After</code> の透過も確認（<a class="ref" data-ref="apps/web/tests/it-bff-01-02.orders-route.test.ts">it-bff-01-02.orders-route.test.ts</a>）<span class="tstat pass">✅ 通過</span></td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>利用者送信ヘッダーの扱い</td>
+<td>テスト設計書に対応する ID が見当たらない（2026-09-24 の ST 実施記録の 🟡 指摘への対応。設計仕様書 8.2 には反映済み）</td>
+<td>段数 0 では <code>X-Forwarded-For</code>・<code>X-Client-IP</code> を使わず <code>127.0.0.1</code>、1 以上では <code>X-Client-IP</code>→右から数えた XFF（<a class="ref" data-ref="apps/web/tests/st-sec-xff.client-ip.test.ts">st-sec-xff.client-ip.test.ts</a>、29 本）<span class="tstat pass">✅ 通過</span></td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>公開環境の IP の数え方</td>
+<td>設計仕様書 8.2「<code>TRUSTED_PROXY_HOPS</code>: App Service 配下は 1」</td>
+<td>テストは段数 0・1・2 を確かめるが、公開環境のアプリ設定を作る <code>02-settings.sh</code> にこの変数が無い。0 のままなら全員が <code>127.0.0.1</code> で、制限が 1 つの枠になる</td>
+<td class="ng">ng</td>
+</tr>
+<tr>
+<td>複数ワーカーでの上限</td>
+<td>設計仕様書 9.4「P2 の gunicorn 2 ワーカーでは共有ストアに置き換える」（既知）</td>
+<td>テストは 1 プロセスの制限器だけを確かめる。ワーカーが 2 つの環境では、同じ IP で最大 200 回通る</td>
+<td class="warn">warn</td>
+</tr>
+<tr>
+<td>IT を CI で回す</td>
+<td>1.2 章「IT・UT は CI で実行し、1 件でも失敗すれば main へのマージを止める」</td>
+<td>CI の api は <code>200 passed, 100 skipped</code>。IT-023-01・02 を含む結合テスト 100 件が全件スキップ。ローカルは全件通過<span class="tstat ciskip">⏭ CI ではスキップ</span></td>
+<td class="ng">ng</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="note warn"><p>今は直していない点: 結合テスト 100 件が CI で実行されていないこと（コード解説書 9 章 D3）。<code>TRUSTED_PROXY_HOPS</code> が公開環境の設定に無いこと（同 A1）。レート制限がワーカーごとであること（同 B1）。いずれも、このガイドを書いた 2026-10-03 時点では修正していません。</p></div>
+
+<h3 id="r07-qa">詰まりそうな質問</h3>
+
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>他人の注文番号を総当たりで試されたら、どうなりますか</summary>
+  <div class="qa-body">
+    <p>当てるには、注文番号とメールアドレスの両方が必要です。注文番号の後ろの 8 文字は 32 種類から選ぶので、約 1.1 兆通り（32 の 8 乗）あります。番号が無い場合もメールが違う場合も、同じ 404 を返すので、注文があるかどうかも分かりません。1 つの IP からの照会は、1 時間に 100 回までです（404 になった呼び出しも数えます）。</p>
+    <div class="followup"><p class="followup-q">追撃: その制限は、公開環境でも掛かっていますか</p><p>掛かり方に穴が 2 つあります。1 つ目は、公開環境では IP の設定漏れで、利用者全員が 1 つの枠を共有する見込みであることです（コード解説書 9 章 A1。直す予定ですが、まだ直していません）。2 つ目は、ワーカーごとに数えるので、最大 200 回まで通ることです（同 B1。設計書 9.4 に既知として書いてあり、P2 で対応します）。</p></div>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">1〜2分</span>レート制限の IP は、どう決めていますか</summary>
+  <div class="qa-body">
+    <p>IP を決めるのは BFF の <code>resolveClientIp</code> で、FastAPI にはその値を <code>X-Forwarded-For</code> に載せて渡します。利用者が付けたヘッダーは使いません。信頼するプロキシの段数（<code>TRUSTED_PROXY_HOPS</code>）が 0 のときは接続元だけを使い、1 以上のときは App Service が付ける <code>X-Client-IP</code> を使います。それが無ければ、<code>X-Forwarded-For</code> を右から数えた位置の値です。FastAPI は、受け取った値の先頭を IP として数えます。</p>
+    <p>ST 実施記録の 2026-09-24 の指摘で、問題が見つかりました。利用者の <code>X-Forwarded-For</code> をそのまま転送していたため、ヘッダーを付けるだけで制限を逃れられたのです。これは PR #27 で今の形に直しました。公開環境で段数の設定が抜けている点は、上の A1 のとおりです。</p>
+  </div>
+</details>
+
+<details class="qa">
+  <summary><span class="qa-time">0〜1分</span>完了画面をリロードしたり、別のタブで開いたりしたらどうなりますか</summary>
+  <div class="qa-body">
+    <p>同じタブでリロードしたときは、sessionStorage の <code>guapp.lastOrder</code> が残っているので、同じ注文がまた表示されます。タブを閉じたあとや、別のタブで URL を開いたときは、保存した注文が無いので、照会フォームが出ます（注文番号は URL から入り、メールアドレスは自分で入力します）。URL の注文番号が保存済みの注文の番号と違うときも、保存済みの注文は見せず、照会フォームを出します。別タブから照会する流れは、手動テストの ST-F025-01 で確認しました（2026-09-18）。</p>
+  </div>
+</details>
+</section>
