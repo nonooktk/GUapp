@@ -15,6 +15,7 @@
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-10-20 | 初稿。P2-c の追補設計を本編との差分として作成。DS-DEC-107〜126、DS-API 12 本、DS-PRC 11 件、マイグレーション 1 本（新規テーブルなし）、実装レーンの分け方（11 章）を含む。オーナーは「実装し切ってから最後にまとめて承認」と決めている（ADR-0006）ため、実装担当が迷わない粒度まで決定を書いた | Claude | — |
 | draft-v1.1 | 2026-10-20 | 実装と手元の検収で見つかった食い違いを修正。6.2 の管理画面のレイアウトは redirect せず、各ページがデータ取得の 401・403 で `/admin/login` へ移す（レイアウトは現在のパスを知れず、ログイン画面が自分へ戻り続けるため）。注文一覧の期間は「両端を含む暦日数で 366 日まで、367 日以上は 422」と明記した。モックと範囲の記述の seed の商品数を 30 から 31 にした | Claude | — |
+| draft-v1.2 | 2026-10-22 | セキュリティ点検 2026-10-21 の G-16・G-17・G-19 に合わせて更新。管理ログインの処理順（3.1 の図と DS-PRC-050）を追補b の DS-PRC-032 と同じ「試行を先に記録・COMMIT → 数える（自分を除く）→ 上限以上なら取り消して拒否 → 照合」にした。DS-DEC-110 に先に記録する方式と拒否ログの `subject` を足した | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -82,19 +83,20 @@ sequenceDiagram
     B->>BFF: POST /admin/api/auth/login（login_id・password・csrf_token）
     BFF->>BFF: Origin 確認・CSRF 照合・本文 8KB 以内・白リスト
     BFF->>API: POST /api/v1/admin/auth/login（本文・X-Forwarded-For・古い asid があれば X-Admin-Session-Token）
-    API->>DB: login_attempts（subject_type=staff）を集計（IP 単位 10 回・ID 単位 5 回、各 15 分）
-    alt 上限超過
+    API->>DB: この試行を失敗として login_attempts（subject_type=staff）に先に記録して COMMIT
+    API->>DB: 自分の行を除いて数える（IP 単位 10 回・ID 単位 5 回、各 15 分）
+    alt 上限以上
+        API->>DB: 先に記録した行を取り消す（ロック期間を延ばさない）
         API-->>BFF: 429 rate_limited または 403 account_locked
     else 続行
         API->>DB: staff を login_id で検索
         API->>API: argon2id で検証（管理者がいないときもダミーのハッシュで同じ時間をかける）
         alt 不一致
-            API->>DB: login_attempts に失敗を記録
-            API-->>BFF: 401 invalid_credentials
+            API-->>BFF: 401 invalid_credentials（失敗の行は先に記録した行のまま残る）
         else 一致
             API->>DB: BEGIN（READ COMMITTED）
             API->>DB: 古い sessions 行と期限切れ行を削除・3 件に達していれば古い順に削除・新しい行（8 時間）を INSERT
-            API->>DB: 当該 ID の失敗行を削除・成功を記録・audit_logs に admin.login
+            API->>DB: 当該 ID の失敗行（先に記録した行を含む）を削除・成功を記録・audit_logs に admin.login
             API->>DB: COMMIT
             API-->>BFF: 200（session_token・staff の login_id と role）
         end
@@ -337,13 +339,14 @@ BFF の Route Handler は 7 本（認証 2 本・CSRF 発行 1 本・更新 4 �
 
 1. 入力検査（Pydantic）。login_id と password は検査の前に NFKC 正規化する。
 2. `ip` を `client_ip(request)` で決める。`identifier` は正規化した login_id の SHA-256（16 進 64 文字）。
-3. `login_attempts` を `subject_type=staff` だけで集計する。`ip` が一致する失敗が直近 15 分で **10 件**以上なら 429 `rate_limited`（`Retry-After: 900`）。`identifier` が一致する失敗が直近 15 分で 5 件以上なら 403 `account_locked`。この 2 つはパスワードの検証より前に判定する。**会員のログインの失敗行は数えない**（互いに影響させない。DS-DEC-110）。
+3. **試行を先に記録して数える**（G-16。追補b の DS-PRC-032 手順 3 と同じ `claim_login_attempt`・`withdraw_login_attempt`）。パスワードの検証より前に、この試行を失敗（`succeeded=false`、`subject_type=staff`）として INSERT して COMMIT し、COMMIT のあとで `login_attempts` を `subject_type=staff` だけで集計する。**自分の行は数えない**。上限以上のときは、検証せずに、先に記録した行を取り消して（ロック期間が延びない）拒否する。`ip` が一致する失敗が直近 15 分で **10 件**以上なら 429 `rate_limited`（`Retry-After: 900`）。`identifier` が一致する失敗が直近 15 分で 5 件以上なら 403 `account_locked`。この 2 つはパスワードの検証より前に判定する。**会員のログインの失敗行は数えない**（互いに影響させない。DS-DEC-110）。
 4. `staff` を login_id で検索する。**管理者がいない場合も、固定のダミーハッシュに対して検証する**（時間を揃える）。
-5. 検証が失敗したら `login_attempts` に失敗（`succeeded=false`）を INSERT して COMMIT し、401 `invalid_credentials` を返す。**ロック通知メールは送らない**（`staff` にメールの列がない）。
+5. 検証が失敗したら、失敗の行は手順 3 で記録済みなので追加せず、401 `invalid_credentials` を返す。**ロック通知メールは送らない**（`staff` にメールの列がない）。
 6. 検証が成功したら、`check_needs_rehash` を調べ、違うときは再ハッシュする（更新は手順 7 の最初の文）。
-7. 1 トランザクション（READ COMMITTED）で、文を `staff` → `sessions` → `login_attempts` の順に発行する。①再ハッシュがあれば `staff.password_hash` を UPDATE する。②`X-Admin-Session-Token` が指す古い `sessions` 行を削除する。③この管理者の期限切れの行を削除する。④この管理者の有効なセッションが **3 件**に達していれば、古い順に削除して 2 件にする。⑤新しい `sessions` 行を INSERT する（`subject_type=staff`、`expires_at` は現在 + **8 時間**の固定。延長しない）。⑥`identifier` の失敗行を削除し、成功を 1 件記録する。⑦`audit_logs` に `admin.login`（`detail` は丸めた IP だけ）を記録する。ロック競合（MySQL の 1213・1205）が起きたときは ROLLBACK して手順 7 を 1 回だけやり直す。
+7. 1 トランザクション（READ COMMITTED）で、文を `staff` → `sessions` → `login_attempts` の順に発行する。①再ハッシュがあれば `staff.password_hash` を UPDATE する。②`X-Admin-Session-Token` が指す古い `sessions` 行を削除する。③この管理者の期限切れの行を削除する。④この管理者の有効なセッションが **3 件**に達していれば、古い順に削除して 2 件にする。⑤新しい `sessions` 行を INSERT する（`subject_type=staff`、`expires_at` は現在 + **8 時間**の固定。延長しない）。⑥`identifier` の失敗行（手順 3 で先に記録した自分の行を含む）を削除し、成功を 1 件記録する。⑦`audit_logs` に `admin.login`（`detail` は丸めた IP だけ）を記録する。ロック競合（MySQL の 1213・1205）が起きたときは ROLLBACK して手順 7 を 1 回だけやり直す。
 8. 24 時間より古い `login_attempts` の行を最大 1000 件、ついでに削除する（追補b の DS-PRC-032 手順 8 と同じ掃除）。
 9. 新しいセッショントークン（32 バイト乱数の base64url 43 文字）を応答に入れる。DB には SHA-256 だけを保存する。
+10. 拒否ログ（`request_rejected`）には、`subject`（`identifier` の先頭 12 桁。G-19）を付ける。対象は、このログインの 401・403・429。ID そのものは出さない。
 
 #### DS-PRC-050b 管理セッションの検証（`app/core/admin_session.py`）
 
@@ -839,7 +842,7 @@ web 側に新しい環境変数はない（`SESSION_COOKIE_DOMAIN`・`TRUSTED_PR
 | 107 | **配置**：FastAPI の管理 API は `/api/v1/admin/*`、BFF の Route Handler は `/admin/api/*`、画面は `/admin/*`。管理面を `/admin` の 1 つの接頭辞に集める。BFF の `/admin/api/*` は、`proxy.ts` の回数制限で `/api/*` と同じ「API」の枠（120 回/分）に数える | Cookie `asid` を `Path=/admin` に限定するには、BFF も `/admin` の下に置く必要がある（BFF が `/api/admin/*` だと、その Cookie は届かない）。管理面が 1 つの接頭辞に集まると、Week10 の別ホスト・IP 制限への切り出し（本編 7.3）を接頭辞の規則 1 つで書ける | BFF を `/api/admin/*` に置き、`asid` を `Path=/` にする（Cookie が顧客向けの全リクエストに付く） |
 | 108 | **管理セッション**。`sessions` に `subject_type=staff`。Cookie `asid`（`HttpOnly`・`SameSite=Strict`・`Path=/admin`・`Max-Age=28800`・production で `Secure`）。8 時間の固定期限（延長しない）、同時 3 件まで、`last_seen_at` は更新しない。値は FastAPI が発行し、BFF が Cookie にして本文から除く。BFF → FastAPI は `X-Admin-Session-Token` | 本編 7.3・DS-DEC-21 の「管理 8 時間」と、追補b の DS-DEC-72 の方式を踏襲する。管理者は少人数のため同時 3 件で足りる。管理画面へ外部サイトからのリンクで入る導線がないので、`Strict` にして CSRF への層を 1 つ増やしても使い勝手を損なわない。GET が DB に書かない方針（DS-DEC-59）に合わせ `last_seen_at` を更新しない | `Lax`（外部サイトを起点とする遷移で Cookie が付く。利点がない）。無操作での失効の追加（`last_seen_at` を更新する必要があり、GET が書く。残余リスク 7.4 #3） |
 | 109 | **管理認証の依存関数と既定拒否**。`require_staff` は `X-Admin-Session-Token` で `sessions` を `subject_type` を問わず引き、管理者なら通す。**会員のセッションなら 403 と拒否ログ、無い・不明・期限切れ・管理者の行がないなら 401**。許可するロールの集合（`ALLOWED_ROLES = {"staff"}`）も検査する。管理ルートを 1 つのルーターにまとめてルーター単位で掛け、ログインだけを別に置く。実行時にルートを列挙して無認証で呼ぶ結合テストを置く | 管理 API の事故で多いのは、認証の依存関数の付け忘れ。ルーター単位なら、足したルートは自動で保護される。401（認証されていない）と 403（認証されたが権限がない）を分けると、会員のセッションの持ち込み（BFLA の試み）をログで検知できる | ルートごとに依存関数を書く（書き忘れが起きる）。会員のセッションも 401 にする（試みを区別して検知できない） |
-| 110 | **管理ログインの制限**。追補b の DS-DEC-70 と同じ仕組みを `subject_type=staff` の行で別に集計する。ID 単位で直近 15 分に失敗 5 件以上なら 403 `account_locked`、IP 単位で直近 15 分に失敗 **10 件**以上なら 429（`Retry-After: 900`）。判定はパスワードの検証より前。管理者がいない ID でもダミーのハッシュを検証し、同じ応答・同じ時間にする。ロック通知のメールは送らない。会員と管理者の失敗は互いに数えない | 管理者は少人数で、IP 単位を会員（30 回）より厳しくしても業務を妨げない。集計を分けると、会員向けの総当たりで管理者がログインできなくなる、またはその逆が起きない。`staff` にメールの列がなく、通知先がない | 会員と同じ閾値（30 回）。会員と集計を共有する（互いの妨害を許す） |
+| 110 | **管理ログインの制限**。追補b の DS-DEC-70 と同じ仕組みを `subject_type=staff` の行で別に集計する。ID 単位で直近 15 分に失敗 5 件以上なら 403 `account_locked`、IP 単位で直近 15 分に失敗 **10 件**以上なら 429（`Retry-After: 900`）。判定はパスワードの検証より前。管理者がいない ID でもダミーのハッシュを検証し、同じ応答・同じ時間にする。ロック通知のメールは送らない。会員と管理者の失敗は互いに数えない。検証の前に、その試行を失敗として先に記録して COMMIT し、自分の行を除いて数える（G-16）。上限以上なら先に記録した行を取り消して拒否する。拒否ログには `subject`（G-19） | 管理者は少人数で、IP 単位を会員（30 回）より厳しくしても業務を妨げない。集計を分けると、会員向けの総当たりで管理者がログインできなくなる、またはその逆が起きない。`staff` にメールの列がなく、通知先がない | 会員と同じ閾値（30 回）。会員と集計を共有する（互いの妨害を許す） |
 | 111 | **ロールは `staff` の 1 つ**。`staff.role` の列は残し、依存関数が許可集合で検査し、DB に CHECK 制約 `ck_staff_role_allowed` を足す。管理者の追加・削除・ロール変更の画面・API は作らない | 要件定義書 A-04 と本編 5.2 が「単一ロール」。`admin` を足すと、権限の差（例：設定の更新は `admin` だけ）を定義する API・画面・テストが増える。管理者の追加画面が P2 に無いので、差を付ける場面もない | `staff`・`admin` の 2 ロール（設定の更新を `admin` に限る）。ロールを増やすときは、CHECK 制約を 1 リビジョンで差し替える |
 | 112 | **管理者の作り方**。seed で 1 件（`demo-staff`）。パスワードは `seed_data.py` の定数（ダミー）または `SEED_STAFF_PASSWORD`、ID は `SEED_STAFF_LOGIN_ID` で置き換えられる。**`APP_ENV=production` では `SEED_STAFF_PASSWORD` が必須で 12 文字以上、無ければ管理者を入れない**。`seed --only-p2c`（`staff` が空のときだけ投入）と `--update-staff-password`（パスワードの更新）を用意する。画面・API での管理者の追加は作らない | 追補b の DS-DEC-87 と同じ方針（既知のパスワードを公開環境に残さない。点検の B-07）。最初の管理者を画面や API で作ると、その API 自体が攻撃面になり、最初の 1 人をどう作るかの問題が残る。本番で 12 文字を課すのは、管理者が全注文の個人情報を見られる権限の大きさに見合う長さとして置いた値（意見） | 管理者の登録 API（最初の 1 人の作り方が別に要る）。本番でも固定のダミーで投入する（公開環境に既知の資格情報が残る） |
 | 113 | **更新の同時実行の制御**。更新する値と、画面が表示していた更新前の値（`expected_<項目名>`）を一組で送る。サーバーは対象の行を `SELECT … FOR UPDATE` で読み、型を含めて `expected_*` と厳密に等しいときだけ更新する。不一致は 409 `stale_data`（`field`・`current`）。注文状態は、更新先から更新前の状態が一意に決まるため `expected_*` を使わず、遷移表で判定する。本編 4.5 の「楽観ロック `updated_at`」は使わない | `updated_at` は DATETIME（秒精度）で、同じ秒の 2 つの更新を区別できない。値の照合なら、他の管理者の更新だけでなく、注文確定による在庫の減少のような別の経路の変更も検知できる。`FOR UPDATE` で、照合と更新の間に別の更新が入らない | `updated_at` の比較（同じ秒の更新を見逃す）。`version` 列の追加（対象の表すべてにマイグレーションが要る） |
@@ -929,7 +932,7 @@ DS-DEC-107〜126 は 2026-10-20 に追加した。他の文書で使っている
 | REQ-FR-1102 | F-032／SCR-016 | DS-API-052・052a、DS-PRC-052、DS-DEC-113・119 | AT-35 | ST-F032-01〜06 | IT-052、IT-052a | UT-ADM-10、UT-WEB-48 |
 | REQ-NFR-04 | — | DS-TBL-23（`audit_logs` の新しい action）、DS-PRC-054、5.4、DS-DEC-120 | AT-36 | ST-SEC-89 | IT-050-01、IT-050a-01、IT-051b-01・02、IT-051c-01、IT-052a-01、IT-053a-04、IT-053b-01 | UT-ADM-17・18 |
 | REQ-NFR-07・08 | — | 7 章、DS-DEC-109・118 | AT-30 | ST-SEC-80・81・87・88・93 | IT-ADM-01〜05、IT-053a | UT-ADM-02・03・13 |
-| REQ-NFR-10（管理ログイン） | — | DS-DEC-110・126 | — | ST-F035-03・04、ST-SEC-85・86・95 | IT-050-03〜05・11 | UT-ADM-05 |
+| REQ-NFR-10（管理ログイン） | — | DS-DEC-110・126 | — | ST-F035-03・04、ST-SEC-85・86・95 | IT-050-03〜05・11・13・14 | UT-ADM-05、UT-SEC-05 |
 | REQ-NFR-09 | — | 6 章 | AT-37 | ST-NFR-10 | — | UT-WEB-41・54 |
 | REQ-NFR-05 | — | 5.7 seed、DS-DEC-112 | — | ST-SEC-92 | — | UT-SEED-20〜23 |
 | REQ-NFR-02（性能の目安） | — | DS-PRC-051・053 | — | ST-NFR-11 | IT-051-06、IT-053-09 | — |

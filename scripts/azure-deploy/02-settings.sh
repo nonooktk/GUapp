@@ -21,6 +21,8 @@
 #     （AI アシスタントは本番で無効になる）。OPENAI_MODEL・LLM_PROVIDER は設定しない（コードの既定値）。
 #   - 管理者の初期パスワードは App Service には入れない。apps/api/.env.admin（権限600）に、
 #     未作成のときだけランダムな 20 文字を SEED_STAFF_PASSWORD= として書く（06 --seed-p2 が読む）。
+#   - 管理者のログイン ID も同じファイルに、未作成のときだけ `staff-` ＋ 小文字英数字 10 文字を
+#     SEED_STAFF_LOGIN_ID= として書く（既定値 demo-staff を本番に残さない。06 --seed-p2 が読む。値は表示しない）。
 #
 # 前提: `apps/api/.env.azure`（DB_USER・DB_PASSWORD の2行、権限600）が存在すること。
 # Basic 認証の ID・パスワードは実行後に `apps/web/.env.basic-auth`（権限600）に書く。
@@ -220,6 +222,33 @@ else
   chmod 600 "$ADMIN_ENV_FILE"
   unset ADMIN_PASSWORD
   echo "[02-settings] 管理者の初期パスワードを作成しました（値は表示しません）: $ADMIN_ENV_FILE"
+fi
+
+# --- 管理者のログイン ID: 未作成のときだけ作る（既にあれば変えない。値は表示しない） ---
+# 形は api の login_id の規則（[a-z0-9][a-z0-9._-]{2,49}）に合わせる。`staff-` ＋ 小文字英数字 10 文字。
+if [[ -f "$ADMIN_ENV_FILE" ]] && grep -qE '^SEED_STAFF_LOGIN_ID=.+' "$ADMIN_ENV_FILE"; then
+  echo "[02-settings] 管理者のログイン ID は作成済みのため変えません: $ADMIN_ENV_FILE"
+else
+  ADMIN_LOGIN_SUFFIX="$(openssl rand -base64 48 | tr -dc 'a-z0-9' | head -c 10)"
+  if [[ ${#ADMIN_LOGIN_SUFFIX} -ne 10 ]]; then
+    echo "[02-settings] エラー: 管理者のログイン ID の生成に失敗しました。" >&2
+    exit 1
+  fi
+  umask 077
+  # `>>` はブロックの実行前にファイルを作るため、新規かどうかは先に判定する
+  ADMIN_ENV_IS_NEW=0
+  [[ -f "$ADMIN_ENV_FILE" ]] || ADMIN_ENV_IS_NEW=1
+  {
+    if [[ "$ADMIN_ENV_IS_NEW" == "1" ]]; then
+      echo "# scripts/azure-deploy/02-settings.sh が生成しました（$(date -u +%Y-%m-%dT%H:%M:%SZ)）"
+      echo "# 管理者の初期パスワードとログイン ID。06-migrate-seed.sh --seed-p2 が読む。App Service には入れない。"
+      echo "# このファイルは git 管理対象外（.gitignore の .env.* パターン）。"
+    fi
+    echo "SEED_STAFF_LOGIN_ID=staff-${ADMIN_LOGIN_SUFFIX}"
+  } >> "$ADMIN_ENV_FILE"
+  chmod 600 "$ADMIN_ENV_FILE"
+  unset ADMIN_LOGIN_SUFFIX
+  echo "[02-settings] 管理者のログイン ID を作成しました（値は表示しません）: $ADMIN_ENV_FILE"
 fi
 if git -C "$GUAPP_REPO_ROOT" check-ignore -q "$ADMIN_ENV_FILE"; then
   echo "[02-settings] 確認: $ADMIN_ENV_FILE は git 管理対象外です（.gitignore の .env.* パターンに一致）。"

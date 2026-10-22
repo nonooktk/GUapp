@@ -77,6 +77,7 @@ export GUAPP_TARGET=tech0
 #    - api: PUBLIC_WEB_BASE_URL（web の URL）
 #    - api: OPENAI_API_KEY（手元の $HOME/GUapp/apps/api/.env の OPENAI_API_KEY= の行だけを読む。値は表示しない）
 #    - 管理者の初期パスワード: apps/api/.env.admin に、未作成のときだけ 20 文字を作る（App Service には入れない）
+#    - 管理者のログイン ID: 同じファイルに、未作成のときだけ `staff-` ＋ 小文字英数字 10 文字を SEED_STAFF_LOGIN_ID= として作る
 #    OPENAI_API_KEY の読み元を変えるとき: GUAPP_OPENAI_ENV_FILE=/path/to/.env scripts/azure-deploy/02-settings.sh
 #    キーが読めなければ、設定せず警告して続ける（AI アシスタントは本番で無効 = chat_unavailable になる）
 scripts/azure-deploy/02-settings.sh
@@ -93,7 +94,7 @@ scripts/azure-deploy/05-deploy-web.sh
 > [!warning] `--seed`（全件 seed）は使わない
 > `06-migrate-seed.sh --seed` は `--reset --yes` で既存データを消してから入れ直す。共用 DB の P2 配備では必ず `--seed-p2` を使う。
 
-管理者のパスワードの確かめ方: `apps/api/.env.admin` を本人が開き、`SEED_STAFF_PASSWORD=` の行を見る。スクリプトは値を表示しない。ログイン ID は seed の既定値。
+管理者のパスワードとログイン ID の確かめ方: `apps/api/.env.admin` を本人が開き、`SEED_STAFF_PASSWORD=` と `SEED_STAFF_LOGIN_ID=` の行を見る。スクリプトは値を表示しない。`SEED_STAFF_LOGIN_ID` が無いファイルでは、seed の既定値（`demo-staff`）のまま投入される。02 を再実行すると、無い場合だけ追記する。
 
 ```bash
 open -e apps/api/.env.admin
@@ -103,7 +104,8 @@ open -e apps/api/.env.admin
 
 ```bash
 cd apps/api
-SEED_STAFF_PASSWORD="$(grep '^SEED_STAFF_PASSWORD=' .env.admin | cut -d= -f2-)" APP_ENV=production \
+SEED_STAFF_PASSWORD="$(grep '^SEED_STAFF_PASSWORD=' .env.admin | cut -d= -f2-)" \
+SEED_STAFF_LOGIN_ID="$(grep '^SEED_STAFF_LOGIN_ID=' .env.admin | cut -d= -f2-)" APP_ENV=production \
   ../../scripts/azure-db/with-azure-db.sh uv run python -m app.seed --only-p2c --update-staff-password
 ```
 

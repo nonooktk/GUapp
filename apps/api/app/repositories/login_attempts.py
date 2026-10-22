@@ -4,6 +4,11 @@
 `identifier` は正規化したメールの SHA-256（平文のメールを保存しない）。
 数えるのは「失敗」かつ同じ `subject_type` かつ同じ識別子（または同じ IP）で、
 `at > since`（直近 15 分）の行だけ。
+
+ログインは、パスワードの検証（argon2 で遅い）より前に自分の試行を「失敗」として先に記録して
+COMMIT し、そのあとで数える（G-16）。数える時点で自分の行を含むため、同時に来た試行のうち
+検証まで進めるのは上限の件数までになる。成功したら失敗行を消して成功を記録し、上限超過で拒否した
+試行は自分の行を取り消す。
 """
 
 from __future__ import annotations
@@ -64,18 +69,23 @@ async def record(
     succeeded: bool,
     ip: str,
     at: datetime,
-) -> None:
-    """試行を 1 件記録する。"""
-    session.add(
-        LoginAttempt(
-            subject_type=subject_type,
-            identifier=identifier,
-            succeeded=succeeded,
-            ip=ip,
-            at=at,
-        )
+) -> int:
+    """試行を 1 件記録して、その行の ID を返す。"""
+    row = LoginAttempt(
+        subject_type=subject_type,
+        identifier=identifier,
+        succeeded=succeeded,
+        ip=ip,
+        at=at,
     )
+    session.add(row)
     await session.flush()
+    return int(row.id)
+
+
+async def delete_by_id(session: AsyncSession, attempt_id: int) -> None:
+    """試行を 1 件、主キーで削除する（上限超過で拒否した試行の「先に記録した行」を取り消す）。"""
+    await session.execute(delete(LoginAttempt).where(LoginAttempt.id == attempt_id))
 
 
 async def delete_failures_by_identifier(

@@ -15,6 +15,7 @@
 | --- | --- | --- | --- | --- |
 | draft-v1 | 2026-10-20 | 初稿。オーナー承認（2026-10-20）の前提（LLM は OpenAI・api から呼ぶ・キー無しはスタブ）に沿って、F-029 の範囲・創作防止・上限・API・DB・画面・アダプタ・設計判断（DS-DEC-90〜106）を本編との差分として書いた | Claude | — |
 | draft-v1 追記 | 2026-10-20 | 実機（本物の GPT）の確認で、商品詳細から開いて「この商品の洗濯方法と素材を教えて」と送ると範囲外の定型文が返ることが分かった。原因は、文脈の商品の資料が id と名前だけで、固定指示も商品の質問に答える用件を持たなかったこと。intent `product_info` を足し、文脈の商品の DB の情報を資料に渡して答えさせる（DS-DEC-127） | Claude | — |
+| draft-v1.1 | 2026-10-22 | セキュリティ点検 2026-10-21 の G-20・G-21・G-22 に合わせて更新。DS-PRC-029-2 と DS-PRC-029-3 の末尾に追記（canary の変形の検知、約束の語の検査、マスクの追加、ガード発動のログ）、8.6 に `chat_guard` を足した | Claude | — |
 
 ## 0. 本書の位置づけ
 
@@ -364,6 +365,12 @@ LLM の出力（付録 B のスキーマ）を、次の順に検査する。**�
 
 `product_info` の `items` は使わない（`products` は常に空）。`products[].reason` は LLM の文章で、手順 1・2・3・9 を通ったものだけを使う。**価格・在庫は LLM の文章を使わず、カードの DB 値だけ**で示す（要件定義書 6 章のチャット制約）。
 
+**追記（2026-10-22。セキュリティ点検の G-20・G-21・G-22）**
+
+- G-20: 手順 2 の canary は、NFKC・小文字化のあと空白・記号・長音を除いた文字列と、その逆順にも当てる。`recommend`・`clarify`・`faq`・`product_info` で、約束の語（送料無料・クーポン・割引・半額・セールなど）が応答にあり、LLM に渡した資料（FAQ・特商法・商品一覧・文脈の商品）に無いときは、金額の置き換えと同じ扱いで定型文にする（利用者の質問は資料に含めない。FAQ の「4,990円以上で送料無料です」は通る）。
+- G-21: DS-PRC-029-2 のマスクに、県名なしの住所、崩したメール（`(at)`・`(dot)`）、漢数字・全角の電話番号、「〇〇といいます」「山田 太郎 です」の氏名、12 桁の番号（`[番号]`）を足した。限界は、漢数字の番地と「1条西2丁目」型の住所が未対応なこと、「といいます」の氏名が前の語を巻き込むことがある点である。
+- G-22: ガードが動いたとき、種類（`html_url`・`pii_output`・`pii_input`・`canary`・`amount`・`promise`・`product_info`・`faq_number`）と件数だけを `chat_guard` の 1 行ログに出す（8.6）。
+
 #### DS-PRC-029-4 利用上限の判定
 
 | 上限 | 値（環境変数） | 判定 | 超えたとき |
@@ -678,7 +685,9 @@ OpenAI のダッシュボード側でも、月の利用額の上限（Usage limi
 
 ### 8.6 ログ（`app.chat` ロガー）
 
-1 回の呼び出しにつき 1 行（`SecretMaskFilter` を通る）。項目は event（`chat_reply`／`chat_llm_error`／`chat_canary_leak`／`chat_daily_limit`）、provider、model、intent、outcome、latency_ms、input_tokens、output_tokens、dropped_ids（捨てた商品 ID の件数）。質問・応答の本文、`chat_token`、IP の全桁は出さない（IP は既存の `mask_ip` で丸める）。
+1 回の呼び出しにつき 1 行（`SecretMaskFilter` を通る）。項目は event（`chat_reply`／`chat_llm_error`／`chat_canary_leak`／`chat_daily_limit`／`chat_guard`）、provider、model、intent、outcome、latency_ms、input_tokens、output_tokens、dropped_ids（捨てた商品 ID の件数）。質問・応答の本文、`chat_token`、IP の全桁は出さない（IP は既存の `mask_ip` で丸める）。
+
+`chat_guard`（G-22）は、ガードが動いたときだけ追加で 1 行出す。項目は provider、model、intent、guards（種類と件数）で、本文は出さない。出力側のガードが動いたときは WARNING、質問のマスクだけなら INFO。
 
 ## 9. 設計上の決定・申し送り
 

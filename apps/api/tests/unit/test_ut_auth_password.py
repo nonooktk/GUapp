@@ -160,8 +160,17 @@ def test_ut_auth_05_login_password_has_no_minimum_but_max_128() -> None:
 # ── UT-AUTH-06 禁止リスト ────────────────────────────────────────────────
 
 
-def test_ut_auth_06_banned_list_has_20_words() -> None:
-    assert len(BANNED_PASSWORDS) == 20
+def test_ut_auth_06_banned_list_has_150_to_300_words() -> None:
+    """G-17: 禁止語リストは 150〜300 語。比較用に NFKC・小文字化済みで、旧リストの 20 語を含む。"""
+    assert 150 <= len(BANNED_PASSWORDS) <= 300
+    assert all(normalize_password(w).lower() == w for w in BANNED_PASSWORDS)
+    legacy = {
+        "password", "password1", "password12", "password123", "12345678", "123456789",
+        "1234567890", "12341234", "01234567", "qwertyui", "qwerty123", "abcd1234", "abc12345",
+        "iloveyou", "letmein1", "welcome1", "admin123", "guapp123", "パスワード1234",
+        "ぱすわーど1234",
+    }  # fmt: skip
+    assert legacy <= BANNED_PASSWORDS
 
 
 @pytest.mark.parametrize("word", sorted(BANNED_PASSWORDS))
@@ -179,6 +188,114 @@ def test_ut_auth_06_banned_words_in_any_case_and_width(word: str) -> None:
 def test_ut_auth_06_halfwidth_katakana_is_normalized_before_comparison() -> None:
     assert weak_password_reason(normalize_password("ﾊﾟｽﾜｰﾄﾞ1234"), EMAIL) == "banned"
     assert weak_password_reason("password-ok-2026", EMAIL) is None
+
+
+# ── UT-AUTH-06b 禁止語＋数字・記号、leet、連番、キーボード配列、メールの一部（G-17）──────
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "password2",
+        "Password123!",
+        "2024qwerty",
+        "PASSWORD99",
+        "!!password!!",
+        "welcome2026",
+        "Sunshine99",
+        "Dragon2024",
+        "letmein!!",
+        "iloveyou2",
+        "admin-2026",  # 記号と数字を足しただけ
+        "ＰＡＳＳＷＯＲＤ２",  # 全角
+        "パスワード9999",
+        "ﾊﾟｽﾜｰﾄﾞ777",
+        "あいうえお12345",
+    ],
+)
+def test_ut_auth_06b_banned_word_with_digits_or_symbols_around_it_is_weak(password: str) -> None:
+    assert weak_password_reason(normalize_password(password), EMAIL) == "banned_decorated"
+
+
+@pytest.mark.parametrize("password", ["P@ssw0rd", "p@ssw0rd!", "passw0rd2", "p4ssword", "ilovey0u"])
+def test_ut_auth_06b_leet_spelling_of_a_banned_word_is_weak(password: str) -> None:
+    assert weak_password_reason(normalize_password(password), EMAIL) in (
+        "banned",
+        "banned_decorated",
+    )
+
+
+@pytest.mark.parametrize(
+    ("password", "reason"),
+    [
+        ("bcdefghi", "sequence"),
+        ("BCDEFGHI", "sequence"),
+        ("23456789", "sequence"),
+        ("98765432", "sequence"),
+        ("87654321", "sequence"),
+        ("zyxwvuts", "sequence"),
+        ("abcdefgh12", "banned_decorated"),  # 連番（abcdefgh）の後ろに数字を足しただけ
+        ("abababab", "repeated"),
+        ("12121212", "repeated"),
+        ("abcabcabc", "repeated"),
+        ("x1x1x1x1", "repeated"),
+        ("ああああああああ", "repeated"),
+        ("wertyuio", "keyboard"),
+        ("ASDFGHJK", "banned"),
+        ("poiuytre", "keyboard"),
+        ("lkjhgfds", "keyboard"),
+        ("mnbvcxz1", "keyboard"),
+        ("qwerty-1", "banned_decorated"),
+    ],
+)
+def test_ut_auth_06b_sequences_repeats_and_keyboard_rows_are_weak(
+    password: str, reason: str
+) -> None:
+    assert weak_password_reason(normalize_password(password), "other@example.org") == reason
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "taro.yamada1",
+        "TaroYamada2026",
+        "xx-taro.yamada-xx",
+        "ＴＡＲＯ．ＹＡＭＡＤＡ９９９",
+        "taroyamada-77",
+    ],
+)
+def test_ut_auth_06b_email_local_part_inside_the_password_is_weak(password: str) -> None:
+    email = "taro.yamada@example.com"
+    assert weak_password_reason(normalize_password(password), email) == "contains_email_local"
+
+
+def test_ut_auth_06b_email_local_part_rules() -> None:
+    # `+` より前だけを含む、`@` より後（ドメイン）だけを含む、短い部分は対象外
+    assert weak_password_reason("shop-taro-77", "taro+shop@example.com") == "contains_email_local"
+    assert weak_password_reason("My-example-77", "taro@example.com") is None
+    assert weak_password_reason("a-fine-phrase-77", "a@example.com") is None
+    assert weak_password_reason("tom-and-jerry-77", "tom@example.com") is None  # 3 文字は見ない
+    # 呼び手が NFKC 済みを渡す前提（未正規化の全角は照合しない）
+    assert weak_password_reason("ｔａｒｏ-green-77", "taro@example.com") is None
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "correct-horse-battery-1",
+        "Fresh-Pass-Phrase-77",
+        "Another-Phrase-88",
+        "DemoMember-Seed-2026",
+        "purple-giraffe-42",
+        "Sunflower2026",  # 禁止語（sun・flower など）を含むだけで、全体は別の語
+        "Welcome-Home-2026",
+        "admin-console-7",
+        "春の青いシャツが好き",
+        "mypassword-is-long",  # 禁止語の前後が数字・記号でなく文字のものは対象外
+    ],
+)
+def test_ut_auth_06b_ordinary_passphrases_are_not_weak(password: str) -> None:
+    assert weak_password_reason(normalize_password(password), "someone@example.org") is None
 
 
 # ── UT-AUTH-07 メールと同一 ──────────────────────────────────────────────

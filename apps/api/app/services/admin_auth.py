@@ -14,6 +14,10 @@
   ロック競合 1213・1205 は ROLLBACK して 1 回だけやり直す。5.6）。`staff` の行は最初に
   `FOR UPDATE` で取り、同じ管理者のログインを直列化する（同時 3 件の上限を超えないため。
   設計書 5.6 は再ハッシュ時だけ `staff` を触ると書くが、IT-050-10 の「3 件以内」に要る）
+- 失敗の記録は、パスワードの検証より前に「失敗」として先に記録して COMMIT し、そのあとで数える
+  （G-16。同時に来た試行が全部「失敗 0 件」を読んで検証まで進むすり抜けを防ぐ。会員と共通の
+  `claim_login_attempt`）。上限を超えていれば検証せずに拒否して自分の行を取り消し、成功したら
+  失敗行を消して成功を記録する
 - ログ・監査ログ・拒否ログに login_id・パスワード・トークンを入れない（`identifier` は SHA-256）
 
 `login_id` の正規化（`normalize_login_id`）もここに置く（スキーマとシードが使う）。
@@ -47,10 +51,11 @@ from app.services.auth import (
     ATTEMPT_CLEANUP_LIMIT,
     ATTEMPT_RETENTION,
     LOGIN_RETRY_AFTER_SECONDS,
-    LOGIN_WINDOW,
+    claim_login_attempt,
     new_token,
     normalize_ip,
     utcnow,
+    withdraw_login_attempt,
 )
 
 logger = logging.getLogger("app.services.admin_auth")
@@ -139,10 +144,19 @@ async def _begin_read_committed(session: AsyncSession) -> None:
 
 
 def _reject(
-    request: Request, *, status: int, code: str, ip: str, headers: dict[str, str] | None = None
+    request: Request,
+    *,
+    status: int,
+    code: str,
+    ip: str,
+    identifier: str | None = None,
+    headers: dict[str, str] | None = None,
 ) -> AppError:
-    """拒否ログ（S9。IP は丸められる）を 1 行出して、返すエラーを作る。"""
-    log_rejection(request, status=status, code=code, ip=ip)
+    """拒否ログ（S9。IP は丸められる）を 1 行出して、返すエラーを作る。
+
+    `identifier`（login_id の SHA-256）の先頭 12 桁が `subject` として出る（G-19）。
+    """
+    log_rejection(request, status=status, code=code, ip=ip, subject=identifier)
     return AppError(status, code, headers=headers)
 
 
@@ -177,27 +191,25 @@ async def login(
     ip = normalize_ip(client_ip(request))
     identifier = admin_login_identifier(login_id)
 
-    # 3. 回数の判定。パスワードの検証より前（IP が先、ID が後）。`subject_type=staff` だけを数える
-    await _begin_read_committed(session)
-    since = utcnow() - LOGIN_WINDOW
-    ip_failures = await attempts_repo.count_failures_by_ip(session, SubjectType.staff, ip, since)
-    if is_ip_limited(ip_failures):
-        await session.rollback()
+    # 3. 先に「失敗」として記録して COMMIT し、数え直す（G-16）。パスワードの検証より前。
+    #    `subject_type=staff` だけを数える。判定は従来と同じ（自分の行を除いて、IP が先・ID が後）
+    claimed = await claim_login_attempt(session, SubjectType.staff, identifier, ip)
+    if is_ip_limited(claimed.prior_ip_failures):
+        await withdraw_login_attempt(session, claimed.attempt_id)
         raise _reject(
             request,
             status=429,
             code="rate_limited",
             ip=ip,
+            identifier=identifier,
             headers={"Retry-After": str(LOGIN_RETRY_AFTER_SECONDS)},
         )
-    id_failures = await attempts_repo.count_failures_by_identifier(
-        session, SubjectType.staff, identifier, since
-    )
-    if is_id_locked(id_failures):
-        await session.rollback()
-        raise _reject(request, status=403, code="account_locked", ip=ip)
+    if is_id_locked(claimed.prior_identifier_failures):
+        await withdraw_login_attempt(session, claimed.attempt_id)
+        raise _reject(request, status=403, code="account_locked", ip=ip, identifier=identifier)
 
     # 4. 管理者を検索する。読み取りを終えてから argon2 を計算する
+    await _begin_read_committed(session)
     staff = await staff_repo.find_by_login_id(session, login_id)
     await session.rollback()
 
@@ -205,10 +217,10 @@ async def login(
     stored_hash = staff.password_hash if staff is not None else passwords.dummy_hash()
     verified = await passwords.verify_password_async(stored_hash, password)
 
-    # 5. 失敗: 記録して 401（管理者の有無・パスワード違いを区別しない）。ロック通知メールは送らない
+    # 5. 失敗: 試行は 3 で記録済み。401（管理者の有無・パスワード違いを区別しない）。
+    #    ロック通知メールは送らない
     if staff is None or not verified:
-        await _record_failure(session, identifier=identifier, ip=ip)
-        raise _reject(request, status=401, code="invalid_credentials", ip=ip)
+        raise _reject(request, status=401, code="invalid_credentials", ip=ip, identifier=identifier)
 
     # 6. 成功: パラメータが古ければ再ハッシュ（更新は 7 の最初の文）
     new_hash: str | None = None
@@ -276,15 +288,6 @@ async def login(
     await _cleanup_old_attempts(session)
 
     return AdminLoginResult(session_token=token, login_id=staff.login_id, role=staff.role)
-
-
-async def _record_failure(session: AsyncSession, *, identifier: str, ip: str) -> None:
-    """失敗を記録して COMMIT（手順 5）。管理者の有無に関係なく記録する。"""
-    await _begin_read_committed(session)
-    await attempts_repo.record(
-        session, SubjectType.staff, identifier, succeeded=False, ip=ip, at=utcnow()
-    )
-    await session.commit()
 
 
 async def _cleanup_old_attempts(session: AsyncSession) -> None:
