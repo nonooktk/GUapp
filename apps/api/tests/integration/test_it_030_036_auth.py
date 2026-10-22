@@ -311,7 +311,7 @@ async def test_it_030_04_password_length_boundaries_by_codepoints(
         assert res.json()["fields"][0]["name"] == "password"
 
 
-@pytest.mark.parametrize("password", sorted(BANNED_PASSWORDS))
+@pytest.mark.parametrize("password", sorted(w for w in BANNED_PASSWORDS if len(w) >= 8))
 async def test_it_030_05_banned_passwords_are_422_weak_password(
     client: httpx.AsyncClient, engine: AsyncEngine, password: str
 ) -> None:
@@ -338,6 +338,44 @@ async def test_it_030_05_email_equal_and_repeated_passwords_are_422(
             422,
             {"code": "weak_password", "field": "password"},
         ), password
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        "password2",
+        "Password123!",
+        "2024qwerty",
+        "P@ssw0rd!",
+        "bcdefghi",
+        "98765432",
+        "abababab",
+        "asdfghjk",
+        "weakpw-extra-77",  # メールの @ より前の部分（weakpw）を含む
+    ],
+)
+async def test_it_030_05b_decorated_sequence_and_email_local_passwords_are_422(
+    client: httpx.AsyncClient, engine: AsyncEngine, password: str
+) -> None:
+    """G-17: 禁止語＋数字・記号、連番、繰り返し、メールの一部を含むものも 422 weak_password。"""
+    res = await register(client, "weakpw@example.com", password)
+    assert (res.status_code, res.json()) == (422, {"code": "weak_password", "field": "password"})
+    assert await scalar(engine, "SELECT COUNT(*) FROM members") == len(seed_data.MEMBERS)
+
+
+async def test_it_035_03b_reset_confirm_rejects_the_same_weak_patterns_without_consuming_the_token(
+    client: httpx.AsyncClient, engine: AsyncEngine, recording_mail: RecordingMailAdapter
+) -> None:
+    """G-17: 再設定の確定でも同じ規則（メールの一部を含むものを含む）。トークンは消費しない。"""
+    token = await _reset_token(client, recording_mail)
+    local = MEMBER1.split("@", 1)[0]  # demo-member1
+    for password in ("password2", "Password123!", "87654321", f"{local}-Extra-77"):
+        res = await reset_confirm(client, token, password)
+        assert (res.status_code, res.json()) == (
+            422,
+            {"code": "weak_password", "field": "password"},
+        )
+    assert (await reset_confirm(client, token)).status_code == 200
 
 
 async def test_it_030_05_weak_password_check_does_not_depend_on_existing_email(
